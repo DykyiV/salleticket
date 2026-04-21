@@ -10,7 +10,7 @@ This is the frontend-only scaffold — no backend yet.
 - React 18
 - TypeScript
 - Tailwind CSS 3
-- PostgreSQL + Prisma ORM 6
+- Prisma ORM 6 (SQLite by default for local dev; swap the datasource to Postgres for production)
 - JWT auth via `jose` (Edge-compatible) + `bcryptjs` for password hashing
 
 ## Project structure
@@ -60,9 +60,10 @@ Booking (id, ticketId, passengerName, phone)
 
 `TicketStatus` enum: `RESERVED`, `PAID_ONLINE`, `PAID_CASH`, `CANCELLED`, `REFUNDED`.
 
-Bookings are persisted in Postgres via Prisma. `/api/search` currently returns
-mock trips from `MockCarrierAdapter`; real carriers can be plugged in via
-`lib/carriers/registry.ts` and `/api/search` will aggregate across all of them.
+Bookings are persisted via Prisma (SQLite locally, file at `prisma/dev.db`).
+`/api/search` currently returns mock trips from `MockCarrierAdapter`; real
+carriers can be plugged in via `lib/carriers/registry.ts` and `/api/search`
+will aggregate across all of them.
 
 ## Authentication & authorization
 
@@ -153,8 +154,8 @@ Failures in any single carrier are isolated and reported in `carriers[].error` /
 
 ### `POST /api/booking`
 
-**Requires authentication.** The booking is persisted in Postgres via Prisma
-inside a single transaction that:
+**Requires authentication.** The booking is persisted via Prisma inside a
+single transaction that:
 
 1. Upserts a `Carrier` by name.
 2. Creates a `Trip` row from the trip snapshot (departure/arrival combined with the booking `date`).
@@ -204,35 +205,33 @@ npm install
 
 `postinstall` runs `prisma generate`, so the Prisma client is ready immediately.
 
-### 2. Start PostgreSQL and configure `.env`
+### 2. Configure `.env`
 
-Copy the template and point it at your database:
+Copy the template:
 
 ```bash
 cp .env.example .env
 ```
 
-Quick local Postgres with Docker:
-
-```bash
-docker run --name asol-pg \
-  -e POSTGRES_PASSWORD=postgres \
-  -e POSTGRES_DB=asol_bus \
-  -p 5432:5432 -d postgres:16
-```
-
-Default `DATABASE_URL`:
+Defaults use SQLite and a local dev JWT secret:
 
 ```
-postgresql://postgres:postgres@localhost:5432/asol_bus?schema=public
+DATABASE_URL="file:./dev.db"
+JWT_SECRET="super-secret-key-12345"
 ```
+
+The SQLite file will be created at `prisma/dev.db` on first push / migrate.
+
+To run against Postgres instead, switch `datasource db { provider = ... }`
+in `prisma/schema.prisma` to `"postgresql"` and point `DATABASE_URL` at your
+Postgres instance (e.g. `postgresql://postgres:postgres@localhost:5432/asol_bus?schema=public`).
 
 ### 3. Apply the schema
 
 ```bash
-npm run db:migrate      # creates migrations/ and applies them (dev)
-# or, for a quick prototype:
-npm run db:push         # pushes schema without migrations
+npm run db:push         # fastest: writes tables into prisma/dev.db
+# or, for tracked migrations:
+npm run db:migrate
 ```
 
 Useful helpers:

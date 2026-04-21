@@ -6,7 +6,7 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "sqlite"
   url      = env("DATABASE_URL")
 }
 
@@ -57,7 +57,7 @@ model Trip {
   toCity        String
   departureTime DateTime
   arrivalTime   DateTime
-  price         Decimal  @db.Decimal(10, 2)
+  price         Float
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
@@ -74,7 +74,7 @@ model Trip {
 model Ticket {
   id        String       @id @default(cuid())
   status    TicketStatus @default(RESERVED)
-  price     Decimal      @db.Decimal(10, 2)
+  price     Float
   createdAt DateTime     @default(now())
   updatedAt DateTime     @updatedAt
 

@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { Prisma, TicketStatus } from "@prisma/client";
+import { TicketStatus } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { findCarrier } from "@/lib/carriers/registry";
 import { requireAuth } from "@/lib/auth/guard";
@@ -127,7 +127,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const price = new Prisma.Decimal(snapshot.price.toFixed(2));
+  const price = Math.round(snapshot.price * 100) / 100;
   const departureAt = combineDateTime(snapshot.date, snapshot.departure);
   const arrivalAt = combineDateTime(snapshot.date, snapshot.arrival);
   if (arrivalAt <= departureAt) {
@@ -180,7 +180,7 @@ export async function POST(req: NextRequest) {
       return { carrier, trip, ticket, booking };
     });
 
-    const totalPaid = Number(price) + SERVICE_FEE_EUR;
+    const totalPaid = price + SERVICE_FEE_EUR;
 
     return NextResponse.json(
       {
@@ -201,7 +201,7 @@ export async function POST(req: NextRequest) {
             arrival: snapshot.arrival,
             departureAt: created.trip.departureTime,
             arrivalAt: created.trip.arrivalTime,
-            price: Number(created.trip.price),
+            price: created.trip.price,
             currency: snapshot.currency ?? "EUR",
           },
           carrier: {
