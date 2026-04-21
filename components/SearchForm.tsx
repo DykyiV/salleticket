@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 
 type SearchValues = {
@@ -20,6 +21,7 @@ const POPULAR_CITIES = [
 ];
 
 export default function SearchForm() {
+  const router = useRouter();
   const [values, setValues] = useState<SearchValues>({
     from: "",
     to: "",
@@ -38,7 +40,12 @@ export default function SearchForm() {
 
   const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    console.log("Search:", values);
+    const params = new URLSearchParams();
+    if (values.from) params.set("from", values.from);
+    if (values.to) params.set("to", values.to);
+    if (values.date) params.set("date", values.date);
+    const qs = params.toString();
+    router.push(qs ? `/results?${qs}` : "/results");
   };
 
   return (
