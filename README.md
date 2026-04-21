@@ -6,11 +6,12 @@ This is the frontend-only scaffold — no backend yet.
 
 ## Stack
 
-- Next.js 14 (App Router)
+- Next.js 14 (App Router) + Edge middleware
 - React 18
 - TypeScript
 - Tailwind CSS 3
 - PostgreSQL + Prisma ORM 6
+- JWT auth via `jose` (Edge-compatible) + `bcryptjs` for password hashing
 
 ## Project structure
 
@@ -37,6 +38,13 @@ lib/
     types.ts              CarrierAdapter + Booking types
     registry.ts           Parallel fan-out across adapters
     mock/index.ts         MockCarrierAdapter
+  auth/
+    constants.ts          SESSION_COOKIE, ROLE_RANK, hasRoleAtLeast
+    password.ts           bcryptjs hash / verify
+    jwt.ts                jose sign / verify (Edge-compatible)
+    session.ts            cookie helpers, getSession, getCurrentUser
+    guard.ts              requireRole / requireAuth
+middleware.ts              Edge middleware: role-based route protection
 prisma/
   schema.prisma           User / Ticket / Booking / Carrier / Trip + enums
 ```
@@ -57,6 +65,72 @@ The in-memory booking store in `lib/bookings/store.ts` is the next candidate
 to migrate onto Prisma — `POST /api/booking` should create a `Ticket` and
 a linked `Booking`, and `/api/search` can later pull real data from the
 `Trip`/`Carrier` tables instead of the mock generator.
+
+## Authentication & authorization
+
+JWT-based auth using `jose` (Edge-compatible) and `bcryptjs` for password
+hashing. Sessions are stored in an **HttpOnly, SameSite=Lax** cookie named
+`asol_session` (7-day TTL).
+
+### API routes
+
+- `POST /api/auth/register` — `{ email, password }` (min 8 chars). Creates a
+  `USER`, sets the session cookie. `409` if email taken.
+- `POST /api/auth/login` — `{ email, password }`. Generic `401` on failure.
+- `POST /api/auth/logout` — clears the session cookie.
+- `GET  /api/auth/me` — `{ user }` or `{ user: null }`.
+- `GET/PATCH /api/admin/users` — example ADMIN-only route. `PATCH` assigning
+  `ADMIN` / `SUPER_ADMIN` requires SUPER_ADMIN.
+
+### UI pages
+
+- `/login` and `/register` — AuthForm with validation + redirect to `?next=…`.
+- `/account` — protected by middleware; shows email, role badge, and role-aware links.
+- `/admin`, `/agent` — role-gated dashboards.
+
+### Role hierarchy
+
+`USER < AGENT < ADMIN < SUPER_ADMIN`. See `lib/auth/constants.ts` (`ROLE_RANK`, `hasRoleAtLeast`).
+
+### Middleware
+
+`middleware.ts` runs at the Edge and guards these prefixes (configured via
+`matcher`, so public routes pay zero overhead):
+
+| Path            | Required role | Unauth / under-privileged |
+|-----------------|---------------|---------------------------|
+| `/account/**`   | `USER`        | redirect → `/login?next=…` / `/?error=forbidden` |
+| `/agent/**`     | `AGENT`       | redirect as above |
+| `/admin/**`     | `ADMIN`       | redirect as above |
+| `/api/agent/**` | `AGENT`       | `401` / `403` JSON |
+| `/api/admin/**` | `ADMIN`       | `401` / `403` JSON |
+
+The middleware verifies the JWT with `jose` and forwards identity as request
+headers (`x-user-id`, `x-user-email`, `x-user-role`) to downstream handlers.
+
+### Route-handler guard
+
+For fine-grained checks inside route handlers:
+
+```ts
+import { requireRole } from "@/lib/auth/guard";
+
+const guard = await requireRole("ADMIN");
+if (!guard.ok) return guard.response;
+const { session } = guard;
+```
+
+### Env
+
+```
+JWT_SECRET="openssl rand -base64 48"
+```
+
+The CLI tip actually works:
+
+```bash
+openssl rand -base64 48
+```
 
 ## API
 
