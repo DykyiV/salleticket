@@ -22,3 +22,5 @@ coverage
 .idea
 
 next-env.d.ts
+
+/lib/generated/prisma

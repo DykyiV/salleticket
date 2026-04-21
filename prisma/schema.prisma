@@ -1,0 +1,106 @@
+// Asol BUS — Prisma schema
+// Docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  USER
+  AGENT
+  ADMIN
+  SUPER_ADMIN
+}
+
+enum TicketStatus {
+  RESERVED
+  PAID_ONLINE
+  PAID_CASH
+  CANCELLED
+  REFUNDED
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String
+  role      Role     @default(USER)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tickets Ticket[]
+
+  @@index([role])
+  @@map("users")
+}
+
+model Carrier {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  rating    Float    @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  trips Trip[]
+
+  @@map("carriers")
+}
+
+model Trip {
+  id            String   @id @default(cuid())
+  fromCity      String
+  toCity        String
+  departureTime DateTime
+  arrivalTime   DateTime
+  price         Decimal  @db.Decimal(10, 2)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  carrierId String
+  carrier   Carrier @relation(fields: [carrierId], references: [id], onDelete: Restrict)
+
+  tickets Ticket[]
+
+  @@index([fromCity, toCity, departureTime])
+  @@index([carrierId])
+  @@map("trips")
+}
+
+model Ticket {
+  id        String       @id @default(cuid())
+  status    TicketStatus @default(RESERVED)
+  price     Decimal      @db.Decimal(10, 2)
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  tripId String?
+  trip   Trip?   @relation(fields: [tripId], references: [id], onDelete: SetNull)
+
+  booking Booking?
+
+  @@index([userId])
+  @@index([status])
+  @@index([tripId])
+  @@map("tickets")
+}
+
+model Booking {
+  id            String   @id @default(cuid())
+  passengerName String
+  phone         String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  ticketId String @unique
+  ticket   Ticket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  @@map("bookings")
+}
