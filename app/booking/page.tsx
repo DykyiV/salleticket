@@ -5,6 +5,8 @@ import { formatDuration } from "@/lib/mockTrips";
 
 type SearchParams = {
   carrier?: string;
+  carrierId?: string;
+  tripId?: string;
   from?: string;
   to?: string;
   date?: string;
@@ -88,6 +90,8 @@ export default function BookingPage({
           <BookingForm
             tripSummary={{
               carrier,
+              carrierId: searchParams.carrierId ?? "mock",
+              tripId: searchParams.tripId,
               from,
               to,
               date,

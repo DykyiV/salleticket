@@ -1,5 +1,6 @@
 export type Trip = {
   id: string;
+  carrierId: string;
   carrier: string;
   carrierShort: string;
   busType: string;
@@ -57,7 +58,8 @@ export function getMockTrips(from: string, to: string): Trip[] {
   return base.map((b, i) => {
     const carrier = CARRIERS[b.carrier];
     return {
-      id: `trip-${i + 1}`,
+      id: `mock-trip-${i + 1}`,
+      carrierId: "mock",
       carrier: carrier.name,
       carrierShort: carrier.short,
       busType: carrier.bus,

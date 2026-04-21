@@ -10,6 +10,8 @@ type Props = {
 function buildBookingHref(trip: Trip, date?: string): string {
   const params = new URLSearchParams({
     carrier: trip.carrier,
+    carrierId: trip.carrierId,
+    tripId: trip.id,
     from: trip.from,
     to: trip.to,
     departure: trip.departure,

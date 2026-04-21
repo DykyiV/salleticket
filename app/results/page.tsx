@@ -1,7 +1,7 @@
 import Link from "next/link";
 import Header from "@/components/Header";
 import TripCard from "@/components/TripCard";
-import { getMockTrips } from "@/lib/mockTrips";
+import { searchAllCarriers } from "@/lib/carriers/registry";
 
 type SearchParams = {
   from?: string;
@@ -21,7 +21,9 @@ function formatDate(dateStr?: string): string {
   });
 }
 
-export default function ResultsPage({
+export const dynamic = "force-dynamic";
+
+export default async function ResultsPage({
   searchParams,
 }: {
   searchParams: SearchParams;
@@ -30,11 +32,13 @@ export default function ResultsPage({
   const to = searchParams.to || "Lviv";
   const date = searchParams.date;
 
-  const trips = getMockTrips(from, to);
-  const cheapest = trips.reduce(
-    (min, t) => (t.price < min ? t.price : min),
-    Infinity
-  );
+  const carrierResults = await searchAllCarriers({ from, to, date });
+  const trips = carrierResults.flatMap((r) => r.trips);
+  const cheapest =
+    trips.length > 0
+      ? trips.reduce((min, t) => (t.price < min ? t.price : min), Infinity)
+      : Infinity;
+  const failedCarriers = carrierResults.filter((r) => r.error);
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -82,10 +86,16 @@ export default function ResultsPage({
                 <span>{to}</span>
               </h1>
               <p className="mt-0.5 text-sm text-slate-500">
-                {formatDate(date)} · {trips.length} trips found · from{" "}
-                <span className="font-semibold text-slate-900">
-                  €{cheapest.toFixed(2)}
-                </span>
+                {formatDate(date)} · {trips.length} trips found
+                {trips.length > 0 ? (
+                  <>
+                    {" "}
+                    · from{" "}
+                    <span className="font-semibold text-slate-900">
+                      €{cheapest.toFixed(2)}
+                    </span>
+                  </>
+                ) : null}
               </p>
             </div>
           </div>
@@ -151,9 +161,33 @@ export default function ResultsPage({
               </div>
             </div>
 
-            {trips.map((trip) => (
-              <TripCard key={trip.id} trip={trip} date={date} />
-            ))}
+            {failedCarriers.length > 0 ? (
+              <div
+                role="status"
+                className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800"
+              >
+                Some carriers didn&apos;t respond:{" "}
+                {failedCarriers
+                  .map((c) => `${c.carrierName} (${c.error})`)
+                  .join(", ")}
+                .
+              </div>
+            ) : null}
+
+            {trips.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-10 text-center">
+                <p className="text-base font-semibold text-slate-900">
+                  No trips found
+                </p>
+                <p className="mt-1 text-sm text-slate-500">
+                  Try a different route or date.
+                </p>
+              </div>
+            ) : (
+              trips.map((trip) => (
+                <TripCard key={trip.id} trip={trip} date={date} />
+              ))
+            )}
           </div>
         </div>
       </main>

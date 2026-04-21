@@ -4,6 +4,8 @@ import { useState, type FormEvent } from "react";
 
 type TripSummary = {
   carrier: string;
+  carrierId?: string;
+  tripId?: string;
   from: string;
   to: string;
   date?: string;
@@ -15,6 +17,13 @@ type TripSummary = {
 
 type Props = {
   tripSummary: TripSummary;
+};
+
+type BookingConfirmation = {
+  reference: string;
+  carrierReference?: string;
+  totalPaid: number;
+  status: string;
 };
 
 type Values = {
@@ -35,7 +44,10 @@ export default function BookingForm({ tripSummary }: Props) {
   });
   const [errors, setErrors] = useState<Errors>({});
   const [submitting, setSubmitting] = useState(false);
-  const [confirmed, setConfirmed] = useState(false);
+  const [confirmation, setConfirmation] = useState<BookingConfirmation | null>(
+    null
+  );
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const handleChange =
     (field: keyof Values) =>
@@ -64,21 +76,58 @@ export default function BookingForm({ tripSummary }: Props) {
     return next;
   };
 
-  const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const found = validate();
     setErrors(found);
+    setSubmitError(null);
     if (Object.keys(found).length > 0) return;
 
     setSubmitting(true);
-    window.setTimeout(() => {
+    try {
+      const res = await fetch("/api/booking", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tripId: tripSummary.tripId ?? "unknown",
+          carrierId: tripSummary.carrierId ?? "mock",
+          passenger: {
+            name: values.name.trim(),
+            phone: values.phone.trim(),
+            email: values.email.trim() || undefined,
+          },
+          tripSnapshot: {
+            from: tripSummary.from,
+            to: tripSummary.to,
+            departure: tripSummary.departure,
+            arrival: tripSummary.arrival,
+            price: tripSummary.price,
+            currency: "EUR",
+          },
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data?.error ?? "Booking failed");
+      }
+
+      setConfirmation({
+        reference: data.booking.reference,
+        carrierReference: data.carrierReference,
+        totalPaid: data.booking.totalPaid,
+        status: data.booking.status,
+      });
+    } catch (err) {
+      setSubmitError(
+        err instanceof Error ? err.message : "Something went wrong. Please try again."
+      );
+    } finally {
       setSubmitting(false);
-      setConfirmed(true);
-    }, 700);
+    }
   };
 
-  if (confirmed) {
-    const ref = `AB-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
+  if (confirmation) {
     return (
       <div className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200 sm:p-8">
         <div className="flex items-center gap-3">
@@ -96,7 +145,14 @@ export default function BookingForm({ tripSummary }: Props) {
         </div>
 
         <dl className="mt-6 grid grid-cols-1 gap-3 rounded-xl bg-slate-50 p-4 text-sm sm:grid-cols-2">
-          <SummaryRow label="Reference" value={ref} mono />
+          <SummaryRow label="Reference" value={confirmation.reference} mono />
+          {confirmation.carrierReference ? (
+            <SummaryRow
+              label="Carrier PNR"
+              value={confirmation.carrierReference}
+              mono
+            />
+          ) : null}
           <SummaryRow label="Passenger" value={values.name} />
           <SummaryRow label="Phone" value={values.phone} />
           {values.email ? (
@@ -112,8 +168,12 @@ export default function BookingForm({ tripSummary }: Props) {
           />
           <SummaryRow label="Carrier" value={tripSummary.carrier} />
           <SummaryRow
+            label="Status"
+            value={confirmation.status}
+          />
+          <SummaryRow
             label="Total paid"
-            value={`€${tripSummary.total.toFixed(2)}`}
+            value={`€${confirmation.totalPaid.toFixed(2)}`}
           />
         </dl>
 
@@ -209,6 +269,15 @@ export default function BookingForm({ tripSummary }: Props) {
       </label>
       {errors.agree ? (
         <p className="mt-1 text-xs text-rose-600">{errors.agree}</p>
+      ) : null}
+
+      {submitError ? (
+        <div
+          role="alert"
+          className="mt-6 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700"
+        >
+          {submitError}
+        </div>
       ) : null}
 
       <div className="mt-8 flex flex-col gap-3 border-t border-dashed border-slate-200 pt-6 sm:flex-row sm:items-center sm:justify-between">
