@@ -1,13 +1,35 @@
+import { headers } from "next/headers";
 import Link from "next/link";
 import Header from "@/components/Header";
 import TripCard from "@/components/TripCard";
-import { searchAllCarriers } from "@/lib/carriers/registry";
+import type { Trip } from "@/lib/carriers/types";
 
 type SearchParams = {
   from?: string;
   to?: string;
   date?: string;
 };
+
+type SearchApiResponse = {
+  query: { from: string; to: string; date?: string; passengers?: number };
+  carriers: { id: string; name: string; tripCount: number; error?: string }[];
+  trips: Trip[];
+  errors: { carrierId: string; error: string }[];
+  meta: { total: number; cheapest: number | null };
+};
+
+/**
+ * Build a same-origin absolute URL for server-side fetch from request headers.
+ * This keeps the frontend talking to the backend through /api/* rather than
+ * importing server code directly.
+ */
+function getBaseUrl(): string {
+  const h = headers();
+  const host = h.get("x-forwarded-host") ?? h.get("host");
+  const proto = h.get("x-forwarded-proto") ?? "http";
+  if (host) return `${proto}://${host}`;
+  return process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+}
 
 function formatDate(dateStr?: string): string {
   if (!dateStr) return "Any date";
@@ -32,13 +54,40 @@ export default async function ResultsPage({
   const to = searchParams.to || "Lviv";
   const date = searchParams.date;
 
-  const carrierResults = await searchAllCarriers({ from, to, date });
-  const trips = carrierResults.flatMap((r) => r.trips);
+  const params = new URLSearchParams({ from, to });
+  if (date) params.set("date", date);
+
+  let trips: Trip[] = [];
+  let failedCarriers: { carrierId: string; carrierName: string; error: string }[] = [];
+  let fetchError: string | null = null;
+
+  try {
+    const res = await fetch(`${getBaseUrl()}/api/search?${params.toString()}`, {
+      cache: "no-store",
+    });
+    if (!res.ok) {
+      const data = (await res.json().catch(() => ({}))) as { error?: string };
+      fetchError = data.error ?? `Search failed with status ${res.status}`;
+    } else {
+      const data = (await res.json()) as SearchApiResponse;
+      trips = data.trips;
+      failedCarriers = data.carriers
+        .filter((c) => c.error)
+        .map((c) => ({
+          carrierId: c.id,
+          carrierName: c.name,
+          error: c.error as string,
+        }));
+    }
+  } catch (err) {
+    fetchError =
+      err instanceof Error ? err.message : "Unable to reach search API";
+  }
+
   const cheapest =
     trips.length > 0
       ? trips.reduce((min, t) => (t.price < min ? t.price : min), Infinity)
       : Infinity;
-  const failedCarriers = carrierResults.filter((r) => r.error);
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -161,6 +210,15 @@ export default async function ResultsPage({
               </div>
             </div>
 
+            {fetchError ? (
+              <div
+                role="alert"
+                className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700"
+              >
+                {fetchError}
+              </div>
+            ) : null}
+
             {failedCarriers.length > 0 ? (
               <div
                 role="status"
@@ -194,7 +252,8 @@ export default async function ResultsPage({
 
       <footer className="border-t border-slate-200 bg-white">
         <div className="mx-auto max-w-6xl px-4 py-6 text-center text-sm text-slate-500 sm:px-6 lg:px-8">
-          © {new Date().getFullYear()} Asol BUS. Mock results — no backend yet.
+          © {new Date().getFullYear()} Asol BUS. Results fetched from{" "}
+          <code className="rounded bg-slate-100 px-1.5 py-0.5">/api/search</code>.
         </div>
       </footer>
     </div>

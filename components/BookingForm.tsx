@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 
 type TripSummary = {
@@ -36,6 +37,7 @@ type Values = {
 type Errors = Partial<Record<keyof Values, string>>;
 
 export default function BookingForm({ tripSummary }: Props) {
+  const router = useRouter();
   const [values, setValues] = useState<Values>({
     name: "",
     phone: "",
@@ -97,15 +99,25 @@ export default function BookingForm({ tripSummary }: Props) {
             email: values.email.trim() || undefined,
           },
           tripSnapshot: {
+            carrier: tripSummary.carrier,
             from: tripSummary.from,
             to: tripSummary.to,
             departure: tripSummary.departure,
             arrival: tripSummary.arrival,
             price: tripSummary.price,
             currency: "EUR",
+            date: tripSummary.date,
           },
         }),
       });
+
+      if (res.status === 401) {
+        const next = typeof window !== "undefined"
+          ? window.location.pathname + window.location.search
+          : "/booking";
+        router.push(`/login?next=${encodeURIComponent(next)}`);
+        return;
+      }
 
       const data = await res.json();
       if (!res.ok) {

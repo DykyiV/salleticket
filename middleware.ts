@@ -26,6 +26,7 @@ const RULES: Rule[] = [
   { match: (p) => p.startsWith("/admin"), role: "ADMIN", mode: "page" },
   { match: (p) => p.startsWith("/agent"), role: "AGENT", mode: "page" },
   { match: (p) => p.startsWith("/account"), role: "USER", mode: "page" },
+  { match: (p) => p.startsWith("/booking"), role: "USER", mode: "page" },
 ];
 
 function matchRule(pathname: string): Rule | null {
@@ -81,5 +82,6 @@ export const config = {
     "/admin/:path*",
     "/agent/:path*",
     "/account/:path*",
+    "/booking/:path*",
   ],
 };

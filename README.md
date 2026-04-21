@@ -33,7 +33,6 @@ components/
 lib/
   db.ts                   Prisma client singleton
   mockTrips.ts            Fake trip data generator
-  bookings/store.ts       In-memory booking store (to be replaced with Prisma)
   carriers/
     types.ts              CarrierAdapter + Booking types
     registry.ts           Parallel fan-out across adapters
@@ -61,10 +60,9 @@ Booking (id, ticketId, passengerName, phone)
 
 `TicketStatus` enum: `RESERVED`, `PAID_ONLINE`, `PAID_CASH`, `CANCELLED`, `REFUNDED`.
 
-The in-memory booking store in `lib/bookings/store.ts` is the next candidate
-to migrate onto Prisma — `POST /api/booking` should create a `Ticket` and
-a linked `Booking`, and `/api/search` can later pull real data from the
-`Trip`/`Carrier` tables instead of the mock generator.
+Bookings are persisted in Postgres via Prisma. `/api/search` currently returns
+mock trips from `MockCarrierAdapter`; real carriers can be plugged in via
+`lib/carriers/registry.ts` and `/api/search` will aggregate across all of them.
 
 ## Authentication & authorization
 
@@ -99,11 +97,15 @@ hashing. Sessions are stored in an **HttpOnly, SameSite=Lax** cookie named
 
 | Path            | Required role | Unauth / under-privileged |
 |-----------------|---------------|---------------------------|
+| `/booking/**`   | `USER`        | redirect → `/login?next=…` |
 | `/account/**`   | `USER`        | redirect → `/login?next=…` / `/?error=forbidden` |
 | `/agent/**`     | `AGENT`       | redirect as above |
 | `/admin/**`     | `ADMIN`       | redirect as above |
 | `/api/agent/**` | `AGENT`       | `401` / `403` JSON |
 | `/api/admin/**` | `ADMIN`       | `401` / `403` JSON |
+
+`POST /api/booking` additionally calls `requireAuth()` inside its handler so
+it returns `401` JSON rather than a redirect when called without a session.
 
 The middleware verifies the JWT with `jose` and forwards identity as request
 headers (`x-user-id`, `x-user-email`, `x-user-role`) to downstream handlers.
@@ -151,17 +153,35 @@ Failures in any single carrier are isolated and reported in `carriers[].error` /
 
 ### `POST /api/booking`
 
+**Requires authentication.** The booking is persisted in Postgres via Prisma
+inside a single transaction that:
+
+1. Upserts a `Carrier` by name.
+2. Creates a `Trip` row from the trip snapshot (departure/arrival combined with the booking `date`).
+3. Creates a `Ticket` owned by the authenticated user with status `RESERVED`.
+4. Creates a linked `Booking` with a generated `reference` (e.g. `AB-7K3X9P`).
+
 ```jsonc
 {
   "tripId":    "mock-trip-2",
   "carrierId": "mock",
   "passenger": { "name": "John Doe", "phone": "+380991234567", "email": "a@b.c" },
-  "tripSnapshot": { "from": "Kyiv", "to": "Lviv", "departure": "08:00", "arrival": "14:50", "price": 22 }
+  "tripSnapshot": {
+    "carrier":   "Grandes Tour",
+    "from":      "Kyiv",
+    "to":        "Lviv",
+    "departure": "08:00",
+    "arrival":   "14:50",
+    "price":     22,
+    "currency":  "EUR",
+    "date":      "2026-05-01"
+  }
 }
 ```
 
 Returns `201` with `{ booking, carrierReference, fees }`.
-`GET /api/booking?reference=AB-XXXXXX` returns a single booking, `GET /api/booking` lists all.
+- `GET /api/booking?reference=AB-XXXXXX` — returns a single booking (owner or admin only).
+- `GET /api/booking` — lists the caller's bookings (admins get all).
 
 ## Adding a new carrier integration
 
