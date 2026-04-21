@@ -152,7 +152,7 @@ export default function ResultsPage({
             </div>
 
             {trips.map((trip) => (
-              <TripCard key={trip.id} trip={trip} />
+              <TripCard key={trip.id} trip={trip} date={date} />
             ))}
           </div>
         </div>

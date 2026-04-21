@@ -1,11 +1,27 @@
+import Link from "next/link";
 import type { Trip } from "@/lib/mockTrips";
 import { formatDuration } from "@/lib/mockTrips";
 
 type Props = {
   trip: Trip;
+  date?: string;
 };
 
-export default function TripCard({ trip }: Props) {
+function buildBookingHref(trip: Trip, date?: string): string {
+  const params = new URLSearchParams({
+    carrier: trip.carrier,
+    from: trip.from,
+    to: trip.to,
+    departure: trip.departure,
+    arrival: trip.arrival,
+    duration: String(trip.durationMinutes),
+    price: trip.price.toFixed(2),
+  });
+  if (date) params.set("date", date);
+  return `/booking?${params.toString()}`;
+}
+
+export default function TripCard({ trip, date }: Props) {
   return (
     <article className="group relative flex flex-col overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-slate-200 transition hover:shadow-lg hover:ring-brand-300 md:flex-row">
       <div className="flex flex-1 flex-col gap-5 p-5 sm:p-6">
@@ -109,13 +125,13 @@ export default function TripCard({ trip }: Props) {
           </p>
         </div>
 
-        <button
-          type="button"
+        <Link
+          href={buildBookingHref(trip, date)}
           className="inline-flex h-11 shrink-0 items-center justify-center gap-1.5 rounded-xl bg-brand-600 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2"
         >
           Book
           <ArrowRightIcon className="h-4 w-4" />
-        </button>
+        </Link>
       </div>
     </article>
   );
