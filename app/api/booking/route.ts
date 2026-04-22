@@ -295,7 +295,19 @@ export async function POST(req: NextRequest) {
           tripId: trip.id,
           status: TicketStatus.RESERVED,
           basePrice,
-          price: finalPrice,
+          finalPrice,
+        },
+      });
+
+      // Audit trail: record ticket creation as "CREATED". History rows are
+      // append-only; subsequent status changes go through the same model.
+      await tx.ticketHistory.create({
+        data: {
+          ticketId: ticket.id,
+          action: "CREATED",
+          oldStatus: null,
+          newStatus: ticket.status,
+          changedBy: session.sub,
         },
       });
 

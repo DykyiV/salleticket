@@ -115,12 +115,14 @@ model Trip {
 }
 
 model Ticket {
-  id        String       @id @default(cuid())
-  status    TicketStatus @default(RESERVED)
-  basePrice Float
-  price     Float
-  createdAt DateTime     @default(now())
-  updatedAt DateTime     @updatedAt
+  id         String       @id @default(cuid())
+  status     TicketStatus @default(RESERVED)
+  basePrice  Float
+  /// The charged price after age + promo discounts. Stored under the existing
+  /// `price` column so older rows keep working after the rename.
+  finalPrice Float        @map("price")
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
 
   userId String
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -129,11 +131,31 @@ model Ticket {
   trip   Trip?   @relation(fields: [tripId], references: [id], onDelete: SetNull)
 
   booking Booking?
+  history TicketHistory[]
 
   @@index([userId])
   @@index([status])
   @@index([tripId])
   @@map("tickets")
+}
+
+/// Audit trail for tickets. Every status change / admin action should
+/// append a row. `oldStatus` / `newStatus` are optional so the same model
+/// can also record non-status actions (e.g. refund processed).
+model TicketHistory {
+  id        String        @id @default(cuid())
+  ticketId  String
+  ticket    Ticket        @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  action    String
+  oldStatus TicketStatus?
+  newStatus TicketStatus?
+  changedBy String?
+  timestamp DateTime      @default(now())
+
+  @@index([ticketId])
+  @@index([changedBy])
+  @@index([timestamp])
+  @@map("ticket_history")
 }
 
 model Booking {
