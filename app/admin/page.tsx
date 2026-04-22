@@ -1,3 +1,4 @@
+import Link from "next/link";
 import Header from "@/components/Header";
 import { getCurrentUser } from "@/lib/auth/session";
 
@@ -32,6 +33,21 @@ export default async function AdminPage() {
               </p>
             </div>
           ) : null}
+
+          <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <Link
+              href="/admin/discounts"
+              className="group rounded-2xl border border-slate-200 bg-white p-6 transition hover:-translate-y-0.5 hover:border-brand-300 hover:shadow-md"
+            >
+              <p className="text-sm font-semibold text-slate-900 group-hover:text-brand-700">
+                Discounts
+              </p>
+              <p className="mt-1 text-xs text-slate-500">
+                Create and manage promo codes. Set percent, validity window,
+                usage limit and per-user binding.
+              </p>
+            </Link>
+          </div>
         </div>
       </main>
     </div>
