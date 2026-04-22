@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { TicketStatus } from "@prisma/client";
+import { AgeCategory, TicketStatus } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { findCarrier } from "@/lib/carriers/registry";
 import { requireAuth } from "@/lib/auth/guard";
@@ -8,28 +8,100 @@ import type { BookingPassenger, Trip } from "@/lib/carriers/types";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+type PassengerPayload = Partial<BookingPassenger> & {
+  firstName?: string;
+  lastName?: string;
+  ageCategory?: AgeCategory | string;
+};
+
 type CreateBookingBody = {
   tripId?: string;
   carrierId?: string;
-  passenger?: Partial<BookingPassenger>;
+  passenger?: PassengerPayload;
+  promoCode?: string;
   tripSnapshot?: Partial<Trip> & { date?: string };
 };
 
 const SERVICE_FEE_EUR = 1.5;
 
-function validatePassenger(p?: Partial<BookingPassenger>): string | null {
-  if (!p) return "`passenger` is required";
-  if (!p.name || p.name.trim().length < 2) {
-    return "`passenger.name` must be at least 2 characters";
+/**
+ * Split "First Last" into { firstName, lastName }. If only one token is given,
+ * the last name defaults to a single dash so the column stays non-null; API
+ * consumers that want a real split should send firstName + lastName directly.
+ */
+function splitName(full: string): { firstName: string; lastName: string } {
+  const parts = full.trim().split(/\s+/);
+  if (parts.length === 1) return { firstName: parts[0], lastName: "-" };
+  return {
+    firstName: parts[0],
+    lastName: parts.slice(1).join(" "),
+  };
+}
+
+type ResolvedPassenger = {
+  firstName: string;
+  lastName: string;
+  ageCategory: AgeCategory;
+  phone: string;
+  email?: string;
+};
+
+function resolvePassenger(
+  p?: PassengerPayload
+): { ok: true; passenger: ResolvedPassenger } | { ok: false; error: string } {
+  if (!p) return { ok: false, error: "`passenger` is required" };
+
+  let firstName = p.firstName?.trim() ?? "";
+  let lastName = p.lastName?.trim() ?? "";
+  if ((!firstName || !lastName) && p.name) {
+    const split = splitName(p.name);
+    firstName = firstName || split.firstName;
+    lastName = lastName || split.lastName;
   }
+
+  if (firstName.length < 1) {
+    return { ok: false, error: "`passenger.firstName` is required" };
+  }
+  if (lastName.length < 1) {
+    return { ok: false, error: "`passenger.lastName` is required" };
+  }
+
   const digits = (p.phone ?? "").replace(/\D/g, "");
   if (digits.length < 7) {
-    return "`passenger.phone` must contain at least 7 digits";
+    return {
+      ok: false,
+      error: "`passenger.phone` must contain at least 7 digits",
+    };
   }
   if (p.email && !/^\S+@\S+\.\S+$/.test(p.email)) {
-    return "`passenger.email` is not a valid email address";
+    return {
+      ok: false,
+      error: "`passenger.email` is not a valid email address",
+    };
   }
-  return null;
+
+  let ageCategory: AgeCategory = AgeCategory.ADULT;
+  if (p.ageCategory) {
+    if (!(p.ageCategory in AgeCategory)) {
+      return {
+        ok: false,
+        error:
+          "`passenger.ageCategory` must be one of CHILD_0_4, CHILD_5_12, ADULT, SENIOR_60",
+      };
+    }
+    ageCategory = p.ageCategory as AgeCategory;
+  }
+
+  return {
+    ok: true,
+    passenger: {
+      firstName,
+      lastName,
+      ageCategory,
+      phone: (p.phone ?? "").trim(),
+      email: p.email?.trim() || undefined,
+    },
+  };
 }
 
 function generateReference(): string {
@@ -83,16 +155,20 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const passengerError = validatePassenger(body.passenger);
-  if (passengerError) {
-    return NextResponse.json({ error: passengerError }, { status: 400 });
+  const resolved = resolvePassenger(body.passenger);
+  if (!resolved.ok) {
+    return NextResponse.json({ error: resolved.error }, { status: 400 });
   }
+  const passenger = resolved.passenger;
 
-  const passenger: BookingPassenger = {
-    name: body.passenger!.name!.trim(),
-    phone: body.passenger!.phone!.trim(),
-    email: body.passenger!.email?.trim() || undefined,
+  // Snapshot shape for downstream carrier adapter (still expects { name, ... }).
+  const adapterPassenger: BookingPassenger = {
+    name: `${passenger.firstName} ${passenger.lastName}`.trim(),
+    phone: passenger.phone,
+    email: passenger.email,
   };
+
+  const promoCode = body.promoCode?.trim() || undefined;
 
   const snapshot = body.tripSnapshot ?? {};
   if (
@@ -114,7 +190,7 @@ export async function POST(req: NextRequest) {
     adapterResult = await adapter.book({
       tripId: body.tripId,
       carrierId: carrierAdapterId,
-      passenger,
+      passenger: adapterPassenger,
       tripSnapshot: snapshot,
     });
   } catch (err) {
@@ -127,7 +203,11 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const price = Math.round(snapshot.price * 100) / 100;
+  const basePrice = Math.round(snapshot.price * 100) / 100;
+  // Final price will be recomputed once age-category discounts and promo-code
+  // validation land; for now it mirrors the base price.
+  const finalPrice = basePrice;
+
   const departureAt = combineDateTime(snapshot.date, snapshot.departure);
   const arrivalAt = combineDateTime(snapshot.date, snapshot.arrival);
   if (arrivalAt <= departureAt) {
@@ -153,7 +233,7 @@ export async function POST(req: NextRequest) {
           toCity: snapshot.to!,
           departureTime: departureAt,
           arrivalTime: arrivalAt,
-          price,
+          price: basePrice,
           carrierId: carrier.id,
         },
       });
@@ -163,16 +243,21 @@ export async function POST(req: NextRequest) {
           userId: session.sub,
           tripId: trip.id,
           status: TicketStatus.RESERVED,
-          price,
+          basePrice,
+          price: finalPrice,
         },
       });
 
       const booking = await tx.booking.create({
         data: {
           reference,
-          passengerName: passenger.name,
+          firstName: passenger.firstName,
+          lastName: passenger.lastName,
+          ageCategory: passenger.ageCategory,
           phone: passenger.phone,
           email: passenger.email ?? null,
+          promoCode: promoCode ?? null,
+          finalPrice,
           ticketId: ticket.id,
         },
       });
@@ -180,7 +265,7 @@ export async function POST(req: NextRequest) {
       return { carrier, trip, ticket, booking };
     });
 
-    const totalPaid = price + SERVICE_FEE_EUR;
+    const totalPaid = finalPrice + SERVICE_FEE_EUR;
 
     return NextResponse.json(
       {
@@ -190,10 +275,13 @@ export async function POST(req: NextRequest) {
           status: created.ticket.status,
           createdAt: created.booking.createdAt,
           passenger: {
-            name: created.booking.passengerName,
+            firstName: created.booking.firstName,
+            lastName: created.booking.lastName,
+            ageCategory: created.booking.ageCategory,
             phone: created.booking.phone,
             email: created.booking.email ?? undefined,
           },
+          promoCode: created.booking.promoCode ?? undefined,
           trip: {
             from: created.trip.fromCity,
             to: created.trip.toCity,
@@ -201,6 +289,7 @@ export async function POST(req: NextRequest) {
             arrival: snapshot.arrival,
             departureAt: created.trip.departureTime,
             arrivalAt: created.trip.arrivalTime,
+            basePrice: created.ticket.basePrice,
             price: created.trip.price,
             currency: snapshot.currency ?? "EUR",
           },
@@ -208,6 +297,8 @@ export async function POST(req: NextRequest) {
             id: created.carrier.id,
             name: created.carrier.name,
           },
+          basePrice: created.ticket.basePrice,
+          finalPrice: created.booking.finalPrice,
           totalPaid: Math.round(totalPaid * 100) / 100,
         },
         carrierReference: adapterResult.carrierReference,

@@ -25,6 +25,13 @@ enum TicketStatus {
   REFUNDED
 }
 
+enum AgeCategory {
+  CHILD_0_4
+  CHILD_5_12
+  ADULT
+  SENIOR_60
+}
+
 model User {
   id        String   @id @default(cuid())
   email     String   @unique
@@ -74,6 +81,7 @@ model Trip {
 model Ticket {
   id        String       @id @default(cuid())
   status    TicketStatus @default(RESERVED)
+  basePrice Float
   price     Float
   createdAt DateTime     @default(now())
   updatedAt DateTime     @updatedAt
@@ -93,13 +101,17 @@ model Ticket {
 }
 
 model Booking {
-  id            String   @id @default(cuid())
-  reference     String   @unique
-  passengerName String
-  phone         String
-  email         String?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id          String      @id @default(cuid())
+  reference   String      @unique
+  firstName   String
+  lastName    String
+  ageCategory AgeCategory @default(ADULT)
+  phone       String
+  email       String?
+  promoCode   String?
+  finalPrice  Float
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
 
   ticketId String @unique
   ticket   Ticket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
