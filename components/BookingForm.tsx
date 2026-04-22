@@ -6,8 +6,10 @@ import {
   AGE_CATEGORIES,
   checkPromo,
   computePrice,
+  promoBadge,
   type AgeCategoryId,
 } from "@/lib/pricing";
+import { PROMO_CODES } from "@/lib/promo";
 
 type TripSummary = {
   carrier: string;
@@ -365,7 +367,7 @@ export default function BookingForm({ tripSummary }: Props) {
               onChange={(e) =>
                 setField("promoCode", e.target.value.toUpperCase())
               }
-              placeholder="SUMMER10"
+              placeholder={PROMO_CODES[0]?.code ?? "PROMO"}
               aria-invalid={errors.promoCode ? "true" : undefined}
               className={`h-12 w-full rounded-xl border bg-slate-50 px-3 pr-28 text-sm uppercase tracking-wider text-slate-900 placeholder:text-slate-400 placeholder:normal-case transition focus:bg-white focus:outline-none focus:ring-2 ${
                 promoCheck.status === "invalid"
@@ -385,7 +387,7 @@ export default function BookingForm({ tripSummary }: Props) {
               }`}
             >
               {promoCheck.status === "valid"
-                ? `-${Math.round(promoCheck.promo.discount * 100)}%`
+                ? promoBadge(promoCheck.promo)
                 : promoCheck.status === "invalid"
                   ? "invalid"
                   : "—"}
@@ -400,7 +402,14 @@ export default function BookingForm({ tripSummary }: Props) {
           <p className="mt-1 text-xs text-rose-600">{errors.promoCode}</p>
         ) : (
           <p className="mt-1 text-xs text-slate-400">
-            Try <code>SUMMER10</code>, <code>STUDENT15</code> or <code>ASOL20</code>.
+            Try{" "}
+            {PROMO_CODES.map((p, i) => (
+              <span key={p.code}>
+                {i > 0 ? ", " : ""}
+                <code>{p.code}</code>
+              </span>
+            ))}
+            .
           </p>
         )}
       </div>

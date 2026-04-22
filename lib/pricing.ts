@@ -1,7 +1,18 @@
 /**
- * Pricing helpers used both by the BookingForm (for the live price preview)
- * and by the server (validation / final charge will move here later).
+ * Pricing helpers shared by the BookingForm (live price preview) and the API
+ * (authoritative final charge).
+ *
+ * Discount order:  base → age → promo → service fee.
  */
+
+import {
+  findPromo,
+  promoDiscountAmount,
+  type Promo,
+} from "@/lib/promo";
+
+export { checkPromo, findPromo, promoBadge } from "@/lib/promo";
+export type { Promo, PromoCheck } from "@/lib/promo";
 
 export type AgeCategoryId = "CHILD_0_4" | "CHILD_5_12" | "ADULT" | "SENIOR_60";
 
@@ -55,66 +66,55 @@ export function applyAgeDiscount(
   return { basePrice: bp, discount, finalPrice };
 }
 
-/**
- * Mock promo codes. Replace with a DB-backed table / promo service when the
- * admin UI for promotions lands.
- */
-export type PromoCode = {
-  code: string;
-  discount: number;
-  label: string;
-};
-
-export const MOCK_PROMO_CODES: ReadonlyArray<PromoCode> = [
-  { code: "SUMMER10", discount: 0.1, label: "Summer 2026 · -10%" },
-  { code: "STUDENT15", discount: 0.15, label: "Student · -15%" },
-  { code: "ASOL20", discount: 0.2, label: "Launch offer · -20%" },
-];
-
-export type PromoCheck =
-  | { status: "empty" }
-  | { status: "valid"; promo: PromoCode }
-  | { status: "invalid"; input: string };
-
-export function checkPromo(raw: string): PromoCheck {
-  const code = raw.trim().toUpperCase();
-  if (!code) return { status: "empty" };
-  const promo = MOCK_PROMO_CODES.find((p) => p.code === code);
-  if (promo) return { status: "valid", promo };
-  return { status: "invalid", input: code };
-}
-
 export const SERVICE_FEE_EUR = 1.5;
 
 export type PriceBreakdown = {
   basePrice: number;
   ageDiscount: number;
+  promoCode?: string;
   promoDiscount: number;
   finalPrice: number;
   serviceFee: number;
   total: number;
 };
 
-const r2 = (n: number) => Math.round(n * 100) / 100;
-
+/**
+ * End-to-end price calculation used by the UI preview and the server. Given a
+ * base price, age category, and optional promo, returns every intermediate
+ * figure so both callers display identical numbers.
+ */
 export function computePrice(
   basePrice: number,
   ageId: AgeCategoryId,
-  promo?: PromoCode | null
+  promo?: Promo | null
 ): PriceBreakdown {
-  const age = getAgeCategory(ageId);
-  const ageDiscount = r2(basePrice * age.discount);
-  const afterAge = r2(basePrice - ageDiscount);
-  const promoDiscount = r2(afterAge * (promo?.discount ?? 0));
-  const finalPrice = r2(afterAge - promoDiscount);
+  const { basePrice: bp, discount: ageDiscount, finalPrice: afterAge } =
+    applyAgeDiscount(basePrice, ageId);
+  const promoDiscount = promoDiscountAmount(afterAge, promo ?? null);
+  const finalPrice = round2(afterAge - promoDiscount);
   const serviceFee = SERVICE_FEE_EUR;
-  const total = r2(finalPrice + serviceFee);
+  const total = round2(finalPrice + serviceFee);
   return {
-    basePrice: r2(basePrice),
+    basePrice: bp,
     ageDiscount,
+    promoCode: promo?.code,
     promoDiscount,
     finalPrice,
     serviceFee,
     total,
   };
+}
+
+/**
+ * Compute the final ticket price authoritatively from an age category and a
+ * raw promo-code string. The server calls this before creating a Booking.
+ */
+export function computeFinalPrice(
+  basePrice: number,
+  ageId: AgeCategoryId,
+  rawPromoCode?: string | null
+): PriceBreakdown & { promo: Promo | null } {
+  const promo = findPromo(rawPromoCode ?? null);
+  const breakdown = computePrice(basePrice, ageId, promo);
+  return { ...breakdown, promo };
 }

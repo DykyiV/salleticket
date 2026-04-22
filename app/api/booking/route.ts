@@ -3,7 +3,7 @@ import { AgeCategory, TicketStatus } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { findCarrier } from "@/lib/carriers/registry";
 import { requireAuth } from "@/lib/auth/guard";
-import { applyAgeDiscount, type AgeCategoryId } from "@/lib/pricing";
+import { computeFinalPrice, type AgeCategoryId } from "@/lib/pricing";
 import type { BookingPassenger, Trip } from "@/lib/carriers/types";
 
 export const runtime = "nodejs";
@@ -169,7 +169,6 @@ export async function POST(req: NextRequest) {
     email: passenger.email,
   };
 
-  const promoCode = body.promoCode?.trim() || undefined;
 
   const snapshot = body.tripSnapshot ?? {};
   if (
@@ -204,15 +203,17 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Base price comes from the trip snapshot; apply the age-category discount
-  // server-side so the form cannot lower the charge by spoofing tripSnapshot
-  // beyond the original fare.
-  const pricing = applyAgeDiscount(
+  // Base price comes from the trip snapshot. Age-category discount + promo
+  // code are applied server-side so the client cannot undercut the fare by
+  // spoofing tripSnapshot beyond the original price.
+  const pricing = computeFinalPrice(
     snapshot.price,
-    passenger.ageCategory as AgeCategoryId
+    passenger.ageCategory as AgeCategoryId,
+    body.promoCode
   );
   const basePrice = pricing.basePrice;
   const finalPrice = pricing.finalPrice;
+  const appliedPromoCode = pricing.promo?.code ?? null;
 
   const departureAt = combineDateTime(snapshot.date, snapshot.departure);
   const arrivalAt = combineDateTime(snapshot.date, snapshot.arrival);
@@ -262,7 +263,7 @@ export async function POST(req: NextRequest) {
           ageCategory: passenger.ageCategory,
           phone: passenger.phone,
           email: passenger.email ?? null,
-          promoCode: promoCode ?? null,
+          promoCode: appliedPromoCode,
           finalPrice,
           ticketId: ticket.id,
         },
@@ -305,6 +306,15 @@ export async function POST(req: NextRequest) {
           },
           basePrice: created.ticket.basePrice,
           finalPrice: created.booking.finalPrice,
+          priceBreakdown: {
+            basePrice: pricing.basePrice,
+            ageDiscount: pricing.ageDiscount,
+            promoDiscount: pricing.promoDiscount,
+            promoCode: pricing.promo?.code ?? null,
+            finalPrice: pricing.finalPrice,
+            serviceFee: pricing.serviceFee,
+            total: pricing.total,
+          },
           totalPaid: Math.round(totalPaid * 100) / 100,
         },
         carrierReference: adapterResult.carrierReference,
