@@ -1,93 +1,111 @@
 /**
- * Promo code registry + lookup.
+ * Promo code service.
  *
- * The registry is intentionally a plain list so the same API can later be
- * backed by:
- *   - a Prisma `Promo` table maintained by admins,
- *   - a feature-flag service (time-boxed campaigns),
- *   - a remote partner endpoint.
- *
- * Code shape is normalised to UPPERCASE on read.
+ * Promos live in the `promos` table. Validation rules (see validatePromo):
+ *   1. code matches a row (case-insensitive)
+ *   2. isActive === true
+ *   3. now is inside [startsAt, endsAt)
+ *   4. usedCount < usageLimit (or usageLimit is null = unlimited)
+ *   5. if promo.userId is set, it must equal the current user's id
  */
 
-export type PromoDiscount =
-  | { type: "percent"; percent: number } // 0..1 of the price after age discount
-  | { type: "fixed"; amount: number; currency: "EUR" };
+import type { Promo as DbPromo, PrismaClient } from "@prisma/client";
 
-export type Promo = {
-  code: string;
-  label: string;
-  discount: PromoDiscount;
-  /** Optional validity window — null/undefined means "always on". */
-  startsAt?: Date | null;
-  endsAt?: Date | null;
+export type Promo = DbPromo;
+
+/** Typed error so API handlers can map each failure to a clean message. */
+export type PromoErrorReason =
+  | "missing"
+  | "not_found"
+  | "inactive"
+  | "not_started"
+  | "expired"
+  | "usage_limit_reached"
+  | "wrong_user";
+
+export class PromoError extends Error {
+  readonly reason: PromoErrorReason;
+  constructor(reason: PromoErrorReason, message: string) {
+    super(message);
+    this.name = "PromoError";
+    this.reason = reason;
+  }
+}
+
+/**
+ * Case-insensitive code lookup. Returns the raw row (no validity checks).
+ * Use validatePromo to run the full rule set.
+ */
+export async function findPromo(
+  db: PrismaClient | Pick<PrismaClient, "promo">,
+  rawCode: string | null | undefined
+): Promise<Promo | null> {
+  if (!rawCode || !rawCode.trim()) return null;
+  const code = rawCode.trim().toUpperCase();
+  return db.promo.findUnique({ where: { code } });
+}
+
+type ValidateArgs = {
+  rawCode: string | null | undefined;
+  currentUserId: string | null;
+  now?: Date;
 };
 
 /**
- * Built-in promo codes. Add or remove entries here; the rest of the app picks
- * them up automatically.
+ * Full rule evaluation. Returns the matching Promo or throws PromoError.
  */
-export const PROMO_CODES: ReadonlyArray<Promo> = [
-  {
-    code: "DISCOUNT10",
-    label: "10% off",
-    discount: { type: "percent", percent: 0.1 },
-  },
-  {
-    code: "VIP20",
-    label: "VIP · 20% off",
-    discount: { type: "percent", percent: 0.2 },
-  },
-];
+export async function validatePromo(
+  db: PrismaClient | Pick<PrismaClient, "promo">,
+  { rawCode, currentUserId, now = new Date() }: ValidateArgs
+): Promise<Promo> {
+  if (!rawCode || !rawCode.trim()) {
+    throw new PromoError("missing", "Promo code is required");
+  }
 
-/**
- * Case-insensitive lookup. Ignores promos outside their [startsAt, endsAt)
- * window so time-boxed campaigns just work.
- */
-export function findPromo(raw: string | null | undefined, now: Date = new Date()): Promo | null {
-  if (!raw) return null;
-  const code = raw.trim().toUpperCase();
-  if (!code) return null;
-  const promo = PROMO_CODES.find((p) => p.code === code);
-  if (!promo) return null;
-  if (promo.startsAt && now < promo.startsAt) return null;
-  if (promo.endsAt && now >= promo.endsAt) return null;
+  const promo = await findPromo(db, rawCode);
+  if (!promo) {
+    throw new PromoError("not_found", "Promo code not found");
+  }
+
+  if (!promo.isActive) {
+    throw new PromoError("inactive", "Promo code is not active");
+  }
+
+  if (promo.startsAt && now < promo.startsAt) {
+    throw new PromoError("not_started", "Promo code is not active yet");
+  }
+  if (promo.endsAt && now >= promo.endsAt) {
+    throw new PromoError("expired", "Promo code has expired");
+  }
+
+  if (promo.usageLimit != null && promo.usedCount >= promo.usageLimit) {
+    throw new PromoError(
+      "usage_limit_reached",
+      "Promo code has reached its usage limit"
+    );
+  }
+
+  if (promo.userId && promo.userId !== currentUserId) {
+    throw new PromoError(
+      "wrong_user",
+      "This promo code is not available for this account"
+    );
+  }
+
   return promo;
 }
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
-/**
- * Returns the monetary discount promo would apply to `priceBeforePromo`
- * (typically the price *after* the age-category discount). Never drops below 0.
- */
 export function promoDiscountAmount(
   priceBeforePromo: number,
   promo: Promo | null | undefined
 ): number {
   if (!promo) return 0;
-  if (promo.discount.type === "percent") {
-    return round2(priceBeforePromo * promo.discount.percent);
-  }
-  return round2(Math.min(promo.discount.amount, priceBeforePromo));
+  return round2(priceBeforePromo * promo.percent);
 }
 
-export type PromoCheck =
-  | { status: "empty" }
-  | { status: "valid"; promo: Promo }
-  | { status: "invalid"; input: string };
-
-export function checkPromo(raw: string, now: Date = new Date()): PromoCheck {
-  if (!raw || !raw.trim()) return { status: "empty" };
-  const promo = findPromo(raw, now);
-  if (promo) return { status: "valid", promo };
-  return { status: "invalid", input: raw.trim().toUpperCase() };
-}
-
-/** UI helper — string like "-10%" or "-€5.00". */
+/** UI helper — "-10%" etc. */
 export function promoBadge(promo: Promo): string {
-  if (promo.discount.type === "percent") {
-    return `-${Math.round(promo.discount.percent * 100)}%`;
-  }
-  return `-€${promo.discount.amount.toFixed(2)}`;
+  return `-${Math.round(promo.percent * 100)}%`;
 }

@@ -41,9 +41,37 @@ model User {
   updatedAt DateTime @updatedAt
 
   tickets Ticket[]
+  promos  Promo[]
 
   @@index([role])
   @@map("users")
+}
+
+/// A promo code that can be applied to a booking to get a percentage discount.
+/// Supports a validity window, a usage cap, and optional binding to a single
+/// user account.
+model Promo {
+  id         String    @id @default(cuid())
+  code       String    @unique
+  /// Discount percent, e.g. 0.10 for -10%.
+  percent    Float
+  label      String?
+  isActive   Boolean   @default(true)
+  startsAt   DateTime?
+  endsAt     DateTime?
+  /// Max total redemptions across all users. null = unlimited.
+  usageLimit Int?
+  usedCount  Int       @default(0)
+  /// When set, only this user may redeem the code.
+  userId     String?
+  user       User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([isActive])
+  @@index([userId])
+  @@map("promos")
 }
 
 model Carrier {

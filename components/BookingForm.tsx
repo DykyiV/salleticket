@@ -4,12 +4,17 @@ import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import {
   AGE_CATEGORIES,
-  checkPromo,
   computePrice,
-  promoBadge,
   type AgeCategoryId,
 } from "@/lib/pricing";
-import { PROMO_CODES } from "@/lib/promo";
+
+type PromoPreview = { code: string; percent: number; label: string | null };
+
+type PromoState =
+  | { status: "empty" }
+  | { status: "checking" }
+  | { status: "valid"; promo: PromoPreview }
+  | { status: "invalid"; message: string };
 
 type TripSummary = {
   carrier: string;
@@ -80,11 +85,69 @@ export default function BookingForm({ tripSummary, currentUser }: Props) {
   );
   const [submitError, setSubmitError] = useState<string | null>(null);
 
-  const promoCheck = useMemo(() => checkPromo(values.promoCode), [values.promoCode]);
-  const activePromo = promoCheck.status === "valid" ? promoCheck.promo : null;
+  const [promoState, setPromoState] = useState<PromoState>({ status: "empty" });
+
+  // Debounced server-side promo check. Hits /api/promo/check which runs the
+  // same rules as POST /api/booking (isActive, date window, usage limit, and
+  // per-user binding if set) without incrementing usedCount.
+  useEffect(() => {
+    const raw = values.promoCode.trim();
+    if (!raw) {
+      setPromoState({ status: "empty" });
+      return;
+    }
+    setPromoState({ status: "checking" });
+    const ac = new AbortController();
+    const timer = window.setTimeout(async () => {
+      try {
+        const res = await fetch(
+          `/api/promo/check?code=${encodeURIComponent(raw)}`,
+          { signal: ac.signal }
+        );
+        const data = (await res.json()) as
+          | { ok: true; promo: PromoPreview }
+          | { ok: false; reason: string; message: string };
+        if (data.ok) {
+          setPromoState({ status: "valid", promo: data.promo });
+        } else {
+          setPromoState({ status: "invalid", message: data.message });
+        }
+      } catch {
+        // aborted or network error — leave the prior state alone
+      }
+    }, 250);
+    return () => {
+      ac.abort();
+      window.clearTimeout(timer);
+    };
+  }, [values.promoCode]);
+
+  const activePromo = promoState.status === "valid" ? promoState.promo : null;
 
   const price = useMemo(
-    () => computePrice(tripSummary.price, values.ageCategory, activePromo),
+    () =>
+      computePrice(
+        tripSummary.price,
+        values.ageCategory,
+        activePromo
+          ? {
+              // Shape-compatible with the shared `computePrice(Promo?)`.
+              // We only use `.percent` and `.code`; the rest are ignored.
+              id: activePromo.code,
+              code: activePromo.code,
+              percent: activePromo.percent,
+              label: activePromo.label,
+              isActive: true,
+              startsAt: null,
+              endsAt: null,
+              usageLimit: null,
+              usedCount: 0,
+              userId: null,
+              createdAt: new Date(),
+              updatedAt: new Date(),
+            }
+          : null
+      ),
     [tripSummary.price, values.ageCategory, activePromo]
   );
 
@@ -111,8 +174,12 @@ export default function BookingForm({ tripSummary, currentUser }: Props) {
     if (!AGE_CATEGORIES.some((c) => c.id === values.ageCategory)) {
       next.ageCategory = "Please choose an age category.";
     }
-    if (promoCheck.status === "invalid") {
-      next.promoCode = "This promo code doesn't exist.";
+    if (promoState.status === "invalid") {
+      next.promoCode = promoState.message;
+    }
+    if (promoState.status === "checking") {
+      // Don't submit while the server is still validating the code
+      next.promoCode = "Checking promo code…";
     }
     if (!values.agree) {
       next.agree = "Please accept the terms to continue.";
@@ -418,49 +485,49 @@ export default function BookingForm({ tripSummary, currentUser }: Props) {
               onChange={(e) =>
                 setField("promoCode", e.target.value.toUpperCase())
               }
-              placeholder={PROMO_CODES[0]?.code ?? "PROMO"}
+              placeholder="e.g. DISCOUNT10"
               aria-invalid={errors.promoCode ? "true" : undefined}
               className={`h-12 w-full rounded-xl border bg-slate-50 px-3 pr-28 text-sm uppercase tracking-wider text-slate-900 placeholder:text-slate-400 placeholder:normal-case transition focus:bg-white focus:outline-none focus:ring-2 ${
-                promoCheck.status === "invalid"
+                promoState.status === "invalid"
                   ? "border-rose-300 focus:border-rose-400 focus:ring-rose-200"
-                  : promoCheck.status === "valid"
+                  : promoState.status === "valid"
                     ? "border-emerald-300 focus:border-emerald-400 focus:ring-emerald-200"
                     : "border-slate-200 focus:border-brand-400 focus:ring-brand-200"
               }`}
             />
             <span
               className={`pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 rounded-full px-2 py-1 text-[11px] font-semibold ${
-                promoCheck.status === "valid"
+                promoState.status === "valid"
                   ? "bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-100"
-                  : promoCheck.status === "invalid"
+                  : promoState.status === "invalid"
                     ? "bg-rose-50 text-rose-700 ring-1 ring-inset ring-rose-100"
-                    : "bg-slate-100 text-slate-500"
+                    : promoState.status === "checking"
+                      ? "bg-brand-50 text-brand-700 ring-1 ring-inset ring-brand-100"
+                      : "bg-slate-100 text-slate-500"
               }`}
             >
-              {promoCheck.status === "valid"
-                ? promoBadge(promoCheck.promo)
-                : promoCheck.status === "invalid"
+              {promoState.status === "valid"
+                ? `-${Math.round(promoState.promo.percent * 100)}%`
+                : promoState.status === "invalid"
                   ? "invalid"
-                  : "—"}
+                  : promoState.status === "checking"
+                    ? "…"
+                    : "—"}
             </span>
           </div>
         </label>
-        {promoCheck.status === "valid" ? (
+        {promoState.status === "valid" ? (
           <p className="mt-1 text-xs text-emerald-700">
-            Applied: {promoCheck.promo.label}
+            Applied
+            {promoState.promo.label ? ` — ${promoState.promo.label}` : ""}
           </p>
+        ) : promoState.status === "invalid" ? (
+          <p className="mt-1 text-xs text-rose-600">{promoState.message}</p>
         ) : errors.promoCode ? (
           <p className="mt-1 text-xs text-rose-600">{errors.promoCode}</p>
         ) : (
           <p className="mt-1 text-xs text-slate-400">
-            Try{" "}
-            {PROMO_CODES.map((p, i) => (
-              <span key={p.code}>
-                {i > 0 ? ", " : ""}
-                <code>{p.code}</code>
-              </span>
-            ))}
-            .
+            Have a code? Enter it here and we&apos;ll check it against the server.
           </p>
         )}
       </div>

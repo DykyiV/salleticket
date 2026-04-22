@@ -1,9 +1,10 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { AgeCategory, TicketStatus } from "@prisma/client";
+import { AgeCategory, Prisma, TicketStatus } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { findCarrier } from "@/lib/carriers/registry";
 import { requireAuth } from "@/lib/auth/guard";
-import { computeFinalPrice, type AgeCategoryId } from "@/lib/pricing";
+import { computePrice, type AgeCategoryId } from "@/lib/pricing";
+import { PromoError, validatePromo } from "@/lib/promo";
 import type { BookingPassenger, Trip } from "@/lib/carriers/types";
 
 export const runtime = "nodejs";
@@ -225,14 +226,38 @@ export async function POST(req: NextRequest) {
   // Base price comes from the trip snapshot. Age-category discount + promo
   // code are applied server-side so the client cannot undercut the fare by
   // spoofing tripSnapshot beyond the original price.
-  const pricing = computeFinalPrice(
+  //
+  // We resolve the promo *outside* the transaction so invalid-code errors
+  // short-circuit before we book anything. The usedCount increment inside
+  // the transaction re-checks the usage limit atomically (optimistic concurrency).
+  const rawPromoCode = body.promoCode?.trim() || null;
+  let validatedPromo = null as Awaited<ReturnType<typeof validatePromo>> | null;
+  if (rawPromoCode) {
+    try {
+      validatedPromo = await validatePromo(prisma, {
+        rawCode: rawPromoCode,
+        currentUserId: session.sub,
+      });
+    } catch (err) {
+      if (err instanceof PromoError) {
+        return NextResponse.json(
+          { error: err.message, reason: err.reason },
+          { status: 400 }
+        );
+      }
+      throw err;
+    }
+  }
+
+  const pricing = computePrice(
     snapshot.price,
     passenger.ageCategory as AgeCategoryId,
-    body.promoCode
+    validatedPromo
   );
   const basePrice = pricing.basePrice;
   const finalPrice = pricing.finalPrice;
-  const appliedPromoCode = pricing.promo?.code ?? null;
+  const appliedPromoCode = validatedPromo?.code ?? null;
+  const appliedPromoId = validatedPromo?.id ?? null;
 
   const departureAt = combineDateTime(snapshot.date, snapshot.departure);
   const arrivalAt = combineDateTime(snapshot.date, snapshot.arrival);
@@ -288,6 +313,25 @@ export async function POST(req: NextRequest) {
         },
       });
 
+      // Atomic usedCount increment with concurrency guard.
+      // If another request just pushed the counter over the usageLimit, the
+      // conditional update matches 0 rows and Prisma throws P2025, which we
+      // turn into a clean 400 outside the transaction so the booking (and
+      // any adapter side effects) rolls back.
+      if (appliedPromoId) {
+        const baseWhere: Prisma.PromoWhereUniqueInput & {
+          isActive?: boolean;
+          usedCount?: { lt: number };
+        } = { id: appliedPromoId, isActive: true };
+        if (validatedPromo?.usageLimit != null) {
+          baseWhere.usedCount = { lt: validatedPromo.usageLimit };
+        }
+        await tx.promo.update({
+          where: baseWhere as Prisma.PromoWhereUniqueInput,
+          data: { usedCount: { increment: 1 } },
+        });
+      }
+
       return { carrier, trip, ticket, booking };
     });
 
@@ -329,7 +373,7 @@ export async function POST(req: NextRequest) {
             basePrice: pricing.basePrice,
             ageDiscount: pricing.ageDiscount,
             promoDiscount: pricing.promoDiscount,
-            promoCode: pricing.promo?.code ?? null,
+            promoCode: appliedPromoCode,
             finalPrice: pricing.finalPrice,
             serviceFee: pricing.serviceFee,
             total: pricing.total,
@@ -342,6 +386,21 @@ export async function POST(req: NextRequest) {
       { status: 201 }
     );
   } catch (err) {
+    // P2025 = the conditional promo update matched 0 rows (concurrency race
+    // against usedCount / isActive). Surface a clean 400 rather than 500.
+    if (
+      err instanceof Prisma.PrismaClientKnownRequestError &&
+      err.code === "P2025" &&
+      appliedPromoId
+    ) {
+      return NextResponse.json(
+        {
+          error: "Promo code has reached its usage limit",
+          reason: "usage_limit_reached",
+        },
+        { status: 400 }
+      );
+    }
     return NextResponse.json(
       {
         error: "Failed to persist booking",

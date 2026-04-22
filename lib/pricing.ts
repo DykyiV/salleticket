@@ -5,14 +5,10 @@
  * Discount order:  base → age → promo → service fee.
  */
 
-import {
-  findPromo,
-  promoDiscountAmount,
-  type Promo,
-} from "@/lib/promo";
+import { promoDiscountAmount, type Promo } from "@/lib/promo";
 
-export { checkPromo, findPromo, promoBadge } from "@/lib/promo";
-export type { Promo, PromoCheck } from "@/lib/promo";
+export { promoBadge } from "@/lib/promo";
+export type { Promo } from "@/lib/promo";
 
 export type AgeCategoryId = "CHILD_0_4" | "CHILD_5_12" | "ADULT" | "SENIOR_60";
 
@@ -51,10 +47,6 @@ export const AGE_DISCOUNT: Record<AgeCategoryId, number> = {
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
-/**
- * Apply the age-category discount to a base price. Promo codes are handled
- * separately (for now, stored without affecting the charge).
- */
 export function applyAgeDiscount(
   basePrice: number,
   ageCategory: AgeCategoryId
@@ -80,8 +72,8 @@ export type PriceBreakdown = {
 
 /**
  * End-to-end price calculation used by the UI preview and the server. Given a
- * base price, age category, and optional promo, returns every intermediate
- * figure so both callers display identical numbers.
+ * base price, age category, and an already-validated promo, returns every
+ * intermediate figure so UI and API display identical numbers.
  */
 export function computePrice(
   basePrice: number,
@@ -103,18 +95,4 @@ export function computePrice(
     serviceFee,
     total,
   };
-}
-
-/**
- * Compute the final ticket price authoritatively from an age category and a
- * raw promo-code string. The server calls this before creating a Booking.
- */
-export function computeFinalPrice(
-  basePrice: number,
-  ageId: AgeCategoryId,
-  rawPromoCode?: string | null
-): PriceBreakdown & { promo: Promo | null } {
-  const promo = findPromo(rawPromoCode ?? null);
-  const breakdown = computePrice(basePrice, ageId, promo);
-  return { ...breakdown, promo };
 }
