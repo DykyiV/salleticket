@@ -1,0 +1,193 @@
+// Asol BUS — Prisma schema
+// Docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  USER
+  AGENT
+  ADMIN
+  SUPER_ADMIN
+}
+
+enum TicketStatus {
+  RESERVED
+  PAID_ONLINE
+  PAID_CASH
+  CANCELLED
+  REFUNDED
+}
+
+enum AgeCategory {
+  CHILD_0_4
+  CHILD_5_12
+  ADULT
+  SENIOR_60
+}
+
+enum PromoType {
+  PERCENT
+  FIXED
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String
+  role      Role     @default(USER)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tickets Ticket[]
+  promos  Promo[]
+
+  @@index([role])
+  @@map("users")
+}
+
+/// A promo code that can be applied to a booking to get a percentage discount.
+/// Supports a validity window, a usage cap, and optional binding to a single
+/// user account.
+model Promo {
+  id         String    @id @default(cuid())
+  code       String    @unique
+  type       PromoType @default(PERCENT)
+  /// For PERCENT: fraction 0..1, e.g. 0.10 for -10% (mirrored by `percent`
+  /// for backwards compatibility). For FIXED: flat EUR amount (e.g. 5.00).
+  percent    Float
+  amount     Float?
+  label      String?
+  isActive   Boolean   @default(true)
+  startsAt   DateTime?
+  endsAt     DateTime?
+  /// Max total redemptions across all users. null = unlimited.
+  usageLimit Int?
+  usedCount  Int       @default(0)
+  /// When set, only this user may redeem the code.
+  userId     String?
+  user       User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([isActive])
+  @@index([userId])
+  @@map("promos")
+}
+
+model Carrier {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  rating    Float    @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  trips Trip[]
+
+  @@map("carriers")
+}
+
+model Trip {
+  id            String   @id @default(cuid())
+  fromCity      String
+  toCity        String
+  departureTime DateTime
+  arrivalTime   DateTime
+  price         Float
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  carrierId String
+  carrier   Carrier @relation(fields: [carrierId], references: [id], onDelete: Restrict)
+
+  tickets Ticket[]
+
+  @@index([fromCity, toCity, departureTime])
+  @@index([carrierId])
+  @@map("trips")
+}
+
+model Ticket {
+  id         String       @id @default(cuid())
+  status     TicketStatus @default(RESERVED)
+  basePrice  Float
+  /// The charged price after age + promo discounts. Stored under the existing
+  /// `price` column so older rows keep working after the rename.
+  finalPrice Float        @map("price")
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  tripId String?
+  trip   Trip?   @relation(fields: [tripId], references: [id], onDelete: SetNull)
+
+  booking Booking?
+  history TicketHistory[]
+
+  @@index([userId])
+  @@index([status])
+  @@index([tripId])
+  @@map("tickets")
+}
+
+/// Audit trail for tickets. Every mutation must append a row with:
+///   - the actor (`changedBy`, user id; null for system actions)
+///   - what they did (`action`)
+///   - where it came from (`source`: BOOKING_FORM | ADMIN_PANEL | ACCOUNT | API | SYSTEM)
+///   - the full diff of changed fields (`changes`, JSON string: { field: { from, to } })
+///   - request metadata for forensic / compliance lookups (ipAddress, userAgent)
+///   - precise wall-clock timestamp
+///
+/// `oldStatus` / `newStatus` remain convenient columns for fast filtering
+/// of status transitions without having to parse `changes`.
+model TicketHistory {
+  id        String        @id @default(cuid())
+  ticketId  String
+  ticket    Ticket        @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  action    String
+  oldStatus TicketStatus?
+  newStatus TicketStatus?
+  /// JSON-encoded diff: { "<field>": { "from": <any|null>, "to": <any> } }
+  changes   String?
+  /// Origin of the change. Known values are enforced at the application level.
+  source    String?
+  changedBy String?
+  ipAddress String?
+  userAgent String?
+  timestamp DateTime      @default(now())
+
+  @@index([ticketId])
+  @@index([changedBy])
+  @@index([timestamp])
+  @@index([source])
+  @@map("ticket_history")
+}
+
+model Booking {
+  id          String      @id @default(cuid())
+  reference   String      @unique
+  firstName   String
+  lastName    String
+  ageCategory AgeCategory @default(ADULT)
+  phone       String
+  email       String?
+  promoCode   String?
+  finalPrice  Float
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  ticketId String @unique
+  ticket   Ticket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  @@index([reference])
+  @@map("bookings")
+}
