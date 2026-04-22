@@ -130,6 +130,21 @@ export async function POST(req: NextRequest) {
   if (!guard.ok) return guard.response;
   const { session } = guard;
 
+  // Email is authoritative from the users table — if a userId exists the
+  // email stored against the booking always matches the account, regardless
+  // of what the client sends in passenger.email.
+  const account = await prisma.user.findUnique({
+    where: { id: session.sub },
+    select: { email: true },
+  });
+  if (!account) {
+    return NextResponse.json(
+      { error: "Authenticated user not found" },
+      { status: 401 }
+    );
+  }
+  const accountEmail = account.email;
+
   let body: CreateBookingBody;
   try {
     body = (await req.json()) as CreateBookingBody;
@@ -163,10 +178,12 @@ export async function POST(req: NextRequest) {
   const passenger = resolved.passenger;
 
   // Snapshot shape for downstream carrier adapter (still expects { name, ... }).
+  // NOTE: we deliberately drop any passenger.email coming from the client —
+  // the canonical email is the one on the authenticated user's account.
   const adapterPassenger: BookingPassenger = {
     name: `${passenger.firstName} ${passenger.lastName}`.trim(),
     phone: passenger.phone,
-    email: passenger.email,
+    email: accountEmail,
   };
 
 
@@ -262,7 +279,7 @@ export async function POST(req: NextRequest) {
           lastName: passenger.lastName,
           ageCategory: passenger.ageCategory,
           phone: passenger.phone,
-          email: passenger.email ?? null,
+          email: accountEmail,
           promoCode: appliedPromoCode,
           finalPrice,
           ticketId: ticket.id,
