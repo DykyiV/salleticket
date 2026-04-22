@@ -23,6 +23,39 @@ export function getAgeCategory(id: AgeCategoryId) {
 }
 
 /**
+ * Discount ratios per age category. Authoritative on the server; the form
+ * uses the same values via AGE_CATEGORIES to preview the price.
+ *
+ * CHILD_0_4  → 30%
+ * CHILD_5_12 → 20%
+ * ADULT      → 0%
+ * SENIOR_60  → 10%
+ */
+export const AGE_DISCOUNT: Record<AgeCategoryId, number> = {
+  CHILD_0_4: 0.3,
+  CHILD_5_12: 0.2,
+  ADULT: 0,
+  SENIOR_60: 0.1,
+};
+
+const round2 = (n: number) => Math.round(n * 100) / 100;
+
+/**
+ * Apply the age-category discount to a base price. Promo codes are handled
+ * separately (for now, stored without affecting the charge).
+ */
+export function applyAgeDiscount(
+  basePrice: number,
+  ageCategory: AgeCategoryId
+): { basePrice: number; discount: number; finalPrice: number } {
+  const bp = round2(basePrice);
+  const rate = AGE_DISCOUNT[ageCategory] ?? 0;
+  const discount = round2(bp * rate);
+  const finalPrice = round2(bp - discount);
+  return { basePrice: bp, discount, finalPrice };
+}
+
+/**
  * Mock promo codes. Replace with a DB-backed table / promo service when the
  * admin UI for promotions lands.
  */

@@ -3,6 +3,7 @@ import { AgeCategory, TicketStatus } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { findCarrier } from "@/lib/carriers/registry";
 import { requireAuth } from "@/lib/auth/guard";
+import { applyAgeDiscount, type AgeCategoryId } from "@/lib/pricing";
 import type { BookingPassenger, Trip } from "@/lib/carriers/types";
 
 export const runtime = "nodejs";
@@ -203,10 +204,15 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const basePrice = Math.round(snapshot.price * 100) / 100;
-  // Final price will be recomputed once age-category discounts and promo-code
-  // validation land; for now it mirrors the base price.
-  const finalPrice = basePrice;
+  // Base price comes from the trip snapshot; apply the age-category discount
+  // server-side so the form cannot lower the charge by spoofing tripSnapshot
+  // beyond the original fare.
+  const pricing = applyAgeDiscount(
+    snapshot.price,
+    passenger.ageCategory as AgeCategoryId
+  );
+  const basePrice = pricing.basePrice;
+  const finalPrice = pricing.finalPrice;
 
   const departureAt = combineDateTime(snapshot.date, snapshot.departure);
   const arrivalAt = combineDateTime(snapshot.date, snapshot.arrival);
