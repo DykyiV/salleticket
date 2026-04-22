@@ -2,11 +2,11 @@ import { NextResponse, type NextRequest } from "next/server";
 import { Prisma, TicketStatus } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { requireRole } from "@/lib/auth/guard";
+import { requestMeta } from "@/lib/tickets/history";
 import {
-  recordTicketHistory,
-  requestMeta,
-  diffChanges,
-} from "@/lib/tickets/history";
+  updateTicketStatus,
+  TicketNotFoundError,
+} from "@/lib/tickets/service";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -22,9 +22,9 @@ const ALLOWED_STATUSES = new Set<TicketStatus>([
 ]);
 
 /**
- * GET  /api/admin/bookings/[reference]         -> booking + ticket history
- * PATCH /api/admin/bookings/[reference]        -> admin changes status; full
- *                                                 audit trail is appended.
+ * GET  /api/admin/bookings/[reference]   -> booking + full audit trail
+ * PATCH /api/admin/bookings/[reference]  -> admin changes status (delegates
+ *                                           to updateTicketStatus service)
  */
 export async function GET(_req: NextRequest, { params }: Params) {
   const guard = await requireRole("ADMIN");
@@ -43,10 +43,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
   });
 
   if (!booking) {
-    return NextResponse.json(
-      { error: "Booking not found" },
-      { status: 404 }
-    );
+    return NextResponse.json({ error: "Booking not found" }, { status: 404 });
   }
   return NextResponse.json({ booking });
 }
@@ -70,10 +67,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   }
 
   if (!body.status) {
-    return NextResponse.json(
-      { error: "`status` is required" },
-      { status: 400 }
-    );
+    return NextResponse.json({ error: "`status` is required" }, { status: 400 });
   }
   if (!ALLOWED_STATUSES.has(body.status as TicketStatus)) {
     return NextResponse.json(
@@ -83,75 +77,43 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   }
   const nextStatus = body.status as TicketStatus;
 
+  const booking = await prisma.booking.findUnique({
+    where: { reference: params.reference },
+    select: { id: true, ticket: { select: { id: true } } },
+  });
+  if (!booking) {
+    return NextResponse.json({ error: "Booking not found" }, { status: 404 });
+  }
+
   try {
-    const updated = await prisma.$transaction(async (tx) => {
-      const booking = await tx.booking.findUnique({
-        where: { reference: params.reference },
-        include: { ticket: true },
-      });
-      if (!booking) throw new NotFound();
-
-      const oldStatus = booking.ticket.status;
-      if (oldStatus === nextStatus) {
-        // No-op — still record it for the audit trail so compliance can see
-        // who confirmed the state.
-        await recordTicketHistory(tx, {
-          ticketId: booking.ticket.id,
-          action: body.action ?? "STATUS_CONFIRMED",
-          oldStatus,
-          newStatus: nextStatus,
-          changes: null,
-          source: "ADMIN_PANEL",
-          changedBy: session.sub,
-          request: meta,
-        });
-        return booking;
-      }
-
-      const ticket = await tx.ticket.update({
-        where: { id: booking.ticket.id },
-        data: { status: nextStatus },
-      });
-
-      await recordTicketHistory(tx, {
-        ticketId: ticket.id,
-        action: body.action ?? "STATUS_CHANGE",
-        oldStatus,
-        newStatus: nextStatus,
-        changes: diffChanges(
-          { status: oldStatus },
-          { status: nextStatus }
-        ),
-        source: "ADMIN_PANEL",
-        changedBy: session.sub,
-        request: meta,
-      });
-
-      return await tx.booking.findUnique({
-        where: { id: booking.id },
-        include: { ticket: { include: { history: { orderBy: { timestamp: "asc" } } } } },
-      });
+    await updateTicketStatus(booking.ticket.id, nextStatus, session.sub, {
+      source: "ADMIN_PANEL",
+      action: body.action,
+      request: meta,
     });
-
-    return NextResponse.json({ booking: updated });
   } catch (err) {
-    if (err instanceof NotFound) {
-      return NextResponse.json(
-        { error: "Booking not found" },
-        { status: 404 }
-      );
+    if (err instanceof TicketNotFoundError) {
+      return NextResponse.json({ error: "Booking not found" }, { status: 404 });
     }
     if (
       err instanceof Prisma.PrismaClientKnownRequestError &&
       err.code === "P2025"
     ) {
-      return NextResponse.json(
-        { error: "Booking not found" },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: "Booking not found" }, { status: 404 });
     }
     throw err;
   }
-}
 
-class NotFound extends Error {}
+  const fresh = await prisma.booking.findUnique({
+    where: { id: booking.id },
+    include: {
+      ticket: {
+        include: {
+          history: { orderBy: { timestamp: "asc" } },
+          trip: { include: { carrier: true } },
+        },
+      },
+    },
+  });
+  return NextResponse.json({ booking: fresh });
+}
