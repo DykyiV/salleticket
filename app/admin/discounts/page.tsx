@@ -16,7 +16,9 @@ export default async function AdminDiscountsPage() {
   const discounts: DiscountRow[] = rows.map((d) => ({
     id: d.id,
     code: d.code,
+    type: d.type,
     percent: d.percent,
+    amount: d.amount,
     label: d.label,
     isActive: d.isActive,
     startsAt: d.startsAt ? d.startsAt.toISOString() : null,

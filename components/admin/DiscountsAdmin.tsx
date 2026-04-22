@@ -6,7 +6,9 @@ import { useRouter } from "next/navigation";
 export type DiscountRow = {
   id: string;
   code: string;
+  type: "PERCENT" | "FIXED";
   percent: number;
+  amount: number | null;
   label: string | null;
   isActive: boolean;
   startsAt: string | null;
@@ -19,7 +21,8 @@ export type DiscountRow = {
 
 type FormValues = {
   code: string;
-  percentInput: string;
+  type: "PERCENT" | "FIXED";
+  value: string;
   label: string;
   isActive: boolean;
   startsAt: string;
@@ -30,7 +33,8 @@ type FormValues = {
 
 const EMPTY: FormValues = {
   code: "",
-  percentInput: "10",
+  type: "PERCENT",
+  value: "",
   label: "",
   isActive: true,
   startsAt: "",
@@ -39,12 +43,15 @@ const EMPTY: FormValues = {
   userEmail: "",
 };
 
-/** Convert a DB row into form values for editing. */
 function rowToForm(r: DiscountRow): FormValues {
   const date = (iso: string | null) => (iso ? iso.slice(0, 10) : "");
   return {
     code: r.code,
-    percentInput: String(Math.round(r.percent * 100)),
+    type: r.type,
+    value:
+      r.type === "FIXED"
+        ? (r.amount ?? 0).toFixed(2)
+        : String(Math.round(r.percent * 100)),
     label: r.label ?? "",
     isActive: r.isActive,
     startsAt: date(r.startsAt),
@@ -54,12 +61,11 @@ function rowToForm(r: DiscountRow): FormValues {
   };
 }
 
-/** Build a JSON payload for /api/admin/discounts (create or patch). */
 function formToPayload(v: FormValues) {
-  // percent is entered as a whole number ("10" -> 10 %) or a fraction ("0.1")
   return {
     code: v.code.trim(),
-    percent: v.percentInput.trim(),
+    type: v.type,
+    value: v.value.trim(),
     label: v.label.trim() || null,
     isActive: v.isActive,
     startsAt: v.startsAt || null,
@@ -67,6 +73,12 @@ function formToPayload(v: FormValues) {
     usageLimit: v.usageLimit.trim() === "" ? null : v.usageLimit.trim(),
     userEmail: v.userEmail.trim() || null,
   };
+}
+
+function formatValue(row: DiscountRow): string {
+  return row.type === "FIXED"
+    ? `€${(row.amount ?? 0).toFixed(2)}`
+    : `${Math.round(row.percent * 100)}%`;
 }
 
 type Props = {
@@ -82,8 +94,6 @@ export default function DiscountsAdmin({ initialDiscounts }: Props) {
   const [submitting, setSubmitting] = useState(false);
 
   const isEditing = editingId !== null;
-  const title = isEditing ? "Edit discount" : "Create discount";
-  const submitLabel = isEditing ? "Save changes" : "Create";
 
   const sorted = useMemo(
     () => [...discounts].sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
@@ -110,7 +120,6 @@ export default function DiscountsAdmin({ initialDiscounts }: Props) {
     e.preventDefault();
     setError(null);
     setSubmitting(true);
-
     try {
       const payload = formToPayload(values);
       const res = await fetch(
@@ -127,15 +136,13 @@ export default function DiscountsAdmin({ initialDiscounts }: Props) {
       if (!res.ok) {
         throw new Error(data?.error ?? "Request failed");
       }
-      const updated: DiscountRow = toRow(data.discount);
-      setDiscounts((list) => {
-        if (isEditing) {
-          return list.map((d) => (d.id === updated.id ? updated : d));
-        }
-        return [updated, ...list];
-      });
+      const updated = toRow(data.discount);
+      setDiscounts((list) =>
+        isEditing
+          ? list.map((d) => (d.id === updated.id ? updated : d))
+          : [updated, ...list]
+      );
       resetForm();
-      // Keep server-rendered data in sync if the admin navigates away and back.
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
@@ -146,7 +153,6 @@ export default function DiscountsAdmin({ initialDiscounts }: Props) {
 
   const toggleActive = async (row: DiscountRow) => {
     const next = !row.isActive;
-    // Optimistic update
     setDiscounts((list) =>
       list.map((d) => (d.id === row.id ? { ...d, isActive: next } : d))
     );
@@ -161,7 +167,6 @@ export default function DiscountsAdmin({ initialDiscounts }: Props) {
         throw new Error(data?.error ?? "Failed to toggle");
       }
     } catch (err) {
-      // Roll back on failure
       setDiscounts((list) =>
         list.map((d) => (d.id === row.id ? { ...d, isActive: !next } : d))
       );
@@ -170,7 +175,7 @@ export default function DiscountsAdmin({ initialDiscounts }: Props) {
   };
 
   const deleteRow = async (row: DiscountRow) => {
-    if (!window.confirm(`Delete ${row.code}? This cannot be undone.`)) return;
+    if (!window.confirm(`Delete ${row.code}?`)) return;
     const snapshot = discounts;
     setDiscounts((list) => list.filter((d) => d.id !== row.id));
     try {
@@ -189,256 +194,250 @@ export default function DiscountsAdmin({ initialDiscounts }: Props) {
   };
 
   return (
-    <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_420px]">
-      <section className="overflow-hidden rounded-2xl bg-white ring-1 ring-slate-200">
-        <header className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-5 py-3">
-          <p className="text-sm font-semibold text-slate-900">
-            All discounts
-            <span className="ml-2 rounded-full bg-slate-200/70 px-2 py-0.5 text-[11px] text-slate-600">
-              {discounts.length}
-            </span>
-          </p>
-          <button
-            type="button"
-            onClick={resetForm}
-            className="text-xs font-medium text-brand-700 hover:underline"
-          >
-            + New discount
-          </button>
-        </header>
+    <div className="space-y-6">
+      <div className="overflow-x-auto rounded border border-slate-300 bg-white">
+        <table className="w-full border-collapse text-sm">
+          <thead className="bg-slate-100 text-left text-xs uppercase tracking-wide text-slate-600">
+            <tr>
+              <th className="border-b border-slate-300 px-3 py-2">Code</th>
+              <th className="border-b border-slate-300 px-3 py-2">Type</th>
+              <th className="border-b border-slate-300 px-3 py-2">Value</th>
+              <th className="border-b border-slate-300 px-3 py-2">Usage</th>
+              <th className="border-b border-slate-300 px-3 py-2">Active</th>
+              <th className="border-b border-slate-300 px-3 py-2">Bound user</th>
+              <th className="border-b border-slate-300 px-3 py-2 text-right">
+                Actions
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {sorted.length === 0 ? (
+              <tr>
+                <td
+                  className="px-3 py-6 text-center text-slate-500"
+                  colSpan={7}
+                >
+                  No discounts yet.
+                </td>
+              </tr>
+            ) : (
+              sorted.map((row) => (
+                <tr
+                  key={row.id}
+                  className={
+                    editingId === row.id
+                      ? "bg-yellow-50"
+                      : "odd:bg-white even:bg-slate-50"
+                  }
+                >
+                  <td className="border-t border-slate-200 px-3 py-2 font-mono">
+                    {row.code}
+                  </td>
+                  <td className="border-t border-slate-200 px-3 py-2">
+                    {row.type}
+                  </td>
+                  <td className="border-t border-slate-200 px-3 py-2">
+                    {formatValue(row)}
+                  </td>
+                  <td className="border-t border-slate-200 px-3 py-2 tabular-nums">
+                    {row.usedCount}
+                    {row.usageLimit != null ? ` / ${row.usageLimit}` : ""}
+                  </td>
+                  <td className="border-t border-slate-200 px-3 py-2">
+                    <label className="inline-flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={row.isActive}
+                        onChange={() => toggleActive(row)}
+                      />
+                      <span
+                        className={
+                          row.isActive ? "text-slate-900" : "text-slate-400"
+                        }
+                      >
+                        {row.isActive ? "yes" : "no"}
+                      </span>
+                    </label>
+                  </td>
+                  <td className="border-t border-slate-200 px-3 py-2">
+                    {row.userEmail ?? "—"}
+                  </td>
+                  <td className="border-t border-slate-200 px-3 py-2 text-right">
+                    <button
+                      type="button"
+                      onClick={() => startEdit(row)}
+                      className="mr-2 rounded border border-slate-300 bg-white px-2 py-1 text-xs"
+                    >
+                      Edit
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => deleteRow(row)}
+                      className="rounded border border-slate-300 bg-white px-2 py-1 text-xs text-rose-700"
+                    >
+                      Delete
+                    </button>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
 
-        {sorted.length === 0 ? (
-          <div className="p-10 text-center text-sm text-slate-500">
-            No discounts yet. Create one with the form on the right.
-          </div>
-        ) : (
-          <ul className="divide-y divide-slate-200 text-sm">
-            {sorted.map((d) => (
-              <DiscountListItem
-                key={d.id}
-                row={d}
-                isSelected={editingId === d.id}
-                onEdit={() => startEdit(d)}
-                onToggle={() => toggleActive(d)}
-                onDelete={() => deleteRow(d)}
-              />
-            ))}
-          </ul>
-        )}
-      </section>
+      <form
+        onSubmit={handleSubmit}
+        className="rounded border border-slate-300 bg-white p-4"
+      >
+        <div className="flex items-center justify-between">
+          <h2 className="text-base font-semibold text-slate-900">
+            {isEditing ? "Edit discount" : "Create discount"}
+          </h2>
+          {isEditing ? (
+            <button
+              type="button"
+              onClick={resetForm}
+              className="text-xs text-slate-600 underline"
+            >
+              Cancel edit
+            </button>
+          ) : null}
+        </div>
 
-      <section className="lg:sticky lg:top-20 lg:self-start">
-        <form
-          onSubmit={handleSubmit}
-          className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200 sm:p-6"
-        >
-          <div className="flex items-center justify-between">
-            <h2 className="text-base font-semibold text-slate-900">{title}</h2>
-            {isEditing ? (
-              <button
-                type="button"
-                onClick={resetForm}
-                className="text-xs text-slate-500 hover:text-slate-900"
-              >
-                Cancel
-              </button>
-            ) : null}
-          </div>
-
-          <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <Field
-              label="Code"
-              required
-              placeholder="DISCOUNT10"
+        <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <Field label="Code">
+            <input
+              type="text"
               value={values.code}
               onChange={(e) =>
                 setField("code", e.target.value.toUpperCase().replace(/\s+/g, ""))
               }
-              className="uppercase tracking-wider"
-            />
-            <Field
-              label="Percent"
               required
-              type="number"
-              step="1"
-              min="1"
-              max="99"
-              placeholder="10"
-              value={values.percentInput}
-              onChange={(e) => setField("percentInput", e.target.value)}
-              suffix="%"
+              placeholder="SUMMER10"
+              className="h-9 w-full rounded border border-slate-300 px-2 font-mono uppercase"
             />
-          </div>
+          </Field>
 
-          <div className="mt-3">
-            <Field
-              label="Label (optional)"
-              placeholder="Summer sale"
+          <Field label="Type">
+            <select
+              value={values.type}
+              onChange={(e) =>
+                setField("type", e.target.value as "PERCENT" | "FIXED")
+              }
+              className="h-9 w-full rounded border border-slate-300 bg-white px-2"
+            >
+              <option value="PERCENT">Percent</option>
+              <option value="FIXED">Fixed (€)</option>
+            </select>
+          </Field>
+
+          <Field
+            label={
+              values.type === "FIXED"
+                ? "Value (EUR)"
+                : "Value (percent, 1–99)"
+            }
+          >
+            <input
+              type="number"
+              min="0"
+              step={values.type === "FIXED" ? "0.01" : "1"}
+              value={values.value}
+              onChange={(e) => setField("value", e.target.value)}
+              required
+              placeholder={values.type === "FIXED" ? "5.00" : "10"}
+              className="h-9 w-full rounded border border-slate-300 px-2"
+            />
+          </Field>
+
+          <Field label="Label (optional)">
+            <input
+              type="text"
               value={values.label}
               onChange={(e) => setField("label", e.target.value)}
+              placeholder="Summer sale"
+              className="h-9 w-full rounded border border-slate-300 px-2"
             />
-          </div>
+          </Field>
 
-          <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <Field
-              label="Starts at"
+          <Field label="Starts at">
+            <input
               type="date"
               value={values.startsAt}
               onChange={(e) => setField("startsAt", e.target.value)}
+              className="h-9 w-full rounded border border-slate-300 px-2"
             />
-            <Field
-              label="Ends at"
+          </Field>
+
+          <Field label="Ends at">
+            <input
               type="date"
               value={values.endsAt}
               onChange={(e) => setField("endsAt", e.target.value)}
+              className="h-9 w-full rounded border border-slate-300 px-2"
             />
-          </div>
+          </Field>
 
-          <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <Field
-              label="Usage limit"
+          <Field label="Usage limit (blank = unlimited)">
+            <input
               type="number"
               min="0"
               step="1"
-              placeholder="unlimited"
               value={values.usageLimit}
               onChange={(e) => setField("usageLimit", e.target.value)}
+              className="h-9 w-full rounded border border-slate-300 px-2"
             />
-            <Field
-              label="Bind to user (email)"
+          </Field>
+
+          <Field label="Bind to user (email, blank = everyone)">
+            <input
               type="email"
-              placeholder="everyone"
               value={values.userEmail}
               onChange={(e) => setField("userEmail", e.target.value)}
+              placeholder="user@example.com"
+              className="h-9 w-full rounded border border-slate-300 px-2"
             />
-          </div>
+          </Field>
+        </div>
 
-          <label className="mt-4 flex items-center gap-2 text-sm text-slate-700">
-            <input
-              type="checkbox"
-              checked={values.isActive}
-              onChange={(e) => setField("isActive", e.target.checked)}
-              className="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
-            />
-            Active
-          </label>
+        <label className="mt-3 flex items-center gap-2 text-sm text-slate-700">
+          <input
+            type="checkbox"
+            checked={values.isActive}
+            onChange={(e) => setField("isActive", e.target.checked)}
+          />
+          Active
+        </label>
 
-          {error ? (
-            <div
-              role="alert"
-              className="mt-4 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700"
-            >
-              {error}
-            </div>
-          ) : null}
+        {error ? (
+          <p className="mt-3 text-sm text-rose-700">{error}</p>
+        ) : null}
 
+        <div className="mt-4 flex items-center gap-2">
           <button
             type="submit"
             disabled={submitting}
-            className="mt-5 inline-flex h-11 w-full items-center justify-center rounded-xl bg-brand-600 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-70"
+            className="rounded bg-slate-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-60"
           >
-            {submitting ? "Saving…" : submitLabel}
+            {submitting ? "Saving…" : isEditing ? "Save changes" : "Create"}
           </button>
-        </form>
-      </section>
+          {isEditing ? null : (
+            <span className="text-xs text-slate-500">
+              Fill in the fields and click Create.
+            </span>
+          )}
+        </div>
+      </form>
     </div>
   );
-}
-
-function DiscountListItem({
-  row,
-  isSelected,
-  onEdit,
-  onToggle,
-  onDelete,
-}: {
-  row: DiscountRow;
-  isSelected: boolean;
-  onEdit: () => void;
-  onToggle: () => void;
-  onDelete: () => void;
-}) {
-  const percentLabel = `-${Math.round(row.percent * 100)}%`;
-  const validity = formatWindow(row.startsAt, row.endsAt);
-  const usage =
-    row.usageLimit == null
-      ? `${row.usedCount} used`
-      : `${row.usedCount} / ${row.usageLimit}`;
-
-  return (
-    <li
-      className={`flex flex-wrap items-center gap-3 px-5 py-4 transition ${
-        isSelected ? "bg-brand-50/60" : "hover:bg-slate-50"
-      }`}
-    >
-      <div className="min-w-[200px] flex-1">
-        <div className="flex items-center gap-2">
-          <span className="rounded-lg bg-slate-100 px-2 py-0.5 font-mono text-xs font-semibold tracking-wider text-slate-800">
-            {row.code}
-          </span>
-          <span
-            className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
-              row.isActive
-                ? "bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-100"
-                : "bg-slate-100 text-slate-500"
-            }`}
-          >
-            {row.isActive ? "active" : "inactive"}
-          </span>
-          <span className="rounded-full bg-brand-50 px-2 py-0.5 text-[11px] font-semibold text-brand-700 ring-1 ring-inset ring-brand-100">
-            {percentLabel}
-          </span>
-        </div>
-        <p className="mt-1 truncate text-xs text-slate-500">
-          {row.label ?? "—"} · {validity} · {usage}
-          {row.userEmail ? ` · for ${row.userEmail}` : " · everyone"}
-        </p>
-      </div>
-
-      <div className="flex shrink-0 items-center gap-2 text-xs">
-        <button
-          type="button"
-          onClick={onToggle}
-          className="rounded-lg border border-slate-200 bg-white px-2 py-1 font-medium text-slate-700 transition hover:border-brand-300 hover:text-brand-700"
-        >
-          {row.isActive ? "Deactivate" : "Activate"}
-        </button>
-        <button
-          type="button"
-          onClick={onEdit}
-          className="rounded-lg bg-brand-600 px-2 py-1 font-semibold text-white transition hover:bg-brand-700"
-        >
-          Edit
-        </button>
-        <button
-          type="button"
-          onClick={onDelete}
-          className="rounded-lg border border-slate-200 bg-white px-2 py-1 font-medium text-rose-600 transition hover:border-rose-300 hover:bg-rose-50"
-        >
-          Delete
-        </button>
-      </div>
-    </li>
-  );
-}
-
-function formatWindow(start: string | null, end: string | null): string {
-  const fmt = (iso: string) =>
-    new Date(iso).toLocaleDateString("en-GB", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-    });
-  if (!start && !end) return "any date";
-  if (start && !end) return `from ${fmt(start)}`;
-  if (!start && end) return `until ${fmt(end)}`;
-  return `${fmt(start!)} → ${fmt(end!)}`;
 }
 
 type ApiDiscount = {
   id: string;
   code: string;
+  type: "PERCENT" | "FIXED";
   percent: number;
+  amount: number | null;
   label: string | null;
   isActive: boolean;
   startsAt: string | null;
@@ -453,7 +452,9 @@ function toRow(d: ApiDiscount): DiscountRow {
   return {
     id: d.id,
     code: d.code,
+    type: d.type,
     percent: d.percent,
+    amount: d.amount,
     label: d.label,
     isActive: d.isActive,
     startsAt: d.startsAt,
@@ -465,55 +466,17 @@ function toRow(d: ApiDiscount): DiscountRow {
   };
 }
 
-type FieldProps = {
-  label: string;
-  value: string;
-  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
-  type?: string;
-  placeholder?: string;
-  required?: boolean;
-  className?: string;
-  min?: string;
-  max?: string;
-  step?: string;
-  suffix?: string;
-};
-
 function Field({
   label,
-  value,
-  onChange,
-  type = "text",
-  placeholder,
-  required,
-  className,
-  suffix,
-  ...rest
-}: FieldProps) {
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
   return (
-    <label className="block">
-      <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
-        {label}
-        {required ? <span className="ml-1 text-rose-500">*</span> : null}
-      </span>
-      <div className="relative">
-        <input
-          type={type}
-          value={value}
-          onChange={onChange}
-          placeholder={placeholder}
-          required={required}
-          {...rest}
-          className={`h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900 placeholder:text-slate-400 transition focus:border-brand-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-200 ${
-            suffix ? "pr-10" : ""
-          } ${className ?? ""}`}
-        />
-        {suffix ? (
-          <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-slate-400">
-            {suffix}
-          </span>
-        ) : null}
-      </div>
+    <label className="block text-xs">
+      <span className="mb-1 block font-medium text-slate-600">{label}</span>
+      {children}
     </label>
   );
 }

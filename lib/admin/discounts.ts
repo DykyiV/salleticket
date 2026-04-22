@@ -1,8 +1,18 @@
-import { Prisma, type PrismaClient } from "@prisma/client";
+import { Prisma, PromoType, type PrismaClient } from "@prisma/client";
 
 export type DiscountPayload = {
   code?: unknown;
+  /** "PERCENT" | "FIXED". Optional on PATCH; defaults to "PERCENT" on create. */
+  type?: unknown;
+  /**
+   * One number interpreted by `type`.
+   *   PERCENT: 0..1 fraction or 1..99 whole percent (auto-scaled).
+   *   FIXED:   EUR amount, > 0.
+   * If absent, the legacy `percent` / `amount` fields are accepted.
+   */
+  value?: unknown;
   percent?: unknown;
+  amount?: unknown;
   label?: unknown;
   isActive?: unknown;
   startsAt?: unknown;
@@ -59,6 +69,78 @@ function parsePercent(input: unknown): number | undefined {
     );
   }
   return Math.round(n * 10000) / 10000;
+}
+
+function parseAmount(input: unknown): number | undefined {
+  if (input === undefined) return undefined;
+  const n =
+    typeof input === "number" ? input : Number.parseFloat(String(input));
+  if (!Number.isFinite(n) || n <= 0) {
+    throw new DiscountValidationError(
+      "amount must be a positive number (e.g. 5 for €5)"
+    );
+  }
+  return Math.round(n * 100) / 100;
+}
+
+function parseType(input: unknown): PromoType | undefined {
+  if (input === undefined) return undefined;
+  const raw = String(input).trim().toUpperCase();
+  if (raw === "PERCENT" || raw === "FIXED") return raw as PromoType;
+  throw new DiscountValidationError("type must be PERCENT or FIXED");
+}
+
+/**
+ * Resolve (type, percent, amount) from either the new (type, value) fields
+ * or the legacy (percent, amount). Returns undefined for "not supplied" to
+ * preserve PATCH semantics.
+ */
+function parseTypeAndValue(
+  payload: DiscountPayload,
+  fallbackType: PromoType | undefined
+): {
+  type?: PromoType;
+  percent?: number | null;
+  amount?: number | null;
+} {
+  const explicitType = parseType(payload.type);
+  const legacyPercent = parsePercent(payload.percent);
+  const legacyAmount = parseAmount(payload.amount);
+
+  // If only legacy fields were sent, keep previous behavior.
+  if (payload.value === undefined) {
+    const out: { type?: PromoType; percent?: number | null; amount?: number | null } = {};
+    if (explicitType !== undefined) out.type = explicitType;
+    if (legacyPercent !== undefined) {
+      out.percent = legacyPercent;
+      // Switching to PERCENT clears amount to keep the row coherent.
+      if ((explicitType ?? fallbackType) === "PERCENT") {
+        out.amount = null;
+      }
+    }
+    if (legacyAmount !== undefined) {
+      out.amount = legacyAmount;
+      if ((explicitType ?? fallbackType) === "FIXED") {
+        out.percent = 0;
+      }
+    }
+    return out;
+  }
+
+  // New shape: a single `value` interpreted by `type`.
+  const effectiveType = explicitType ?? fallbackType ?? PromoType.PERCENT;
+  if (effectiveType === PromoType.PERCENT) {
+    const percent = parsePercent(payload.value);
+    if (percent === undefined) {
+      throw new DiscountValidationError("value is required");
+    }
+    return { type: PromoType.PERCENT, percent, amount: null };
+  }
+  const amount = parseAmount(payload.value);
+  if (amount === undefined) {
+    throw new DiscountValidationError("value is required");
+  }
+  return { type: PromoType.FIXED, percent: 0, amount };
 }
 
 function parseCode(input: unknown): string | undefined {
@@ -126,10 +208,23 @@ export async function parseCreateDiscount(
 ): Promise<Prisma.PromoCreateInput> {
   const code = parseCode(payload.code);
   if (!code) throw new DiscountValidationError("code is required");
-  const percent = parsePercent(payload.percent);
-  if (percent === undefined) {
-    throw new DiscountValidationError("percent is required");
+
+  const tv = parseTypeAndValue(payload, undefined);
+  if (tv.type === undefined && tv.percent === undefined && tv.amount === undefined) {
+    throw new DiscountValidationError("value is required");
   }
+  const type = tv.type ?? PromoType.PERCENT;
+  const percent =
+    tv.percent !== undefined && tv.percent !== null ? tv.percent : 0;
+  const amount =
+    tv.amount !== undefined && tv.amount !== null ? tv.amount : null;
+  if (type === PromoType.PERCENT && percent <= 0) {
+    throw new DiscountValidationError("value is required");
+  }
+  if (type === PromoType.FIXED && (amount === null || amount <= 0)) {
+    throw new DiscountValidationError("value is required");
+  }
+
   const startsAt = parseDate(payload.startsAt, "startsAt") ?? null;
   const endsAt = parseDate(payload.endsAt, "endsAt") ?? null;
   if (startsAt && endsAt && endsAt <= startsAt) {
@@ -149,7 +244,9 @@ export async function parseCreateDiscount(
 
   const data: Prisma.PromoCreateInput = {
     code,
+    type,
     percent,
+    amount,
     label,
     isActive,
     startsAt,
@@ -165,15 +262,18 @@ export async function parseCreateDiscount(
 /** Normalised body for PATCH. Only includes fields the caller explicitly sent. */
 export async function parseUpdateDiscount(
   db: Pick<PrismaClient, "user">,
-  payload: DiscountPayload
+  payload: DiscountPayload,
+  currentType?: PromoType
 ): Promise<Prisma.PromoUpdateInput> {
   const data: Prisma.PromoUpdateInput = {};
 
   const code = parseCode(payload.code);
   if (code !== undefined) data.code = code;
 
-  const percent = parsePercent(payload.percent);
-  if (percent !== undefined) data.percent = percent;
+  const tv = parseTypeAndValue(payload, currentType);
+  if (tv.type !== undefined) data.type = tv.type;
+  if (tv.percent !== undefined && tv.percent !== null) data.percent = tv.percent;
+  if (tv.amount !== undefined) data.amount = tv.amount;
 
   const startsAt = parseDate(payload.startsAt, "startsAt");
   if (startsAt !== undefined) data.startsAt = startsAt;

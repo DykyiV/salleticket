@@ -32,7 +32,9 @@ export async function GET(req: NextRequest) {
       ok: true,
       promo: {
         code: promo.code,
+        type: promo.type,
         percent: promo.percent,
+        amount: promo.amount,
         label: promo.label,
       },
     });

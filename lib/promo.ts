@@ -97,15 +97,27 @@ export async function validatePromo(
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
+/**
+ * Monetary discount the promo applies to the post-age price.
+ * For PERCENT: priceBeforePromo * promo.percent.
+ * For FIXED:   min(promo.amount, priceBeforePromo) — never push price below 0.
+ */
 export function promoDiscountAmount(
   priceBeforePromo: number,
   promo: Promo | null | undefined
 ): number {
   if (!promo) return 0;
+  if (promo.type === "FIXED") {
+    const amount = promo.amount ?? 0;
+    return round2(Math.max(0, Math.min(amount, priceBeforePromo)));
+  }
   return round2(priceBeforePromo * promo.percent);
 }
 
-/** UI helper — "-10%" etc. */
+/** UI helper — "-10%" or "-€5.00". */
 export function promoBadge(promo: Promo): string {
+  if (promo.type === "FIXED") {
+    return `-€${(promo.amount ?? 0).toFixed(2)}`;
+  }
   return `-${Math.round(promo.percent * 100)}%`;
 }

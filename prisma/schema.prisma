@@ -32,6 +32,11 @@ enum AgeCategory {
   SENIOR_60
 }
 
+enum PromoType {
+  PERCENT
+  FIXED
+}
+
 model User {
   id        String   @id @default(cuid())
   email     String   @unique
@@ -53,8 +58,11 @@ model User {
 model Promo {
   id         String    @id @default(cuid())
   code       String    @unique
-  /// Discount percent, e.g. 0.10 for -10%.
+  type       PromoType @default(PERCENT)
+  /// For PERCENT: fraction 0..1, e.g. 0.10 for -10% (mirrored by `percent`
+  /// for backwards compatibility). For FIXED: flat EUR amount (e.g. 5.00).
   percent    Float
+  amount     Float?
   label      String?
   isActive   Boolean   @default(true)
   startsAt   DateTime?

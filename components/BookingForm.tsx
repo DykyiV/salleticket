@@ -8,7 +8,13 @@ import {
   type AgeCategoryId,
 } from "@/lib/pricing";
 
-type PromoPreview = { code: string; percent: number; label: string | null };
+type PromoPreview = {
+  code: string;
+  type?: "PERCENT" | "FIXED";
+  percent: number;
+  amount?: number | null;
+  label: string | null;
+};
 
 type PromoState =
   | { status: "empty" }
@@ -132,10 +138,14 @@ export default function BookingForm({ tripSummary, currentUser }: Props) {
         activePromo
           ? {
               // Shape-compatible with the shared `computePrice(Promo?)`.
-              // We only use `.percent` and `.code`; the rest are ignored.
+              // `type`, `percent` and `amount` drive the math; the rest of
+              // the Prisma row columns are placeholders so the UI stays in
+              // sync with `promoDiscountAmount` on the server.
               id: activePromo.code,
               code: activePromo.code,
+              type: activePromo.type ?? "PERCENT",
               percent: activePromo.percent,
+              amount: activePromo.amount ?? null,
               label: activePromo.label,
               isActive: true,
               startsAt: null,
@@ -507,7 +517,9 @@ export default function BookingForm({ tripSummary, currentUser }: Props) {
               }`}
             >
               {promoState.status === "valid"
-                ? `-${Math.round(promoState.promo.percent * 100)}%`
+                ? promoState.promo.type === "FIXED"
+                  ? `-€${(promoState.promo.amount ?? 0).toFixed(2)}`
+                  : `-${Math.round(promoState.promo.percent * 100)}%`
                 : promoState.status === "invalid"
                   ? "invalid"
                   : promoState.status === "checking"

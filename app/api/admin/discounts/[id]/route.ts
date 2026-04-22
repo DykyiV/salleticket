@@ -38,7 +38,17 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   }
 
   try {
-    const data = await parseUpdateDiscount(prisma, body as object);
+    const current = await prisma.promo.findUnique({
+      where: { id: params.id },
+      select: { type: true },
+    });
+    if (!current) {
+      return NextResponse.json(
+        { error: "Discount not found" },
+        { status: 404 }
+      );
+    }
+    const data = await parseUpdateDiscount(prisma, body as object, current.type);
     const discount = await prisma.promo.update({
       where: { id: params.id },
       data,
