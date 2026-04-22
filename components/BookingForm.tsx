@@ -108,6 +108,9 @@ export default function BookingForm({ tripSummary, currentUser }: Props) {
     if (values.email && !/^\S+@\S+\.\S+$/.test(values.email)) {
       next.email = "Please enter a valid email address.";
     }
+    if (!AGE_CATEGORIES.some((c) => c.id === values.ageCategory)) {
+      next.ageCategory = "Please choose an age category.";
+    }
     if (promoCheck.status === "invalid") {
       next.promoCode = "This promo code doesn't exist.";
     }
@@ -356,6 +359,8 @@ export default function BookingForm({ tripSummary, currentUser }: Props) {
         <div
           role="radiogroup"
           aria-label="Age category"
+          aria-required="true"
+          aria-invalid={errors.ageCategory ? "true" : undefined}
           className="grid grid-cols-1 gap-2 sm:grid-cols-2"
         >
           {AGE_CATEGORIES.map((cat) => {
@@ -376,6 +381,7 @@ export default function BookingForm({ tripSummary, currentUser }: Props) {
                     value={cat.id}
                     checked={active}
                     onChange={() => setField("ageCategory", cat.id)}
+                    required
                     className="h-4 w-4 border-slate-300 text-brand-600 focus:ring-brand-500"
                   />
                   <span className="font-medium">{cat.label}</span>
@@ -393,6 +399,9 @@ export default function BookingForm({ tripSummary, currentUser }: Props) {
             );
           })}
         </div>
+        {errors.ageCategory ? (
+          <p className="mt-2 text-xs text-rose-600">{errors.ageCategory}</p>
+        ) : null}
       </div>
 
       <div className="mt-6">

@@ -81,17 +81,17 @@ function resolvePassenger(
     };
   }
 
-  let ageCategory: AgeCategory = AgeCategory.ADULT;
-  if (p.ageCategory) {
-    if (!(p.ageCategory in AgeCategory)) {
-      return {
-        ok: false,
-        error:
-          "`passenger.ageCategory` must be one of CHILD_0_4, CHILD_5_12, ADULT, SENIOR_60",
-      };
-    }
-    ageCategory = p.ageCategory as AgeCategory;
+  if (!p.ageCategory) {
+    return { ok: false, error: "`passenger.ageCategory` is required" };
   }
+  if (!(p.ageCategory in AgeCategory)) {
+    return {
+      ok: false,
+      error:
+        "`passenger.ageCategory` must be one of CHILD_0_4, CHILD_5_12, ADULT, SENIOR_60",
+    };
+  }
+  const ageCategory = p.ageCategory as AgeCategory;
 
   return {
     ok: true,
