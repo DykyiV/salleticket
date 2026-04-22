@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import {
   AGE_CATEGORIES,
@@ -24,8 +24,15 @@ type TripSummary = {
   total: number;
 };
 
+type CurrentUser = {
+  id: string;
+  email: string;
+  role: string;
+};
+
 type Props = {
   tripSummary: TripSummary;
+  currentUser?: CurrentUser | null;
 };
 
 type BookingConfirmation = {
@@ -48,13 +55,20 @@ type Values = {
 
 type Errors = Partial<Record<keyof Values, string>>;
 
-export default function BookingForm({ tripSummary }: Props) {
+export default function BookingForm({ tripSummary, currentUser }: Props) {
   const router = useRouter();
+  const isAuthed = Boolean(currentUser);
+
+  const [loginHref, setLoginHref] = useState("/login");
+  useEffect(() => {
+    const next = window.location.pathname + window.location.search;
+    setLoginHref(`/login?next=${encodeURIComponent(next)}`);
+  }, []);
   const [values, setValues] = useState<Values>({
     firstName: "",
     lastName: "",
     phone: "",
-    email: "",
+    email: currentUser?.email ?? "",
     ageCategory: "ADULT",
     promoCode: "",
     agree: false,
@@ -259,6 +273,28 @@ export default function BookingForm({ tripSummary }: Props) {
         Please enter the primary passenger&apos;s information.
       </p>
 
+      {isAuthed ? (
+        <div className="mt-4 flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+          <UserIcon className="h-4 w-4 shrink-0" />
+          <span className="min-w-0 truncate">
+            Signed in as{" "}
+            <span className="font-semibold">{currentUser!.email}</span>
+          </span>
+        </div>
+      ) : (
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-brand-200 bg-brand-50 px-3 py-2 text-sm text-brand-900">
+          <span>
+            Booking as a guest — sign in to save this ticket to your account.
+          </span>
+          <a
+            href={loginHref}
+            className="rounded-lg bg-brand-600 px-3 py-1 text-xs font-semibold text-white transition hover:bg-brand-700"
+          >
+            Sign in
+          </a>
+        </div>
+      )}
+
       <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
         <Field
           id="firstName"
@@ -296,13 +332,19 @@ export default function BookingForm({ tripSummary }: Props) {
 
         <Field
           id="email"
-          label="Email (optional)"
+          label={isAuthed ? "Email (your account)" : "Email (optional)"}
           type="email"
           placeholder="you@example.com"
           value={values.email}
           onChange={(e) => setField("email", e.target.value)}
           error={errors.email}
           autoComplete="email"
+          readOnly={isAuthed}
+          hint={
+            isAuthed
+              ? "Linked to your account — sign out to use a different email."
+              : undefined
+          }
         />
       </div>
 
@@ -559,6 +601,8 @@ type FieldProps = {
   error?: string;
   autoComplete?: string;
   required?: boolean;
+  readOnly?: boolean;
+  hint?: string;
 };
 
 function Field({
@@ -571,12 +615,19 @@ function Field({
   error,
   autoComplete,
   required,
+  readOnly,
+  hint,
 }: FieldProps) {
   return (
     <label htmlFor={id} className="block">
       <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
         {label}
         {required ? <span className="ml-1 text-rose-500">*</span> : null}
+        {readOnly ? (
+          <span className="ml-2 rounded-full bg-emerald-50 px-1.5 py-0.5 text-[10px] font-semibold tracking-wider text-emerald-700 ring-1 ring-inset ring-emerald-100">
+            LOCKED
+          </span>
+        ) : null}
       </span>
       <input
         id={id}
@@ -586,8 +637,13 @@ function Field({
         onChange={onChange}
         placeholder={placeholder}
         autoComplete={autoComplete}
+        readOnly={readOnly}
         aria-invalid={error ? "true" : undefined}
-        className={`h-12 w-full rounded-xl border bg-slate-50 px-3 text-sm text-slate-900 placeholder:text-slate-400 transition focus:bg-white focus:outline-none focus:ring-2 ${
+        className={`h-12 w-full rounded-xl border px-3 text-sm text-slate-900 placeholder:text-slate-400 transition focus:outline-none focus:ring-2 ${
+          readOnly
+            ? "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-600"
+            : "bg-slate-50 focus:bg-white"
+        } ${
           error
             ? "border-rose-300 focus:border-rose-400 focus:ring-rose-200"
             : "border-slate-200 focus:border-brand-400 focus:ring-brand-200"
@@ -595,6 +651,8 @@ function Field({
       />
       {error ? (
         <span className="mt-1 block text-xs text-rose-600">{error}</span>
+      ) : hint ? (
+        <span className="mt-1 block text-xs text-slate-400">{hint}</span>
       ) : null}
     </label>
   );
@@ -620,6 +678,25 @@ function SummaryRow({
         {value}
       </dd>
     </div>
+  );
+}
+
+function UserIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden="true"
+    >
+      <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+      <circle cx="12" cy="7" r="4" />
+    </svg>
   );
 }
 

@@ -26,7 +26,9 @@ const RULES: Rule[] = [
   { match: (p) => p.startsWith("/admin"), role: "ADMIN", mode: "page" },
   { match: (p) => p.startsWith("/agent"), role: "AGENT", mode: "page" },
   { match: (p) => p.startsWith("/account"), role: "USER", mode: "page" },
-  { match: (p) => p.startsWith("/booking"), role: "USER", mode: "page" },
+  // NOTE: /booking is intentionally PUBLIC so guests can fill the form.
+  // POST /api/booking still calls requireAuth() and returns 401; the client
+  // then redirects to /login?next=... so users sign in before charging.
 ];
 
 function matchRule(pathname: string): Rule | null {
@@ -82,6 +84,5 @@ export const config = {
     "/admin/:path*",
     "/agent/:path*",
     "/account/:path*",
-    "/booking/:path*",
   ],
 };

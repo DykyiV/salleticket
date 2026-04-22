@@ -2,6 +2,9 @@ import Link from "next/link";
 import Header from "@/components/Header";
 import BookingForm from "@/components/BookingForm";
 import { formatDuration } from "@/lib/mockTrips";
+import { getCurrentUser } from "@/lib/auth/session";
+
+export const dynamic = "force-dynamic";
 
 type SearchParams = {
   carrier?: string;
@@ -28,11 +31,13 @@ function formatDate(dateStr?: string): string {
   });
 }
 
-export default function BookingPage({
+export default async function BookingPage({
   searchParams,
 }: {
   searchParams: SearchParams;
 }) {
+  const user = await getCurrentUser();
+
   const carrier = searchParams.carrier || "Grandes Tour";
   const from = searchParams.from || "Kyiv";
   const to = searchParams.to || "Lviv";
@@ -100,6 +105,11 @@ export default function BookingPage({
               price,
               total,
             }}
+            currentUser={
+              user
+                ? { id: user.id, email: user.email, role: user.role }
+                : null
+            }
           />
 
           <aside className="lg:sticky lg:top-20 lg:self-start">
