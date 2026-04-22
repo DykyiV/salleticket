@@ -47,10 +47,19 @@ type ResolvedPassenger = {
   email?: string;
 };
 
-function resolvePassenger(
-  p?: PassengerPayload
-): { ok: true; passenger: ResolvedPassenger } | { ok: false; error: string } {
-  if (!p) return { ok: false, error: "`passenger` is required" };
+/**
+ * Thrown by validation helpers. The POST handler catches it and returns a
+ * 400 with the message.
+ */
+class ValidationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ValidationError";
+  }
+}
+
+function resolvePassenger(p?: PassengerPayload): ResolvedPassenger {
+  if (!p) throw new ValidationError("Passenger is required");
 
   let firstName = p.firstName?.trim() ?? "";
   let lastName = p.lastName?.trim() ?? "";
@@ -61,47 +70,36 @@ function resolvePassenger(
   }
 
   if (firstName.length < 1) {
-    return { ok: false, error: "`passenger.firstName` is required" };
+    throw new ValidationError("First name is required");
   }
   if (lastName.length < 1) {
-    return { ok: false, error: "`passenger.lastName` is required" };
+    throw new ValidationError("Last name is required");
   }
 
   const digits = (p.phone ?? "").replace(/\D/g, "");
   if (digits.length < 7) {
-    return {
-      ok: false,
-      error: "`passenger.phone` must contain at least 7 digits",
-    };
+    throw new ValidationError("Phone must contain at least 7 digits");
   }
   if (p.email && !/^\S+@\S+\.\S+$/.test(p.email)) {
-    return {
-      ok: false,
-      error: "`passenger.email` is not a valid email address",
-    };
+    throw new ValidationError("Email is not a valid address");
   }
 
-  if (!p.ageCategory) {
-    return { ok: false, error: "`passenger.ageCategory` is required" };
+  const ageCategory = p.ageCategory;
+  if (!ageCategory) {
+    throw new Error("Age category is required");
   }
-  if (!(p.ageCategory in AgeCategory)) {
-    return {
-      ok: false,
-      error:
-        "`passenger.ageCategory` must be one of CHILD_0_4, CHILD_5_12, ADULT, SENIOR_60",
-    };
+  if (!(ageCategory in AgeCategory)) {
+    throw new ValidationError(
+      "Age category must be one of CHILD_0_4, CHILD_5_12, ADULT, SENIOR_60"
+    );
   }
-  const ageCategory = p.ageCategory as AgeCategory;
 
   return {
-    ok: true,
-    passenger: {
-      firstName,
-      lastName,
-      ageCategory,
-      phone: (p.phone ?? "").trim(),
-      email: p.email?.trim() || undefined,
-    },
+    firstName,
+    lastName,
+    ageCategory: ageCategory as AgeCategory,
+    phone: (p.phone ?? "").trim(),
+    email: p.email?.trim() || undefined,
   };
 }
 
@@ -171,11 +169,15 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const resolved = resolvePassenger(body.passenger);
-  if (!resolved.ok) {
-    return NextResponse.json({ error: resolved.error }, { status: 400 });
+  let passenger: ResolvedPassenger;
+  try {
+    passenger = resolvePassenger(body.passenger);
+  } catch (err) {
+    if (err instanceof ValidationError || err instanceof Error) {
+      return NextResponse.json({ error: err.message }, { status: 400 });
+    }
+    throw err;
   }
-  const passenger = resolved.passenger;
 
   // Snapshot shape for downstream carrier adapter (still expects { name, ... }).
   // NOTE: we deliberately drop any passenger.email coming from the client —
