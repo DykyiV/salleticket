@@ -139,9 +139,16 @@ model Ticket {
   @@map("tickets")
 }
 
-/// Audit trail for tickets. Every status change / admin action should
-/// append a row. `oldStatus` / `newStatus` are optional so the same model
-/// can also record non-status actions (e.g. refund processed).
+/// Audit trail for tickets. Every mutation must append a row with:
+///   - the actor (`changedBy`, user id; null for system actions)
+///   - what they did (`action`)
+///   - where it came from (`source`: BOOKING_FORM | ADMIN_PANEL | ACCOUNT | API | SYSTEM)
+///   - the full diff of changed fields (`changes`, JSON string: { field: { from, to } })
+///   - request metadata for forensic / compliance lookups (ipAddress, userAgent)
+///   - precise wall-clock timestamp
+///
+/// `oldStatus` / `newStatus` remain convenient columns for fast filtering
+/// of status transitions without having to parse `changes`.
 model TicketHistory {
   id        String        @id @default(cuid())
   ticketId  String
@@ -149,12 +156,19 @@ model TicketHistory {
   action    String
   oldStatus TicketStatus?
   newStatus TicketStatus?
+  /// JSON-encoded diff: { "<field>": { "from": <any|null>, "to": <any> } }
+  changes   String?
+  /// Origin of the change. Known values are enforced at the application level.
+  source    String?
   changedBy String?
+  ipAddress String?
+  userAgent String?
   timestamp DateTime      @default(now())
 
   @@index([ticketId])
   @@index([changedBy])
   @@index([timestamp])
+  @@index([source])
   @@map("ticket_history")
 }
 

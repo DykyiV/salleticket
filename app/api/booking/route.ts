@@ -5,6 +5,7 @@ import { findCarrier } from "@/lib/carriers/registry";
 import { requireAuth } from "@/lib/auth/guard";
 import { computePrice, type AgeCategoryId } from "@/lib/pricing";
 import { PromoError, validatePromo } from "@/lib/promo";
+import { recordTicketHistory, requestMeta } from "@/lib/tickets/history";
 import type { BookingPassenger, Trip } from "@/lib/carriers/types";
 
 export const runtime = "nodejs";
@@ -128,6 +129,7 @@ export async function POST(req: NextRequest) {
   const guard = await requireAuth();
   if (!guard.ok) return guard.response;
   const { session } = guard;
+  const meta = requestMeta(req);
 
   // Email is authoritative from the users table — if a userId exists the
   // email stored against the booking always matches the account, regardless
@@ -299,18 +301,6 @@ export async function POST(req: NextRequest) {
         },
       });
 
-      // Audit trail: record ticket creation as "CREATED". History rows are
-      // append-only; subsequent status changes go through the same model.
-      await tx.ticketHistory.create({
-        data: {
-          ticketId: ticket.id,
-          action: "CREATED",
-          oldStatus: null,
-          newStatus: ticket.status,
-          changedBy: session.sub,
-        },
-      });
-
       const booking = await tx.booking.create({
         data: {
           reference,
@@ -343,6 +333,47 @@ export async function POST(req: NextRequest) {
           data: { usedCount: { increment: 1 } },
         });
       }
+
+      // Audit trail: capture the initial snapshot of every user-visible
+      // booking field as a from→to diff. Subsequent mutations (admin panel,
+      // account cancel, carrier callback) append to the same table with
+      // their own source + ip/ua + diff.
+      await recordTicketHistory(tx, {
+        ticketId: ticket.id,
+        action: "CREATED",
+        oldStatus: null,
+        newStatus: ticket.status,
+        source: "BOOKING_FORM",
+        changedBy: session.sub,
+        request: meta,
+        changes: {
+          reference:    { from: null, to: booking.reference },
+          status:       { from: null, to: ticket.status },
+          basePrice:    { from: null, to: ticket.basePrice },
+          finalPrice:   { from: null, to: ticket.finalPrice },
+          passenger: {
+            from: null,
+            to: {
+              firstName:   booking.firstName,
+              lastName:    booking.lastName,
+              ageCategory: booking.ageCategory,
+              phone:       booking.phone,
+              email:       booking.email,
+            },
+          },
+          promoCode: { from: null, to: booking.promoCode },
+          trip: {
+            from: null,
+            to: {
+              from:      trip.fromCity,
+              to:        trip.toCity,
+              departure: trip.departureTime,
+              arrival:   trip.arrivalTime,
+              carrier:   carrier.name,
+            },
+          },
+        },
+      });
 
       return { carrier, trip, ticket, booking };
     });
