@@ -4,10 +4,26 @@ import {
   listAgentPermissions,
   normalizeAgentPermissionInput,
 } from "../../../../lib/agent-permissions-store";
+import { getUserById } from "../../../../lib/users-store";
 
 export default function handler(req, res) {
   if (req.method === "GET") {
-    return res.status(200).json({ items: listAgentPermissions() });
+    const items = listAgentPermissions().map((item) => {
+      const user = getUserById(item.userId);
+      return {
+        ...item,
+        user: user
+          ? {
+              id: user.id,
+              email: user.email,
+              role: user.role,
+              firstName: user.firstName ?? null,
+              lastName: user.lastName ?? null,
+            }
+          : null,
+      };
+    });
+    return res.status(200).json({ items });
   }
 
   if (req.method === "POST") {

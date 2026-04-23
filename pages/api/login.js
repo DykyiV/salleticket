@@ -1,4 +1,5 @@
 import { issueJwt, sessionCookie } from "../../lib/auth";
+import { getUserByEmail } from "../../lib/users-store";
 
 const DEMO_USER = {
   id: "user-demo-1",
@@ -18,7 +19,10 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: "Email is required" });
   }
 
-  const user = { ...DEMO_USER, email: normalized };
+  const dbUser = getUserByEmail(normalized);
+  const user = dbUser
+    ? { id: dbUser.id, email: dbUser.email, role: dbUser.role }
+    : { ...DEMO_USER, email: normalized };
   const token = issueJwt(user);
   res.setHeader("Set-Cookie", sessionCookie(token));
 
