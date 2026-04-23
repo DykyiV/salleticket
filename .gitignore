@@ -5,3 +5,4 @@ node_modules/
 tsconfig.tsbuildinfo
 data/*.tmp
 prisma/dev.db
+!data/agent-permissions.json
