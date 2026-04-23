@@ -8,6 +8,7 @@ export function middleware(req) {
     pathname.startsWith("/account") ||
     pathname.startsWith("/agent") ||
     pathname.startsWith("/admin") ||
+    pathname.startsWith("/api/reports") ||
     pathname.startsWith("/api/agent") ||
     pathname.startsWith("/api/admin") ||
     pathname.startsWith("/api/private");
@@ -52,6 +53,12 @@ export function middleware(req) {
     }
   }
 
+  if (pathname.startsWith("/api/reports")) {
+    if (payload.role !== "ADMIN" && payload.role !== "SUPER_ADMIN") {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+  }
+
   if (pathname.startsWith("/agent") || pathname.startsWith("/api/agent")) {
     if (payload.role !== "AGENT" && payload.role !== "ADMIN" && payload.role !== "SUPER_ADMIN") {
       if (pathname.startsWith("/api/")) {
@@ -69,6 +76,7 @@ export const config = {
     "/account/:path*",
     "/agent/:path*",
     "/admin/:path*",
+    "/api/reports/:path*",
     "/api/agent/:path*",
     "/api/admin/:path*",
     "/api/private/:path*",
