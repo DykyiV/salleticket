@@ -29,7 +29,8 @@ export default function handler(req, res) {
 
   if (!hasAny) {
     return res.status(400).json({
-      error: "Nothing to update. Provide firstName, lastName, phone, or adminComment.",
+      error:
+        "Nothing to update. Provide firstName, lastName, phone, or adminComment.",
     });
   }
 

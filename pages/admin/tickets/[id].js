@@ -39,7 +39,7 @@ export default function AdminTicketDetailsPage() {
             firstName: data.ticket.firstName || "",
             lastName: data.ticket.lastName || "",
             phone: data.ticket.phone || "",
-            adminComment: data.ticket.adminComment || "",
+            adminComment: data.ticket.adminComment ?? "",
           });
         }
       } catch (err) {
@@ -78,7 +78,7 @@ export default function AdminTicketDetailsPage() {
         firstName: data.ticket.firstName || "",
         lastName: data.ticket.lastName || "",
         phone: data.ticket.phone || "",
-        adminComment: data.ticket.adminComment || "",
+        adminComment: data.ticket.adminComment ?? "",
       });
       setSaveStatus("Saved");
     } catch (err) {
