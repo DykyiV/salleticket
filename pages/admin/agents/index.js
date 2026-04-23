@@ -41,6 +41,7 @@ export default function AdminAgentsPage() {
       <div style={{ marginTop: 10, display: "flex", gap: 10 }}>
         <Link href="/admin/users">Users</Link>
         <Link href="/admin/tickets">Tickets</Link>
+        <Link href="/admin/reports">Reports</Link>
       </div>
 
       {loading ? <p style={{ marginTop: 16 }}>Loading...</p> : null}

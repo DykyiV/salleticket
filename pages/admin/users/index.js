@@ -43,6 +43,8 @@ export default function AdminUsersPage() {
       </p>
       <div style={{ marginTop: 8, marginBottom: 16 }}>
         <Link href="/admin/agents">Go to agent permissions →</Link>
+        <span style={{ margin: "0 8px", color: "#9ca3af" }}>·</span>
+        <Link href="/admin/reports">Go to reports →</Link>
       </div>
 
       {loading ? <p>Loading...</p> : null}
