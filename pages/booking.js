@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 export default function BookingPage() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [status, setStatus] = useState("");
 
   useEffect(() => {
     let active = true;
@@ -24,6 +25,15 @@ export default function BookingPage() {
     };
   }, []);
 
+  const createBooking = async () => {
+    setStatus("");
+    const res = await fetch("/api/booking", {
+      method: "POST",
+      credentials: "include",
+    });
+    setStatus(res.ok ? "Booking request sent" : "Booking request failed");
+  };
+
   return (
     <div style={{ padding: 40 }}>
       <h1>Booking</h1>
@@ -38,8 +48,11 @@ export default function BookingPage() {
       <div style={{ marginTop: 20 }}>
         <input placeholder="Passenger name" />
         <input placeholder="Phone" style={{ marginLeft: 10 }} />
-        <button style={{ marginLeft: 10 }}>Confirm</button>
+        <button style={{ marginLeft: 10 }} onClick={createBooking}>
+          Confirm
+        </button>
       </div>
+      {status ? <p style={{ marginTop: 10 }}>{status}</p> : null}
     </div>
   );
 }
