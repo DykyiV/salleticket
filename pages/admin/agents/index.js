@@ -76,7 +76,9 @@ export default function AdminAgentsPage() {
               ) : (
                 items.map((agent) => (
                   <tr key={agent.id}>
-                    <Td>{agent.id}</Td>
+                    <Td>
+                      <Link href={`/admin/agents/${agent.id}`}>{agent.id}</Link>
+                    </Td>
                     <Td>{agent.email}</Td>
                     <Td>{agent.userId}</Td>
                     <Td>{bool(agent.canEditName)}</Td>

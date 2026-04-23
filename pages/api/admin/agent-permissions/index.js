@@ -1,6 +1,7 @@
 import {
   COMMISSION_TYPES,
   createAgentPermission,
+  getAgentPermissionByUserId,
   listAgentPermissions,
   normalizeAgentPermissionInput,
 } from "../../../../lib/agent-permissions-store";
@@ -37,6 +38,12 @@ export default function handler(req, res) {
     }
     if (typeof payload.commissionValue !== "number" || Number.isNaN(payload.commissionValue)) {
       return res.status(400).json({ error: "commissionValue must be a number" });
+    }
+    if (payload.commissionValue < 0) {
+      return res.status(400).json({ error: "commissionValue must be >= 0" });
+    }
+    if (getAgentPermissionByUserId(payload.userId)) {
+      return res.status(409).json({ error: "AgentPermission already exists for this userId" });
     }
 
     const created = createAgentPermission(payload);
