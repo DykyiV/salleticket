@@ -24,8 +24,6 @@ export default function handler(req, res) {
 
   const rawDateFrom = Array.isArray(req.query.dateFrom) ? req.query.dateFrom[0] : req.query.dateFrom;
   const rawDateTo = Array.isArray(req.query.dateTo) ? req.query.dateTo[0] : req.query.dateTo;
-  const rawAgentId = Array.isArray(req.query.agentId) ? req.query.agentId[0] : req.query.agentId;
-
   const dateFrom = parseDateInput(rawDateFrom, new Date(0));
   const dateTo = parseDateInput(rawDateTo, new Date("9999-12-31T23:59:59.999Z"));
 
@@ -33,13 +31,9 @@ export default function handler(req, res) {
     return res.status(400).json({ error: "dateFrom must be <= dateTo" });
   }
 
-  const normalizedAgentId =
-    typeof rawAgentId === "string" && rawAgentId.trim() ? rawAgentId.trim() : null;
-
   const tickets = listTicketsRaw();
   const filtered = tickets.filter((ticket) => {
     if (!ticket.agentId) return false;
-    if (normalizedAgentId && ticket.agentId !== normalizedAgentId) return false;
     const created = new Date(ticket.createdAt);
     if (Number.isNaN(created.getTime())) return false;
     return created >= dateFrom && created <= dateTo;
@@ -57,7 +51,11 @@ export default function handler(req, res) {
     }
     const row = map.get(ticket.agentId);
     row.totalTickets += 1;
-    row.totalRevenue += Number(ticket.price || 0);
+    const finalPrice =
+      typeof ticket.finalPrice === "number"
+        ? ticket.finalPrice
+        : Number.parseFloat(String(ticket.finalPrice ?? ticket.price ?? 0));
+    row.totalRevenue += Number.isFinite(finalPrice) ? finalPrice : 0;
     row.totalCommission += Number(ticket.commissionAmount || 0);
   }
 
@@ -73,7 +71,6 @@ export default function handler(req, res) {
     filters: {
       dateFrom: dateFrom.toISOString(),
       dateTo: dateTo.toISOString(),
-      agentId: normalizedAgentId,
     },
     items,
   });
