@@ -29,9 +29,22 @@ export default function BookingPage() {
     setStatus("");
     const res = await fetch("/api/booking", {
       method: "POST",
+      headers: { "Content-Type": "application/json" },
       credentials: "include",
+      body: JSON.stringify({
+        price: 42.5,
+      }),
     });
-    setStatus(res.ok ? "Booking request sent" : "Booking request failed");
+    const data = await res.json().catch(() => ({}));
+    if (res.ok) {
+      const commissionText =
+        typeof data?.ticket?.agentCommission === "number"
+          ? ` | commission: ${data.ticket.agentCommission.toFixed(2)}`
+          : "";
+      setStatus(`Booking request sent${commissionText}`);
+      return;
+    }
+    setStatus(data?.error || "Booking request failed");
   };
 
   return (
