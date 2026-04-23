@@ -1,4 +1,3 @@
-import crypto from "crypto";
 import { getCurrentUserFromJwt } from "../../lib/auth";
 import { getAgentPermissionByUserId } from "../../lib/agent-permissions-store";
 import { createTicket } from "../../lib/tickets-store";
@@ -53,9 +52,10 @@ export default function handler(req, res) {
     userEmail: user.email || "unknown@asol.bus",
     userName: user.email || user.id,
     price,
-    commission,
+    commissionAmount: commission,
     commissionType,
     commissionValue,
+    agentId: user.role === "AGENT" ? user.id : null,
   });
 
   return res.status(201).json({ ticket: created });
