@@ -6,7 +6,9 @@ export function middleware(req) {
   // Protect account pages and private APIs; allow public pages freely.
   const needsAuth =
     pathname.startsWith("/account") ||
+    pathname.startsWith("/agent") ||
     pathname.startsWith("/admin") ||
+    pathname.startsWith("/api/agent") ||
     pathname.startsWith("/api/admin") ||
     pathname.startsWith("/api/private");
 
@@ -50,9 +52,25 @@ export function middleware(req) {
     }
   }
 
+  if (pathname.startsWith("/agent") || pathname.startsWith("/api/agent")) {
+    if (payload.role !== "AGENT" && payload.role !== "ADMIN" && payload.role !== "SUPER_ADMIN") {
+      if (pathname.startsWith("/api/")) {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      }
+      return NextResponse.redirect(new URL("/", req.url));
+    }
+  }
+
   return NextResponse.next();
 }
 
 export const config = {
-  matcher: ["/account/:path*", "/admin/:path*", "/api/admin/:path*", "/api/private/:path*"],
+  matcher: [
+    "/account/:path*",
+    "/agent/:path*",
+    "/admin/:path*",
+    "/api/agent/:path*",
+    "/api/admin/:path*",
+    "/api/private/:path*",
+  ],
 };

@@ -3,7 +3,7 @@ import { issueJwt, sessionCookie } from "../../lib/auth";
 const DEMO_USER = {
   id: "user-demo-1",
   email: "demo@asol.bus",
-  role: "USER",
+  role: "AGENT",
 };
 
 export default async function handler(req, res) {
