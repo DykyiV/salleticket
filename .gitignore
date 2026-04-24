@@ -1,0 +1,9 @@
+.next/
+node_modules/
+.env
+*.log
+tsconfig.tsbuildinfo
+data/*.tmp
+prisma/dev.db
+!data/users.json
+!data/agent-permissions.json

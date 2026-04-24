@@ -1,0 +1,32 @@
+[
+  {
+    "id": "user-demo-1",
+    "email": "demo@asol.bus",
+    "role": "AGENT",
+    "createdAt": "2026-01-10T09:00:00.000Z"
+  },
+  {
+    "id": "user-demo-2",
+    "email": "admin@asol.bus",
+    "role": "ADMIN",
+    "createdAt": "2026-01-11T09:00:00.000Z"
+  },
+  {
+    "id": "user-demo-3",
+    "email": "super@asol.bus",
+    "role": "SUPER_ADMIN",
+    "createdAt": "2026-01-12T09:00:00.000Z"
+  },
+  {
+    "id": "user-demo-4",
+    "email": "user1@asol.bus",
+    "role": "USER",
+    "createdAt": "2026-01-13T09:00:00.000Z"
+  },
+  {
+    "id": "user-demo-5",
+    "email": "agent2@asol.bus",
+    "role": "AGENT",
+    "createdAt": "2026-01-14T09:00:00.000Z"
+  }
+]
