@@ -12,6 +12,12 @@ function money(value) {
   return `€${Number(value || 0).toFixed(2)}`;
 }
 
+function formatDate(value) {
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return String(value || "");
+  return d.toLocaleString();
+}
+
 export default function AdminReportsPage() {
   const [dateFrom, setDateFrom] = useState(() =>
     toDateInputValue(new Date(Date.now() - 1000 * 60 * 60 * 24 * 30))
@@ -20,6 +26,9 @@ export default function AdminReportsPage() {
   const [agentId, setAgentId] = useState("");
   const [agents, setAgents] = useState([]);
   const [rows, setRows] = useState([]);
+  const [selectedAgent, setSelectedAgent] = useState(null);
+  const [agentTickets, setAgentTickets] = useState([]);
+  const [agentTicketsLoading, setAgentTicketsLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -101,6 +110,35 @@ export default function AdminReportsPage() {
     );
   }, [filteredRows]);
 
+  const selectedAgentLabel = useMemo(() => {
+    if (!selectedAgent) return "";
+    return agentNameById.get(selectedAgent) || selectedAgent;
+  }, [selectedAgent, agentNameById]);
+
+  const openAgentTickets = async (targetAgentId) => {
+    setSelectedAgent(targetAgentId);
+    setAgentTickets([]);
+    setAgentTicketsLoading(true);
+    setError("");
+    try {
+      const q = new URLSearchParams();
+      q.set("agentId", targetAgentId);
+      if (dateFrom) q.set("dateFrom", `${dateFrom}T00:00:00.000Z`);
+      if (dateTo) q.set("dateTo", `${dateTo}T23:59:59.999Z`);
+      const res = await fetch(`/api/reports/agent-tickets?${q.toString()}`, {
+        method: "GET",
+        credentials: "include",
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || "Failed to load agent tickets");
+      setAgentTickets(Array.isArray(data.items) ? data.items : []);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load agent tickets");
+    } finally {
+      setAgentTicketsLoading(false);
+    }
+  };
+
   return (
     <div style={{ padding: 24, fontFamily: "Arial, sans-serif" }}>
       <h1 style={{ marginTop: 0 }}>Admin Reports</h1>
@@ -180,7 +218,23 @@ export default function AdminReportsPage() {
               ) : (
                 filteredRows.map((row) => (
                   <tr key={row.agentId}>
-                    <Td>{agentNameById.get(row.agentId) || row.agentId}</Td>
+                    <Td>
+                      <button
+                        type="button"
+                        onClick={() => openAgentTickets(row.agentId)}
+                        style={{
+                          border: "none",
+                          background: "transparent",
+                          color: "#1d4ed8",
+                          cursor: "pointer",
+                          padding: 0,
+                          textDecoration: "underline",
+                          fontSize: 14,
+                        }}
+                      >
+                        {agentNameById.get(row.agentId) || row.agentId}
+                      </button>
+                    </Td>
                     <Td>{row.totalTickets}</Td>
                     <Td>{money(row.totalRevenue)}</Td>
                     <Td>{money(row.totalCommission)}</Td>
@@ -197,6 +251,50 @@ export default function AdminReportsPage() {
               </tr>
             </tfoot>
           </table>
+        </div>
+      ) : null}
+
+      {selectedAgent ? (
+        <div style={{ marginTop: 24 }}>
+          <h2 style={{ marginBottom: 8 }}>Tickets for {selectedAgentLabel}</h2>
+          {agentTicketsLoading ? <p>Loading tickets…</p> : null}
+          {!agentTicketsLoading ? (
+            <div style={{ overflowX: "auto" }}>
+              <table
+                style={{
+                  width: "100%",
+                  borderCollapse: "collapse",
+                  border: "1px solid #e5e7eb",
+                  background: "#fff",
+                }}
+              >
+                <thead style={{ background: "#f9fafb" }}>
+                  <tr>
+                    <Th>Date</Th>
+                    <Th>Route</Th>
+                    <Th>Price</Th>
+                    <Th>Commission</Th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {agentTickets.length === 0 ? (
+                    <tr>
+                      <Td colSpan={4}>No tickets for selected filters.</Td>
+                    </tr>
+                  ) : (
+                    agentTickets.map((ticket) => (
+                      <tr key={ticket.id}>
+                        <Td>{formatDate(ticket.createdAt)}</Td>
+                        <Td>{`${ticket.fromCity} → ${ticket.toCity}`}</Td>
+                        <Td>{money(ticket.finalPrice ?? ticket.price)}</Td>
+                        <Td>{money(ticket.commissionAmount)}</Td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          ) : null}
         </div>
       ) : null}
     </div>
