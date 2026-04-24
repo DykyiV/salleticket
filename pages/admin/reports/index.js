@@ -12,6 +12,14 @@ function money(value) {
   return `€${Number(value || 0).toFixed(2)}`;
 }
 
+function csvEscape(value) {
+  const str = String(value ?? "");
+  if (/[",\n]/.test(str)) {
+    return `"${str.replace(/"/g, '""')}"`;
+  }
+  return str;
+}
+
 function formatDate(value) {
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return String(value || "");
@@ -161,6 +169,53 @@ export default function AdminReportsPage() {
     }
   };
 
+  const exportCsv = () => {
+    const lines = [];
+    lines.push(`Report generated at,${csvEscape(new Date().toISOString())}`);
+    lines.push(`Date from,${csvEscape(dateFrom || "")}`);
+    lines.push(`Date to,${csvEscape(dateTo || "")}`);
+    lines.push(`Agent filter,${csvEscape(agentId ? agentNameById.get(agentId) || agentId : "All agents")}`);
+    lines.push("");
+    lines.push("Agent name,Tickets sold,Revenue,Commission");
+    for (const row of filteredRows) {
+      const agentLabel = agentNameById.get(row.agentId) || row.agentId;
+      lines.push(
+        [
+          csvEscape(agentLabel),
+          csvEscape(row.totalTickets),
+          csvEscape(Number(row.totalRevenue || 0).toFixed(2)),
+          csvEscape(Number(row.totalCommission || 0).toFixed(2)),
+        ].join(",")
+      );
+    }
+    lines.push(
+      [
+        csvEscape("Total"),
+        csvEscape(totals.totalTickets),
+        csvEscape(Number(totals.totalRevenue || 0).toFixed(2)),
+        csvEscape(Number(totals.totalCommission || 0).toFixed(2)),
+      ].join(",")
+    );
+    lines.push("");
+    lines.push("System metric,Value");
+    lines.push(`Total system revenue,${csvEscape(Number(summary.totalSystemRevenue || 0).toFixed(2))}`);
+    lines.push(`Total tickets,${csvEscape(summary.totalTickets || 0)}`);
+    lines.push(
+      `Total commission paid,${csvEscape(Number(summary.totalCommissionPaid || 0).toFixed(2))}`
+    );
+    lines.push(`Net profit,${csvEscape(Number(summary.netProfit || 0).toFixed(2))}`);
+
+    const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8;" });
+    const href = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = href;
+    a.download = `agent-report-${dateFrom || "from"}-${dateTo || "to"}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(href);
+  };
+
   return (
     <div style={{ padding: 24, fontFamily: "Arial, sans-serif" }}>
       <h1 style={{ marginTop: 0 }}>Admin Reports</h1>
@@ -172,6 +227,23 @@ export default function AdminReportsPage() {
         <Link href="/admin/users">Users</Link>
         <Link href="/admin/agents">Agents</Link>
         <Link href="/admin/tickets">Tickets</Link>
+        <button
+          type="button"
+          onClick={exportCsv}
+          disabled={loading || filteredRows.length === 0}
+          style={{
+            marginLeft: "auto",
+            border: "1px solid #1f2937",
+            background: "#111827",
+            color: "#fff",
+            borderRadius: 6,
+            padding: "6px 10px",
+            cursor: loading || filteredRows.length === 0 ? "not-allowed" : "pointer",
+            opacity: loading || filteredRows.length === 0 ? 0.6 : 1,
+          }}
+        >
+          Export CSV
+        </button>
       </div>
 
       <div
