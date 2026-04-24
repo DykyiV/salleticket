@@ -67,11 +67,32 @@ export default function handler(req, res) {
     }))
     .sort((a, b) => b.totalRevenue - a.totalRevenue);
 
+  const summary = items.reduce(
+    (acc, row) => {
+      acc.totalTickets += Number(row.totalTickets || 0);
+      acc.totalSystemRevenue += Number(row.totalRevenue || 0);
+      acc.totalCommissionPaid += Number(row.totalCommission || 0);
+      return acc;
+    },
+    {
+      totalTickets: 0,
+      totalSystemRevenue: 0,
+      totalCommissionPaid: 0,
+      netProfit: 0,
+    }
+  );
+  summary.totalSystemRevenue = Number(summary.totalSystemRevenue.toFixed(2));
+  summary.totalCommissionPaid = Number(summary.totalCommissionPaid.toFixed(2));
+  summary.netProfit = Number(
+    (summary.totalSystemRevenue - summary.totalCommissionPaid).toFixed(2)
+  );
+
   return res.status(200).json({
     filters: {
       dateFrom: dateFrom.toISOString(),
       dateTo: dateTo.toISOString(),
     },
+    summary,
     items,
   });
 }

@@ -26,6 +26,12 @@ export default function AdminReportsPage() {
   const [agentId, setAgentId] = useState("");
   const [agents, setAgents] = useState([]);
   const [rows, setRows] = useState([]);
+  const [summary, setSummary] = useState({
+    totalSystemRevenue: 0,
+    totalTickets: 0,
+    totalCommissionPaid: 0,
+    netProfit: 0,
+  });
   const [selectedAgent, setSelectedAgent] = useState(null);
   const [agentTickets, setAgentTickets] = useState([]);
   const [agentTicketsLoading, setAgentTicketsLoading] = useState(false);
@@ -68,10 +74,26 @@ export default function AdminReportsPage() {
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data?.error || "Failed to load report");
-        if (active) setRows(Array.isArray(data.items) ? data.items : []);
+        if (active) {
+          setRows(Array.isArray(data.items) ? data.items : []);
+          setSummary(
+            data.summary || {
+              totalSystemRevenue: 0,
+              totalTickets: 0,
+              totalCommissionPaid: 0,
+              netProfit: 0,
+            }
+          );
+        }
       } catch (err) {
         if (active) {
           setRows([]);
+          setSummary({
+            totalSystemRevenue: 0,
+            totalTickets: 0,
+            totalCommissionPaid: 0,
+            netProfit: 0,
+          });
           setError(err instanceof Error ? err.message : "Failed to load report");
         }
       } finally {
@@ -150,6 +172,21 @@ export default function AdminReportsPage() {
         <Link href="/admin/users">Users</Link>
         <Link href="/admin/agents">Agents</Link>
         <Link href="/admin/tickets">Tickets</Link>
+      </div>
+
+      <div
+        style={{
+          marginTop: 16,
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+          gap: 12,
+          maxWidth: 860,
+        }}
+      >
+        <MetricCard label="Total system revenue" value={money(summary.totalSystemRevenue)} />
+        <MetricCard label="Total tickets" value={String(summary.totalTickets)} />
+        <MetricCard label="Total commission paid" value={money(summary.totalCommissionPaid)} />
+        <MetricCard label="Net profit" value={money(summary.netProfit)} />
       </div>
 
       <div
@@ -348,4 +385,20 @@ const inputStyle = {
   fontSize: 14,
   background: "#fff",
 };
+
+function MetricCard({ label, value }) {
+  return (
+    <div
+      style={{
+        border: "1px solid #e5e7eb",
+        borderRadius: 8,
+        background: "#fff",
+        padding: 12,
+      }}
+    >
+      <div style={{ fontSize: 12, color: "#6b7280" }}>{label}</div>
+      <div style={{ marginTop: 6, fontSize: 20, fontWeight: 700 }}>{value}</div>
+    </div>
+  );
+}
 
