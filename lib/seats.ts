@@ -1,17 +1,20 @@
 /**
  * Bus seat map.
  *
- * This mirrors the pattern used by `lib/carriers/*` for trip search: a plain
- * data function returning a typed shape, so the UI (`components/SeatMap.tsx`)
- * never needs to change when the mock generator below is swapped for a real
- * seat-inventory source (e.g. `GET /api/trips/:tripId/seats`, or a `Seat`
- * table keyed by tripId once one exists in `prisma/schema.prisma`).
+ * `getSeatLayoutForTrip` is the real entry point used by the booking page: it
+ * reads the `Seat` table (populated by `lib/routes/generate.ts` for trips
+ * generated from a Route template) and falls back to the deterministic mock
+ * below only for trips that don't have persisted seats yet — legacy
+ * carrier-adapter trips from before Route templates existed. The mock stays
+ * so those trips still render a seat map instead of erroring.
  *
  * `SeatStatus` intentionally has only the two values a real inventory system
  * would track — AVAILABLE / OCCUPIED. "SELECTED" is a purely client-side UI
  * state (which seat the current visitor has tapped) and is layered on top by
  * the seat map component; it's never part of the underlying data.
  */
+
+import { prisma } from "@/lib/db";
 
 export type SeatStatus = "AVAILABLE" | "OCCUPIED";
 export type SeatSide = "left" | "right";
@@ -73,6 +76,46 @@ export function getSeatLayout(tripId: string): BusLayout {
   }
 
   return { rows: ROWS, hasToilet: true, seats };
+}
+
+/**
+ * Real seat map for a trip generated from a Route template, read from the
+ * `Seat` table. Returns null when the trip has no persisted seats (legacy
+ * mock trip) so the caller can fall back to `getSeatLayout`.
+ */
+export async function getPersistedSeatLayout(
+  tripId: string
+): Promise<BusLayout | null> {
+  const seats = await prisma.seat.findMany({
+    where: { tripId },
+    orderBy: { number: "asc" },
+  });
+  if (seats.length === 0) return null;
+
+  const rows = Math.max(...seats.map((s) => s.row));
+
+  return {
+    rows,
+    hasToilet: true,
+    seats: seats.map((s) => ({
+      number: s.number,
+      row: s.row,
+      side: s.side as SeatSide,
+      position: s.position as SeatPosition,
+      status: s.status === "BOOKED" ? "OCCUPIED" : "AVAILABLE",
+    })),
+  };
+}
+
+/**
+ * Seat layout for the booking page: real persisted seats when the trip was
+ * generated from a Route template, otherwise the deterministic mock so
+ * legacy trips still render something.
+ */
+export async function getSeatLayoutForTrip(tripId: string): Promise<BusLayout> {
+  const persisted = await getPersistedSeatLayout(tripId);
+  if (persisted) return persisted;
+  return getSeatLayout(tripId);
 }
 
 /** Ukrainian side/position labels for the seat info panel (auto-derived from the layout). */

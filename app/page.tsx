@@ -1,3 +1,4 @@
+import Link from "next/link";
 import Header from "@/components/Header";
 import SearchForm from "@/components/SearchForm";
 
@@ -160,15 +161,15 @@ export default function Home() {
         <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-3 px-4 py-6 text-sm text-slate-500 sm:flex-row sm:px-6 lg:px-8">
           <p>© {new Date().getFullYear()} Asol BUS. All rights reserved.</p>
           <div className="flex items-center gap-4">
-            <a href="#" className="hover:text-slate-900">
-              Terms
-            </a>
-            <a href="#" className="hover:text-slate-900">
-              Privacy
-            </a>
-            <a href="#" className="hover:text-slate-900">
-              Support
-            </a>
+            <Link href="/oferta" className="hover:text-slate-900">
+              Оферта
+            </Link>
+            <Link href="/partners" className="hover:text-slate-900">
+              Партнери
+            </Link>
+            <Link href="/contacts" className="hover:text-slate-900">
+              Контакти
+            </Link>
           </div>
         </div>
       </footer>

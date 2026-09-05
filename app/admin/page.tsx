@@ -36,6 +36,18 @@ export default async function AdminPage() {
 
           <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Link
+              href="/admin/routes"
+              className="group rounded-2xl border border-slate-200 bg-white p-6 transition hover:-translate-y-0.5 hover:border-brand-300 hover:shadow-md"
+            >
+              <p className="text-sm font-semibold text-slate-900 group-hover:text-brand-700">
+                Маршрути
+              </p>
+              <p className="mt-1 text-xs text-slate-500">
+                Конструктор шаблонів рейсів: зупинки, розклад по днях тижня,
+                ціна, місткість автобуса.
+              </p>
+            </Link>
+            <Link
               href="/admin/discounts"
               className="group rounded-2xl border border-slate-200 bg-white p-6 transition hover:-translate-y-0.5 hover:border-brand-300 hover:shadow-md"
             >
@@ -45,6 +57,18 @@ export default async function AdminPage() {
               <p className="mt-1 text-xs text-slate-500">
                 Create and manage promo codes. Set percent, validity window,
                 usage limit and per-user binding.
+              </p>
+            </Link>
+            <Link
+              href="/staff/tickets"
+              className="group rounded-2xl border border-slate-200 bg-white p-6 transition hover:-translate-y-0.5 hover:border-brand-300 hover:shadow-md"
+            >
+              <p className="text-sm font-semibold text-slate-900 group-hover:text-brand-700">
+                Квитки
+              </p>
+              <p className="mt-1 text-xs text-slate-500">
+                Пошук по всіх квитках: номер бронювання, ім'я, прізвище,
+                телефон.
               </p>
             </Link>
           </div>

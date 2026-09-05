@@ -1,7 +1,7 @@
 import Header from "@/components/Header";
 import BookingFlow from "@/components/BookingFlow";
 import { getCurrentUser } from "@/lib/auth/session";
-import { getSeatLayout } from "@/lib/seats";
+import { getSeatLayoutForTrip } from "@/lib/seats";
 
 export const dynamic = "force-dynamic";
 
@@ -41,7 +41,7 @@ export default async function BookingPage({
   const serviceFee = 1.5;
   const total = price + serviceFee;
   const tripId = searchParams.tripId ?? "unknown";
-  const seatLayout = getSeatLayout(tripId);
+  const seatLayout = await getSeatLayoutForTrip(tripId);
 
   return (
     <div className="flex min-h-screen flex-col">

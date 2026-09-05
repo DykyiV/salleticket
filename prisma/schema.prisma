@@ -37,6 +37,11 @@ enum PromoType {
   FIXED
 }
 
+enum SeatStatus {
+  AVAILABLE
+  BOOKED
+}
+
 model User {
   id        String   @id @default(cuid())
   email     String   @unique
@@ -45,8 +50,11 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  tickets Ticket[]
-  promos  Promo[]
+  tickets       Ticket[]
+  promos        Promo[]
+  /// Tickets this user (an AGENT/ADMIN) created on behalf of a client while
+  /// signed in — separate from `tickets`, which is ticket ownership.
+  bookedTickets Ticket[] @relation("BookedTickets")
 
   @@index([role])
   @@map("users")
@@ -89,9 +97,63 @@ model Carrier {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  trips Trip[]
+  trips  Trip[]
+  routes Route[]
 
   @@map("carriers")
+}
+
+/// A reusable route template ("Виїзд №N" in the admin constructor): a
+/// from→to schedule with a fixed set of intermediate stops, days of the week
+/// it runs on, base price and bus capacity. Concrete `Trip` rows for actual
+/// calendar dates are generated from active routes by
+/// `lib/routes/generate.ts` (`ensureUpcomingTrips`) — a route is the
+/// template, a trip is one dated departure of it.
+model Route {
+  id            String   @id @default(cuid())
+  /// Internal label shown in the admin list, e.g. "Vinnytsia — Sevilla".
+  name          String
+  fromCity      String
+  toCity        String
+  carrierId     String
+  carrier       Carrier  @relation(fields: [carrierId], references: [id], onDelete: Restrict)
+  /// Local departure time of the first stop, "HH:MM".
+  departureTime String
+  /// Comma-separated ISO weekdays this route runs on (1=Monday..7=Sunday).
+  daysOfWeek    String
+  basePrice     Float
+  busCapacity   Int      @default(45)
+  busType       String   @default("Autobus")
+  /// Comma-separated amenity labels shown on the trip card, e.g. "Wi-Fi,USB,A/C".
+  amenities     String   @default("")
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  stops RouteStop[]
+  trips Trip[]
+
+  @@index([fromCity, toCity])
+  @@index([isActive])
+  @@map("routes")
+}
+
+/// One stop along a Route, in order. `offsetMinutes` is minutes after the
+/// route's `departureTime` that the bus reaches this stop — used both to
+/// display the itinerary and to compute each concrete Trip's stop times.
+model RouteStop {
+  id            String  @id @default(cuid())
+  routeId       String
+  route         Route   @relation(fields: [routeId], references: [id], onDelete: Cascade)
+  order         Int
+  city          String
+  address       String?
+  offsetMinutes Int     @default(0)
+  isPickup      Boolean @default(true)
+  isDropoff     Boolean @default(true)
+
+  @@index([routeId, order])
+  @@map("route_stops")
 }
 
 model Trip {
@@ -107,11 +169,42 @@ model Trip {
   carrierId String
   carrier   Carrier @relation(fields: [carrierId], references: [id], onDelete: Restrict)
 
+  /// Set when this trip was generated from a Route template. Null for
+  /// legacy / carrier-adapter trips that don't come from a template.
+  routeId String?
+  route   Route?  @relation(fields: [routeId], references: [id], onDelete: SetNull)
+
   tickets Ticket[]
+  seats   Seat[]
 
   @@index([fromCity, toCity, departureTime])
   @@index([carrierId])
+  @@index([routeId])
   @@map("trips")
+}
+
+/// Real seat inventory for a Trip, generated alongside it (1..route.busCapacity).
+/// Booking a ticket claims one row here via a conditional update
+/// (`status: AVAILABLE -> BOOKED` guarded by the current status), which is
+/// what actually prevents double-booking / overbooking a trip — the mock
+/// `seatsLeft` on generated trips before this model existed was never
+/// enforced.
+model Seat {
+  id       String     @id @default(cuid())
+  tripId   String
+  trip     Trip       @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  number   Int
+  row      Int
+  side     String
+  position String
+  status   SeatStatus @default(AVAILABLE)
+
+  ticketId String? @unique
+  ticket   Ticket? @relation(fields: [ticketId], references: [id], onDelete: SetNull)
+
+  @@unique([tripId, number])
+  @@index([tripId, status])
+  @@map("seats")
 }
 
 model Ticket {
@@ -127,15 +220,24 @@ model Ticket {
   userId String
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  /// Set when an AGENT/ADMIN created this ticket on the client's behalf
+  /// (e.g. a phone/walk-in booking) rather than the client booking it
+  /// themselves — `userId` above still owns the ticket. Null for
+  /// self-service bookings.
+  bookedByUserId String?
+  bookedBy       User?   @relation("BookedTickets", fields: [bookedByUserId], references: [id], onDelete: SetNull)
+
   tripId String?
   trip   Trip?   @relation(fields: [tripId], references: [id], onDelete: SetNull)
 
   booking Booking?
   history TicketHistory[]
+  seat    Seat?
 
   @@index([userId])
   @@index([status])
   @@index([tripId])
+  @@index([bookedByUserId])
   @@map("tickets")
 }
 
