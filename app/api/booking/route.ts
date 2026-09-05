@@ -192,19 +192,42 @@ export async function POST(req: NextRequest) {
   };
 
 
-  const snapshot = body.tripSnapshot ?? {};
-  if (
-    !snapshot.from ||
-    !snapshot.to ||
-    !snapshot.departure ||
-    !snapshot.arrival ||
-    typeof snapshot.price !== "number"
-  ) {
+  const clientSnapshot = body.tripSnapshot ?? {};
+  if (!clientSnapshot.from || !clientSnapshot.to) {
     return NextResponse.json(
-      { error: "`tripSnapshot` must include from, to, departure, arrival, price" },
+      { error: "`tripSnapshot` must include from and to" },
       { status: 400 }
     );
   }
+
+  // SECURITY: price, departure/arrival, carrier and currency must NEVER be
+  // trusted from the client — the original code took `tripSnapshot.price`
+  // (and the rest of the snapshot) straight from the request body, so any
+  // caller could book a real trip at an arbitrary price (e.g. `price: 0.01`)
+  // by editing the JSON they sent. We re-derive the canonical trip from the
+  // same carrier adapter `/api/search` uses, keyed by `tripId`, and use only
+  // that server-side data for pricing, the carrier/trip rows, and the
+  // adapter booking call. The client-supplied snapshot is used only to know
+  // which route to re-search and to carry the user-picked calendar date
+  // (which the mock trip type doesn't include).
+  const canonicalTrips = await adapter.search({
+    from: String(clientSnapshot.from),
+    to: String(clientSnapshot.to),
+  });
+  const canonicalTrip = canonicalTrips.find((t) => t.id === body.tripId);
+  if (!canonicalTrip) {
+    return NextResponse.json(
+      {
+        error:
+          "Trip not found for this route. Please search again — prices and availability may have changed.",
+      },
+      { status: 409 }
+    );
+  }
+  const snapshot: Trip & { date?: string } = {
+    ...canonicalTrip,
+    date: clientSnapshot.date,
+  };
 
   // Hand off to the carrier adapter first (real PNR / reservation).
   let adapterResult;
@@ -225,9 +248,9 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Base price comes from the trip snapshot. Age-category discount + promo
-  // code are applied server-side so the client cannot undercut the fare by
-  // spoofing tripSnapshot beyond the original price.
+  // Base price comes from the server-side canonical trip (re-fetched above).
+  // Age-category discount + promo code are then applied so the client cannot
+  // undercut the fare.
   //
   // We resolve the promo *outside* the transaction so invalid-code errors
   // short-circuit before we book anything. The usedCount increment inside
