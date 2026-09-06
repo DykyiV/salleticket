@@ -3,8 +3,11 @@ import { AgeCategory, Prisma, TicketStatus } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { findCarrier } from "@/lib/carriers/registry";
 import { requireAuth } from "@/lib/auth/guard";
+import { hasRoleAtLeast } from "@/lib/auth/constants";
 import { computePrice, type AgeCategoryId } from "@/lib/pricing";
 import { PromoError, validatePromo } from "@/lib/promo";
+import { DiscountCardError, validateDiscountCard } from "@/lib/discountCards";
+import { maybeGrantReferralReward } from "@/lib/referrals";
 import { recordTicketHistory, requestMeta } from "@/lib/tickets/history";
 import type { BookingPassenger, Trip } from "@/lib/carriers/types";
 
@@ -22,8 +25,18 @@ type CreateBookingBody = {
   carrierId?: string;
   passenger?: PassengerPayload;
   promoCode?: string;
+  /** Mutually exclusive with promoCode — see Booking.discountCardCode doc comment. */
+  discountCardCode?: string;
   tripSnapshot?: Partial<Trip> & { date?: string };
+  /** Seat picked in the seat-selection step (components/SeatMap.tsx). Optional
+   * for backward compatibility with clients that skip that step. */
+  seat?: { number?: number };
 };
+
+/** Thrown when the requested seat (or, with no seat requested, any seat) is
+ * no longer AVAILABLE by the time we try to claim it inside the transaction —
+ * someone else booked it first. Mapped to 409 outside the transaction. */
+class SeatConflictError extends Error {}
 
 const SERVICE_FEE_EUR = 1.5;
 
@@ -130,6 +143,7 @@ export async function POST(req: NextRequest) {
   if (!guard.ok) return guard.response;
   const { session } = guard;
   const meta = requestMeta(req);
+  const isStaffBooking = hasRoleAtLeast(session.role, "AGENT");
 
   // Email is authoritative from the users table — if a userId exists the
   // email stored against the booking always matches the account, regardless
@@ -256,6 +270,14 @@ export async function POST(req: NextRequest) {
   // short-circuit before we book anything. The usedCount increment inside
   // the transaction re-checks the usage limit atomically (optimistic concurrency).
   const rawPromoCode = body.promoCode?.trim() || null;
+  const rawDiscountCardCode = body.discountCardCode?.trim() || null;
+  if (rawPromoCode && rawDiscountCardCode) {
+    return NextResponse.json(
+      { error: "Use either a promo code or a discount card, not both" },
+      { status: 400 }
+    );
+  }
+
   let validatedPromo = null as Awaited<ReturnType<typeof validatePromo>> | null;
   if (rawPromoCode) {
     try {
@@ -274,15 +296,53 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  let validatedCard = null as Awaited<ReturnType<typeof validateDiscountCard>> | null;
+  if (rawDiscountCardCode) {
+    try {
+      validatedCard = await validateDiscountCard(prisma, {
+        rawCode: rawDiscountCardCode,
+        currentUserId: session.sub,
+      });
+    } catch (err) {
+      if (err instanceof DiscountCardError) {
+        return NextResponse.json(
+          { error: err.message, reason: err.reason },
+          { status: 400 }
+        );
+      }
+      throw err;
+    }
+  }
+
   const pricing = computePrice(
     snapshot.price,
     passenger.ageCategory as AgeCategoryId,
-    validatedPromo
+    validatedPromo,
+    validatedCard
   );
   const basePrice = pricing.basePrice;
   const finalPrice = pricing.finalPrice;
   const appliedPromoCode = validatedPromo?.code ?? null;
   const appliedPromoId = validatedPromo?.id ?? null;
+  const appliedCardCode = validatedCard?.code ?? null;
+  const appliedCardId = validatedCard?.id ?? null;
+
+  // Only bother computing a commission snapshot for staff bookings whose
+  // account actually has a rate configured — most agents won't have one set
+  // and null is the correct "no commission" value on the ticket.
+  let commissionAmount: number | null = null;
+  if (isStaffBooking) {
+    const bookedByUser = await prisma.user.findUnique({
+      where: { id: session.sub },
+      select: { commissionType: true, commissionValue: true },
+    });
+    if (bookedByUser?.commissionType && bookedByUser.commissionValue != null) {
+      commissionAmount =
+        bookedByUser.commissionType === "FIXED"
+          ? bookedByUser.commissionValue
+          : Math.round(finalPrice * bookedByUser.commissionValue * 100) / 100;
+    }
+  }
 
   const departureAt = combineDateTime(snapshot.date, snapshot.departure);
   const arrivalAt = combineDateTime(snapshot.date, snapshot.arrival);
@@ -290,39 +350,106 @@ export async function POST(req: NextRequest) {
     arrivalAt.setUTCDate(arrivalAt.getUTCDate() + 1);
   }
 
-  // Persist carrier, trip, ticket, and booking in one transaction.
+  // Persist carrier, trip, seat claim, ticket, and booking in one transaction.
   try {
     const reference = generateReference();
     const created = await prisma.$transaction(async (tx) => {
-      const carrier = await tx.carrier.upsert({
-        where: { name: snapshot.carrier ?? adapter.name },
-        update: {},
-        create: {
-          name: snapshot.carrier ?? adapter.name,
-          rating: snapshot.rating ?? 0,
-        },
+      // A trip generated from a Route template (lib/routes/generate.ts)
+      // already exists as a shared row with its own Seat inventory — reuse
+      // it so capacity is enforced across every booking against it, instead
+      // of each booking creating its own private Trip (which is what made
+      // overbooking possible before Route templates existed). Only trips
+      // still coming from the legacy in-memory mock generator
+      // (lib/mockTrips.ts — no Route template behind them) fall back to the
+      // old "create a fresh Trip row" behavior, since they have no shared
+      // row or seat inventory to claim from.
+      const existingTrip = await tx.trip.findUnique({
+        where: { id: body.tripId },
       });
 
-      const trip = await tx.trip.create({
-        data: {
-          fromCity: snapshot.from!,
-          toCity: snapshot.to!,
-          departureTime: departureAt,
-          arrivalTime: arrivalAt,
-          price: basePrice,
-          carrierId: carrier.id,
-        },
-      });
+      const carrier = existingTrip
+        ? await tx.carrier.findUniqueOrThrow({ where: { id: existingTrip.carrierId } })
+        : await tx.carrier.upsert({
+            where: { name: snapshot.carrier ?? adapter.name },
+            update: {},
+            create: {
+              name: snapshot.carrier ?? adapter.name,
+              rating: snapshot.rating ?? 0,
+            },
+          });
+
+      const trip =
+        existingTrip ??
+        (await tx.trip.create({
+          data: {
+            fromCity: snapshot.from!,
+            toCity: snapshot.to!,
+            departureTime: departureAt,
+            arrivalTime: arrivalAt,
+            price: basePrice,
+            carrierId: carrier.id,
+          },
+        }));
 
       const ticket = await tx.ticket.create({
         data: {
           userId: session.sub,
+          // Staff (AGENT/ADMIN/SUPER_ADMIN) booking while signed in is
+          // attributed as an agent-made booking for reporting — the ticket
+          // is still owned by `userId` above.
+          bookedByUserId: isStaffBooking ? session.sub : null,
+          commissionAmount,
+          paymentMethod: isStaffBooking ? null : "ONLINE",
           tripId: trip.id,
           status: TicketStatus.RESERVED,
           basePrice,
           finalPrice,
         },
       });
+
+      // Referral reward: if this ticket's owner was referred by someone and
+      // this is their first ticket ever, grant the referrer a reward
+      // discount card. Runs in-transaction so the reward and the booking
+      // commit atomically.
+      await maybeGrantReferralReward(tx, session.sub);
+
+      // Claim a real seat when this trip has persisted inventory (i.e. it
+      // came from a Route template). The conditional `updateMany` (status
+      // must still be AVAILABLE) is the actual double-booking guard: if two
+      // requests race for the same seat, only one matches and updates a row;
+      // the loser gets `count: 0` and we throw SeatConflictError, which
+      // rolls back this entire transaction (ticket/booking included) and
+      // maps to a 409 outside it. Trips with no seat rows (legacy mock
+      // trips) skip this — there's no inventory to enforce there.
+      const requestedSeatNumber = body.seat?.number;
+      const hasSeatInventory = (await tx.seat.count({ where: { tripId: trip.id } })) > 0;
+      if (hasSeatInventory) {
+        const seatNumber =
+          requestedSeatNumber ??
+          (
+            await tx.seat.findFirst({
+              where: { tripId: trip.id, status: "AVAILABLE" },
+              orderBy: { number: "asc" },
+              select: { number: true },
+            })
+          )?.number;
+
+        if (seatNumber == null) {
+          throw new SeatConflictError("This trip is fully booked.");
+        }
+
+        const claim = await tx.seat.updateMany({
+          where: { tripId: trip.id, number: seatNumber, status: "AVAILABLE" },
+          data: { status: "BOOKED", ticketId: ticket.id },
+        });
+        if (claim.count === 0) {
+          throw new SeatConflictError(
+            requestedSeatNumber != null
+              ? `Seat ${seatNumber} was just booked by someone else. Please pick another seat.`
+              : "This trip is fully booked."
+          );
+        }
+      }
 
       const booking = await tx.booking.create({
         data: {
@@ -333,6 +460,7 @@ export async function POST(req: NextRequest) {
           phone: passenger.phone,
           email: accountEmail,
           promoCode: appliedPromoCode,
+          discountCardCode: appliedCardCode,
           finalPrice,
           ticketId: ticket.id,
         },
@@ -356,6 +484,14 @@ export async function POST(req: NextRequest) {
           data: { usedCount: { increment: 1 } },
         });
       }
+      // Discount cards have no usage cap (unlike Promo) — just a plain
+      // increment for reporting, no concurrency guard needed.
+      if (appliedCardId) {
+        await tx.discountCard.update({
+          where: { id: appliedCardId },
+          data: { usedCount: { increment: 1 } },
+        });
+      }
 
       // Audit trail: capture the initial snapshot of every user-visible
       // booking field as a from→to diff. Subsequent mutations (admin panel,
@@ -366,7 +502,7 @@ export async function POST(req: NextRequest) {
         action: "CREATED",
         oldStatus: null,
         newStatus: ticket.status,
-        source: "BOOKING_FORM",
+        source: isStaffBooking ? "AGENT_BOOKING" : "BOOKING_FORM",
         changedBy: session.sub,
         request: meta,
         changes: {
@@ -418,6 +554,7 @@ export async function POST(req: NextRequest) {
             email: created.booking.email ?? undefined,
           },
           promoCode: created.booking.promoCode ?? undefined,
+          discountCardCode: created.booking.discountCardCode ?? undefined,
           trip: {
             from: created.trip.fromCity,
             to: created.trip.toCity,
@@ -440,6 +577,8 @@ export async function POST(req: NextRequest) {
             ageDiscount: pricing.ageDiscount,
             promoDiscount: pricing.promoDiscount,
             promoCode: appliedPromoCode,
+            discountCardAmount: pricing.discountCardAmount,
+            discountCardCode: appliedCardCode,
             finalPrice: pricing.finalPrice,
             serviceFee: pricing.serviceFee,
             total: pricing.total,
@@ -452,6 +591,12 @@ export async function POST(req: NextRequest) {
       { status: 201 }
     );
   } catch (err) {
+    if (err instanceof SeatConflictError) {
+      return NextResponse.json(
+        { error: err.message, reason: "seat_unavailable" },
+        { status: 409 }
+      );
+    }
     // P2025 = the conditional promo update matched 0 rows (concurrency race
     // against usedCount / isActive). Surface a clean 400 rather than 500.
     if (

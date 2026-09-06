@@ -14,6 +14,7 @@ export default function AuthForm({ mode }: Props) {
   const router = useRouter();
   const params = useSearchParams();
   const nextPath = params.get("next") || "/";
+  const referralCode = mode === "register" ? params.get("ref") : null;
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -38,7 +39,11 @@ export default function AuthForm({ mode }: Props) {
       const res = await fetch(`/api/auth/${mode}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({
+          email,
+          password,
+          referralCode: referralCode ?? undefined,
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error ?? `${mode} failed`);
@@ -71,6 +76,13 @@ export default function AuthForm({ mode }: Props) {
         {title}
       </h1>
       <p className="mt-1 text-sm text-slate-500">{subtitle}</p>
+
+      {referralCode ? (
+        <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+          Ви реєструєтесь за запрошенням — отримаєте вітальну знижкову
+          картку одразу після реєстрації.
+        </div>
+      ) : null}
 
       <div className="mt-6 space-y-4">
         <label htmlFor="email" className="block">

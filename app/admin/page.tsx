@@ -36,6 +36,18 @@ export default async function AdminPage() {
 
           <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Link
+              href="/admin/routes"
+              className="group rounded-2xl border border-slate-200 bg-white p-6 transition hover:-translate-y-0.5 hover:border-brand-300 hover:shadow-md"
+            >
+              <p className="text-sm font-semibold text-slate-900 group-hover:text-brand-700">
+                Маршрути
+              </p>
+              <p className="mt-1 text-xs text-slate-500">
+                Конструктор шаблонів рейсів: зупинки, розклад по днях тижня,
+                ціна, місткість автобуса.
+              </p>
+            </Link>
+            <Link
               href="/admin/discounts"
               className="group rounded-2xl border border-slate-200 bg-white p-6 transition hover:-translate-y-0.5 hover:border-brand-300 hover:shadow-md"
             >
@@ -45,6 +57,87 @@ export default async function AdminPage() {
               <p className="mt-1 text-xs text-slate-500">
                 Create and manage promo codes. Set percent, validity window,
                 usage limit and per-user binding.
+              </p>
+            </Link>
+            <Link
+              href="/staff/tickets"
+              className="group rounded-2xl border border-slate-200 bg-white p-6 transition hover:-translate-y-0.5 hover:border-brand-300 hover:shadow-md"
+            >
+              <p className="text-sm font-semibold text-slate-900 group-hover:text-brand-700">
+                Квитки
+              </p>
+              <p className="mt-1 text-xs text-slate-500">
+                Пошук по всіх квитках: номер бронювання, ім'я, прізвище,
+                телефон.
+              </p>
+            </Link>
+            <Link
+              href="/staff/trips"
+              className="group rounded-2xl border border-slate-200 bg-white p-6 transition hover:-translate-y-0.5 hover:border-brand-300 hover:shadow-md"
+            >
+              <p className="text-sm font-semibold text-slate-900 group-hover:text-brand-700">
+                Рейси
+              </p>
+              <p className="mt-1 text-xs text-slate-500">
+                Найближчі рейси, зупинки маршруту, список пасажирів.
+              </p>
+            </Link>
+            <Link
+              href="/admin/users"
+              className="group rounded-2xl border border-slate-200 bg-white p-6 transition hover:-translate-y-0.5 hover:border-brand-300 hover:shadow-md"
+            >
+              <p className="text-sm font-semibold text-slate-900 group-hover:text-brand-700">
+                Користувачі
+              </p>
+              <p className="mt-1 text-xs text-slate-500">
+                Список усіх акаунтів і призначення ролей.
+              </p>
+            </Link>
+            <Link
+              href="/admin/reports"
+              className="group rounded-2xl border border-slate-200 bg-white p-6 transition hover:-translate-y-0.5 hover:border-brand-300 hover:shadow-md"
+            >
+              <p className="text-sm font-semibold text-slate-900 group-hover:text-brand-700">
+                Звіти
+              </p>
+              <p className="mt-1 text-xs text-slate-500">
+                Продажі по агентах і напрямках, комісії, спосіб оплати,
+                фільтри по періоду.
+              </p>
+            </Link>
+            <Link
+              href="/admin/agents"
+              className="group rounded-2xl border border-slate-200 bg-white p-6 transition hover:-translate-y-0.5 hover:border-brand-300 hover:shadow-md"
+            >
+              <p className="text-sm font-semibold text-slate-900 group-hover:text-brand-700">
+                Агенти
+              </p>
+              <p className="mt-1 text-xs text-slate-500">
+                Комісія (фіксована сума або %) та дозволи на /staff/**
+                (квитки, рейси, позначення оплати) для кожного агента.
+              </p>
+            </Link>
+            <Link
+              href="/admin/discount-cards"
+              className="group rounded-2xl border border-slate-200 bg-white p-6 transition hover:-translate-y-0.5 hover:border-brand-300 hover:shadow-md"
+            >
+              <p className="text-sm font-semibold text-slate-900 group-hover:text-brand-700">
+                Дисконтні картки
+              </p>
+              <p className="mt-1 text-xs text-slate-500">
+                Персональні картки клієнтів з незмінною знижкою у %.
+              </p>
+            </Link>
+            <Link
+              href="/admin/settings"
+              className="group rounded-2xl border border-slate-200 bg-white p-6 transition hover:-translate-y-0.5 hover:border-brand-300 hover:shadow-md"
+            >
+              <p className="text-sm font-semibold text-slate-900 group-hover:text-brand-700">
+                Налаштування
+              </p>
+              <p className="mt-1 text-xs text-slate-500">
+                Політика повернення коштів: скільки повертається пасажиру
+                при скасуванні оплаченого квитка.
               </p>
             </Link>
           </div>

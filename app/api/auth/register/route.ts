@@ -6,6 +6,8 @@ import {
   issueSession,
   setSessionCookie,
 } from "@/lib/auth/session";
+import { findReferrer, REFERRAL_WELCOME_PERCENT } from "@/lib/referrals";
+import { issueDiscountCard } from "@/lib/discountCards";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -14,6 +16,8 @@ type Body = {
   email?: string;
   password?: string;
   role?: Role;
+  /** From /register?ref=<code> — see lib/referrals.ts. */
+  referralCode?: string;
 };
 
 const EMAIL_RE = /^\S+@\S+\.\S+$/;
@@ -51,12 +55,29 @@ export async function POST(req: NextRequest) {
   const role: Role = "USER";
 
   const passwordHash = await hashPassword(password);
+  const referrer = await findReferrer(prisma, body.referralCode);
 
   try {
     const user = await prisma.user.create({
-      data: { email, password: passwordHash, role },
+      data: {
+        email,
+        password: passwordHash,
+        role,
+        referredByUserId: referrer?.id ?? null,
+      },
       select: { id: true, email: true, role: true, createdAt: true },
     });
+
+    // Welcome gift for signing up via a referral link — separate from the
+    // referrer's own reward, which is granted after this user's first
+    // booking (see lib/referrals.ts).
+    if (referrer) {
+      await issueDiscountCard(prisma, {
+        userId: user.id,
+        percent: REFERRAL_WELCOME_PERCENT,
+        source: "REFERRAL_WELCOME",
+      });
+    }
 
     const token = await issueSession(user);
     const res = NextResponse.json({ user }, { status: 201 });

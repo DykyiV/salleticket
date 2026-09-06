@@ -37,6 +37,28 @@ enum PromoType {
   FIXED
 }
 
+enum SeatStatus {
+  AVAILABLE
+  BOOKED
+}
+
+enum CommissionType {
+  FIXED
+  PERCENT
+}
+
+/// How a ticket was actually paid for — separate from TicketStatus's
+/// PAID_ONLINE/PAID_CASH (which only says "paid" vs "how"), this says *who
+/// collected the money*: the platform (ONLINE), the booking agent in cash
+/// (CASH_TO_AGENT), or the carrier's driver/office at boarding
+/// (CASH_TO_CARRIER). Staff set this explicitly via /staff/tickets; it's
+/// what /admin/reports splits revenue by.
+enum PaymentMethod {
+  ONLINE
+  CASH_TO_AGENT
+  CASH_TO_CARRIER
+}
+
 model User {
   id        String   @id @default(cuid())
   email     String   @unique
@@ -45,11 +67,72 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  tickets Ticket[]
-  promos  Promo[]
+  /// Commission this user earns per ticket they book as staff
+  /// (bookedByUserId on Ticket). Only meaningful for AGENT/ADMIN accounts;
+  /// null means "no commission configured".
+  commissionType  CommissionType?
+  commissionValue Float?
+
+  /// Fine-grained access to the /staff/** area, for AGENT accounts only —
+  /// ADMIN/SUPER_ADMIN always have full access regardless of these flags
+  /// (see lib/auth/staffPermissions.ts). Default false: an agent gets none
+  /// of this until an admin explicitly grants it on /admin/agents.
+  canAccessStaffTickets Boolean @default(false)
+  canAccessStaffTrips   Boolean @default(false)
+  canMarkPayments       Boolean @default(false)
+  /// Cancel/refund ANY ticket via /staff/tickets (self-service cancellation
+  /// of one's own still-RESERVED ticket doesn't need this — see
+  /// lib/tickets/cancel.ts).
+  canCancelTickets      Boolean @default(false)
+
+  /// This user's own referral code (lazily provisioned — see
+  /// lib/referrals.ts). Sharing /register?ref=<code> credits referredBy.
+  referralCode          String? @unique
+  referredByUserId      String?
+  referredBy            User?   @relation("Referrals", fields: [referredByUserId], references: [id], onDelete: SetNull)
+  referrals             User[]  @relation("Referrals")
+  /// Set once the referrer's reward has been granted for this user's first
+  /// paid booking, so it's never granted twice.
+  referralRewardGranted Boolean @default(false)
+
+  tickets         Ticket[]
+  promos          Promo[]
+  discountCards   DiscountCard[]
+  /// Tickets this user (an AGENT/ADMIN) created on behalf of a client while
+  /// signed in — separate from `tickets`, which is ticket ownership.
+  bookedTickets   Ticket[]       @relation("BookedTickets")
+  /// Tickets this user (staff) processed a cash refund for.
+  refundedTickets Ticket[]       @relation("RefundedTickets")
 
   @@index([role])
+  @@index([referredByUserId])
   @@map("users")
+}
+
+/// A persistent, reusable discount card — unlike Promo (single campaign
+/// code, often time/usage-limited), a card is issued once to a customer
+/// (manually by an admin, or as a referral reward/welcome gift) and applies
+/// its percent discount to every booking that redeems it, indefinitely.
+model DiscountCard {
+  id        String  @id @default(cuid())
+  code      String  @unique
+  /// Fraction 0..1, e.g. 0.10 for -10%.
+  percent   Float
+  isActive  Boolean @default(true)
+  userId    String?
+  user      User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+  /// How this card was issued: "MANUAL" (admin), "REFERRAL_WELCOME" (given
+  /// to a new user who signed up with a referral code), "REFERRAL_REWARD"
+  /// (given to the referrer after their friend's first booking).
+  source    String  @default("MANUAL")
+  usedCount Int     @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([isActive])
+  @@map("discount_cards")
 }
 
 /// A promo code that can be applied to a booking to get a percentage discount.
@@ -89,9 +172,63 @@ model Carrier {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  trips Trip[]
+  trips  Trip[]
+  routes Route[]
 
   @@map("carriers")
+}
+
+/// A reusable route template ("Виїзд №N" in the admin constructor): a
+/// from→to schedule with a fixed set of intermediate stops, days of the week
+/// it runs on, base price and bus capacity. Concrete `Trip` rows for actual
+/// calendar dates are generated from active routes by
+/// `lib/routes/generate.ts` (`ensureUpcomingTrips`) — a route is the
+/// template, a trip is one dated departure of it.
+model Route {
+  id            String   @id @default(cuid())
+  /// Internal label shown in the admin list, e.g. "Vinnytsia — Sevilla".
+  name          String
+  fromCity      String
+  toCity        String
+  carrierId     String
+  carrier       Carrier  @relation(fields: [carrierId], references: [id], onDelete: Restrict)
+  /// Local departure time of the first stop, "HH:MM".
+  departureTime String
+  /// Comma-separated ISO weekdays this route runs on (1=Monday..7=Sunday).
+  daysOfWeek    String
+  basePrice     Float
+  busCapacity   Int      @default(45)
+  busType       String   @default("Autobus")
+  /// Comma-separated amenity labels shown on the trip card, e.g. "Wi-Fi,USB,A/C".
+  amenities     String   @default("")
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  stops RouteStop[]
+  trips Trip[]
+
+  @@index([fromCity, toCity])
+  @@index([isActive])
+  @@map("routes")
+}
+
+/// One stop along a Route, in order. `offsetMinutes` is minutes after the
+/// route's `departureTime` that the bus reaches this stop — used both to
+/// display the itinerary and to compute each concrete Trip's stop times.
+model RouteStop {
+  id            String  @id @default(cuid())
+  routeId       String
+  route         Route   @relation(fields: [routeId], references: [id], onDelete: Cascade)
+  order         Int
+  city          String
+  address       String?
+  offsetMinutes Int     @default(0)
+  isPickup      Boolean @default(true)
+  isDropoff     Boolean @default(true)
+
+  @@index([routeId, order])
+  @@map("route_stops")
 }
 
 model Trip {
@@ -107,11 +244,42 @@ model Trip {
   carrierId String
   carrier   Carrier @relation(fields: [carrierId], references: [id], onDelete: Restrict)
 
+  /// Set when this trip was generated from a Route template. Null for
+  /// legacy / carrier-adapter trips that don't come from a template.
+  routeId String?
+  route   Route?  @relation(fields: [routeId], references: [id], onDelete: SetNull)
+
   tickets Ticket[]
+  seats   Seat[]
 
   @@index([fromCity, toCity, departureTime])
   @@index([carrierId])
+  @@index([routeId])
   @@map("trips")
+}
+
+/// Real seat inventory for a Trip, generated alongside it (1..route.busCapacity).
+/// Booking a ticket claims one row here via a conditional update
+/// (`status: AVAILABLE -> BOOKED` guarded by the current status), which is
+/// what actually prevents double-booking / overbooking a trip — the mock
+/// `seatsLeft` on generated trips before this model existed was never
+/// enforced.
+model Seat {
+  id       String     @id @default(cuid())
+  tripId   String
+  trip     Trip       @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  number   Int
+  row      Int
+  side     String
+  position String
+  status   SeatStatus @default(AVAILABLE)
+
+  ticketId String? @unique
+  ticket   Ticket? @relation(fields: [ticketId], references: [id], onDelete: SetNull)
+
+  @@unique([tripId, number])
+  @@index([tripId, status])
+  @@map("seats")
 }
 
 model Ticket {
@@ -127,16 +295,62 @@ model Ticket {
   userId String
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  /// Set when an AGENT/ADMIN created this ticket on the client's behalf
+  /// (e.g. a phone/walk-in booking) rather than the client booking it
+  /// themselves — `userId` above still owns the ticket. Null for
+  /// self-service bookings.
+  bookedByUserId   String?
+  bookedBy         User?          @relation("BookedTickets", fields: [bookedByUserId], references: [id], onDelete: SetNull)
+  /// Snapshot of bookedBy's commission on this ticket at booking time (so a
+  /// later change to the agent's rate doesn't rewrite past reports). Null
+  /// when bookedByUserId is null or the agent had no commission configured.
+  commissionAmount Float?
+  /// Who actually collected payment — set by staff via /staff/tickets, null
+  /// until then. See the PaymentMethod enum doc comment.
+  paymentMethod    PaymentMethod?
+
+  /// Cancellation/refund outcome — set once, when the ticket moves to
+  /// CANCELLED (no money involved, both fields stay null) or REFUNDED (see
+  /// lib/tickets/cancel.ts for the RESERVED/PAID_CASH/PAID_ONLINE rules).
+  /// Amount actually returned to the passenger.
+  refundAmount     Float?
+  /// Amount withheld by the agent (paymentMethod CASH_TO_AGENT) or carrier
+  /// (CASH_TO_CARRIER / ONLINE) per the active RefundPolicy at the time of
+  /// cancellation.
+  refundWithheld   Float?
+  refundedAt       DateTime?
+  /// Staff member who processed a cash refund. Null for a self-service
+  /// RESERVED cancellation or an automatic online refund.
+  refundedByUserId String?
+  refundedBy       User?     @relation("RefundedTickets", fields: [refundedByUserId], references: [id], onDelete: SetNull)
+
   tripId String?
   trip   Trip?   @relation(fields: [tripId], references: [id], onDelete: SetNull)
 
   booking Booking?
   history TicketHistory[]
+  seat    Seat?
 
   @@index([userId])
   @@index([status])
   @@index([tripId])
+  @@index([bookedByUserId])
+  @@index([refundedByUserId])
   @@map("tickets")
+}
+
+/// Business-rule config admins can tune without a deploy. Single row
+/// (id "default"). Percentages are the fraction returned to the passenger —
+/// e.g. 0.8 means "80% refunded, 20% withheld".
+model RefundPolicy {
+  id                  String   @id @default("default")
+  cashRefundPercent   Float    @default(0.8)
+  /// Used only until a real payment gateway is wired in and starts telling
+  /// us the actual refunded amount itself — see lib/payments/gateway.ts.
+  onlineRefundPercent Float    @default(0.8)
+  updatedAt           DateTime @updatedAt
+
+  @@map("refund_policy")
 }
 
 /// Audit trail for tickets. Every mutation must append a row with:
@@ -173,17 +387,20 @@ model TicketHistory {
 }
 
 model Booking {
-  id          String      @id @default(cuid())
-  reference   String      @unique
-  firstName   String
-  lastName    String
-  ageCategory AgeCategory @default(ADULT)
-  phone       String
-  email       String?
-  promoCode   String?
-  finalPrice  Float
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
+  id               String      @id @default(cuid())
+  reference        String      @unique
+  firstName        String
+  lastName         String
+  ageCategory      AgeCategory @default(ADULT)
+  phone            String
+  email            String?
+  promoCode        String?
+  /// Discount card code redeemed for this booking, if any (mutually
+  /// exclusive with promoCode — see lib/discountCards.ts).
+  discountCardCode String?
+  finalPrice       Float
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
 
   ticketId String @unique
   ticket   Ticket @relation(fields: [ticketId], references: [id], onDelete: Cascade)

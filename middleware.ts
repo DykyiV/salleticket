@@ -23,6 +23,11 @@ type Rule = {
 const RULES: Rule[] = [
   { match: (p) => p.startsWith("/api/admin"), role: "ADMIN", mode: "json" },
   { match: (p) => p.startsWith("/api/agent"), role: "AGENT", mode: "json" },
+  // /staff/** — shared area for AGENT + ADMIN + SUPER_ADMIN (ticket search,
+  // trip passenger manifests). Distinct from /admin/** and /agent/**, which
+  // stay role-specific (route/discount management vs. the agent landing page).
+  { match: (p) => p.startsWith("/api/staff"), role: "AGENT", mode: "json" },
+  { match: (p) => p.startsWith("/staff"), role: "AGENT", mode: "page" },
   { match: (p) => p.startsWith("/admin"), role: "ADMIN", mode: "page" },
   { match: (p) => p.startsWith("/agent"), role: "AGENT", mode: "page" },
   { match: (p) => p.startsWith("/account"), role: "USER", mode: "page" },
@@ -81,8 +86,10 @@ export const config = {
   matcher: [
     "/api/admin/:path*",
     "/api/agent/:path*",
+    "/api/staff/:path*",
     "/admin/:path*",
     "/agent/:path*",
+    "/staff/:path*",
     "/account/:path*",
   ],
 };

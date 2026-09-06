@@ -13,6 +13,7 @@ import type {
  */
 export type TicketHistorySource =
   | "BOOKING_FORM"   // end-user creating a booking
+  | "AGENT_BOOKING"  // AGENT/ADMIN/SUPER_ADMIN booking on a client's behalf
   | "ADMIN_PANEL"    // /admin/** admin action
   | "ACCOUNT"        // user cancelling their own ticket etc.
   | "API"            // external API integration / carrier callback

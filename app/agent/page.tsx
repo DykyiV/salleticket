@@ -1,10 +1,30 @@
+import Link from "next/link";
 import Header from "@/components/Header";
-import { getCurrentUser } from "@/lib/auth/session";
+import { getCurrentUser, getSession } from "@/lib/auth/session";
+import { hasStaffPermission } from "@/lib/auth/staffPermissions";
+import { prisma } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
 export default async function AgentPage() {
   const user = await getCurrentUser();
+  const session = await getSession();
+  const canViewTickets = session
+    ? await hasStaffPermission(session, "canAccessStaffTickets")
+    : false;
+  const canViewTrips = session
+    ? await hasStaffPermission(session, "canAccessStaffTrips")
+    : false;
+
+  const bookedByMe = user
+    ? await prisma.ticket.findMany({
+        where: { bookedByUserId: user.id },
+        include: { booking: true, trip: true },
+        orderBy: { createdAt: "desc" },
+        take: 10,
+      })
+    : [];
+
   return (
     <div className="flex min-h-screen flex-col">
       <Header />
@@ -14,23 +34,130 @@ export default async function AgentPage() {
             AGENT
           </span>
           <h1 className="mt-3 text-2xl font-bold tracking-tight text-slate-900">
-            Agent console
+            Кабінет агента
           </h1>
           <p className="mt-1 text-sm text-slate-500">
-            Gated by <code className="rounded bg-slate-100 px-1.5 py-0.5">middleware.ts</code> —
-            AGENT / ADMIN / SUPER_ADMIN only.
+            Гейт: <code className="rounded bg-slate-100 px-1.5 py-0.5">middleware.ts</code> —
+            доступно ролям AGENT / ADMIN / SUPER_ADMIN.
           </p>
 
           {user ? (
             <div className="mt-6 rounded-2xl bg-white p-6 ring-1 ring-slate-200">
-              <p className="text-sm text-slate-500">Current user</p>
+              <p className="text-sm text-slate-500">Поточний користувач</p>
               <p className="mt-1 text-base font-semibold text-slate-900">
                 {user.email} · {user.role}
               </p>
             </div>
           ) : null}
+
+          <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <Link
+              href="/"
+              className="group rounded-2xl border border-slate-200 bg-white p-5 transition hover:-translate-y-0.5 hover:border-brand-300 hover:shadow-md"
+            >
+              <p className="text-sm font-semibold text-slate-900 group-hover:text-brand-700">
+                Забронювати для клієнта
+              </p>
+              <p className="mt-1 text-xs text-slate-500">
+                Знайдіть рейс і оформіть бронювання від імені клієнта, який
+                телефонує чи прийшов особисто.
+              </p>
+            </Link>
+            {canViewTickets ? (
+              <Link
+                href="/staff/tickets"
+                className="group rounded-2xl border border-slate-200 bg-white p-5 transition hover:-translate-y-0.5 hover:border-brand-300 hover:shadow-md"
+              >
+                <p className="text-sm font-semibold text-slate-900 group-hover:text-brand-700">
+                  Пошук квитків
+                </p>
+                <p className="mt-1 text-xs text-slate-500">
+                  Знайти бронювання за номером, ім'ям, прізвищем або телефоном.
+                </p>
+              </Link>
+            ) : (
+              <LockedCard label="Пошук квитків" />
+            )}
+            {canViewTrips ? (
+              <Link
+                href="/staff/trips"
+                className="group rounded-2xl border border-slate-200 bg-white p-5 transition hover:-translate-y-0.5 hover:border-brand-300 hover:shadow-md"
+              >
+                <p className="text-sm font-semibold text-slate-900 group-hover:text-brand-700">
+                  Рейси та манифест
+                </p>
+                <p className="mt-1 text-xs text-slate-500">
+                  Список найближчих рейсів із зупинками та пасажирами.
+                </p>
+              </Link>
+            ) : (
+              <LockedCard label="Рейси та манифест" />
+            )}
+          </div>
+
+          {(!canViewTickets || !canViewTrips) ? (
+            <p className="mt-3 text-xs text-slate-400">
+              🔒 Деякі розділи недоступні — попросіть адміністратора надати
+              дозвіл на сторінці "Агенти".
+            </p>
+          ) : null}
+
+          <div className="mt-8">
+            <h2 className="text-sm font-semibold text-slate-900">
+              Останні бронювання, оформлені вами
+            </h2>
+            {bookedByMe.length === 0 ? (
+              <p className="mt-2 text-sm text-slate-500">
+                Ви ще не оформлювали бронювань для клієнтів.
+              </p>
+            ) : (
+              <div className="mt-3 overflow-x-auto rounded-2xl border border-slate-200 bg-white">
+                <table className="w-full border-collapse text-sm">
+                  <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
+                    <tr>
+                      <th className="border-b border-slate-200 px-4 py-2">Квиток</th>
+                      <th className="border-b border-slate-200 px-4 py-2">Пасажир</th>
+                      <th className="border-b border-slate-200 px-4 py-2">Рейс</th>
+                      <th className="border-b border-slate-200 px-4 py-2">Статус</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {bookedByMe.map((t) => (
+                      <tr key={t.id} className="odd:bg-white even:bg-slate-50">
+                        <td className="border-t border-slate-100 px-4 py-2 font-mono">
+                          {t.booking?.reference ?? "—"}
+                        </td>
+                        <td className="border-t border-slate-100 px-4 py-2">
+                          {t.booking
+                            ? `${t.booking.firstName} ${t.booking.lastName}`
+                            : "—"}
+                        </td>
+                        <td className="border-t border-slate-100 px-4 py-2">
+                          {t.trip ? `${t.trip.fromCity} → ${t.trip.toCity}` : "—"}
+                        </td>
+                        <td className="border-t border-slate-100 px-4 py-2">
+                          {t.status}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
         </div>
       </main>
+    </div>
+  );
+}
+
+function LockedCard({ label }: { label: string }) {
+  return (
+    <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-5 opacity-70">
+      <p className="flex items-center gap-1.5 text-sm font-semibold text-slate-500">
+        🔒 {label}
+      </p>
+      <p className="mt-1 text-xs text-slate-400">Немає дозволу від адміністратора.</p>
     </div>
   );
 }

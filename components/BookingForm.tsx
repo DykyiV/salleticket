@@ -70,6 +70,8 @@ type Values = {
   email: string;
   ageCategory: AgeCategoryId;
   promoCode: string;
+  /** Mutually exclusive with promoCode — server rejects sending both. */
+  discountCardCode: string;
   agree: boolean;
 };
 
@@ -95,6 +97,7 @@ export default function BookingForm({
     email: currentUser?.email ?? "",
     ageCategory: "ADULT",
     promoCode: "",
+    discountCardCode: "",
     agree: false,
   });
   const [errors, setErrors] = useState<Errors>({});
@@ -226,9 +229,9 @@ export default function BookingForm({
           tripId: tripSummary.tripId ?? "unknown",
           carrierId: tripSummary.carrierId ?? "mock",
           promoCode: activePromo?.code ?? undefined,
-          // Forward-compatible metadata: /api/booking doesn't persist a seat
-          // yet (see lib/seats.ts), but sending it now means nothing needs
-          // to change here once a seat-inventory table exists server-side.
+          discountCardCode: activePromo
+            ? undefined
+            : values.discountCardCode.trim() || undefined,
           seat: selectedSeat ?? undefined,
           passenger: {
             firstName: values.firstName.trim(),
@@ -322,6 +325,8 @@ export default function BookingForm({
           {values.email ? <SummaryRow label="Email" value={values.email} /> : null}
           {activePromo ? (
             <SummaryRow label="Promo" value={activePromo.code} mono />
+          ) : values.discountCardCode.trim() ? (
+            <SummaryRow label="Discount card" value={values.discountCardCode.trim()} mono />
           ) : null}
           <SummaryRow
             label="Route"
@@ -520,7 +525,8 @@ export default function BookingForm({
               }
               placeholder="e.g. DISCOUNT10"
               aria-invalid={errors.promoCode ? "true" : undefined}
-              className={`h-12 w-full rounded-xl border bg-slate-50 px-3 pr-28 text-sm uppercase tracking-wider text-slate-900 placeholder:text-slate-400 placeholder:normal-case transition focus:bg-white focus:outline-none focus:ring-2 ${
+              disabled={Boolean(values.discountCardCode.trim())}
+              className={`h-12 w-full rounded-xl border bg-slate-50 px-3 pr-28 text-sm uppercase tracking-wider text-slate-900 placeholder:text-slate-400 placeholder:normal-case transition focus:bg-white focus:outline-none focus:ring-2 disabled:cursor-not-allowed disabled:opacity-50 ${
                 promoState.status === "invalid"
                   ? "border-rose-300 focus:border-rose-400 focus:ring-rose-200"
                   : promoState.status === "valid"
@@ -565,6 +571,29 @@ export default function BookingForm({
             Have a code? Enter it here and we&apos;ll check it against the server.
           </p>
         )}
+      </div>
+
+      <div className="mt-4">
+        <label htmlFor="discountCardCode" className="block">
+          <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+            Discount card <span className="font-normal text-slate-400">(optional)</span>
+          </span>
+          <input
+            id="discountCardCode"
+            name="discountCardCode"
+            type="text"
+            value={values.discountCardCode}
+            onChange={(e) => setField("discountCardCode", e.target.value.toUpperCase())}
+            disabled={Boolean(values.promoCode.trim())}
+            placeholder="e.g. DC-A1B2C3"
+            className="h-12 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm uppercase tracking-wider text-slate-900 placeholder:text-slate-400 placeholder:normal-case transition focus:border-brand-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-200 disabled:cursor-not-allowed disabled:opacity-50"
+          />
+        </label>
+        <p className="mt-1 text-xs text-slate-400">
+          {values.promoCode.trim()
+            ? "A promo code is applied — remove it to use a discount card instead."
+            : "Your personal discount card, if you have one — checked when you book. Can't be combined with a promo code."}
+        </p>
       </div>
 
       <PriceBreakdownPanel
