@@ -73,6 +73,14 @@ model User {
   commissionType  CommissionType?
   commissionValue Float?
 
+  /// Fine-grained access to the /staff/** area, for AGENT accounts only —
+  /// ADMIN/SUPER_ADMIN always have full access regardless of these flags
+  /// (see lib/auth/staffPermissions.ts). Default false: an agent gets none
+  /// of this until an admin explicitly grants it on /admin/agents.
+  canAccessStaffTickets Boolean @default(false)
+  canAccessStaffTrips   Boolean @default(false)
+  canMarkPayments       Boolean @default(false)
+
   /// This user's own referral code (lazily provisioned — see
   /// lib/referrals.ts). Sharing /register?ref=<code> credits referredBy.
   referralCode          String? @unique

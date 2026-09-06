@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { getCurrentUser } from "@/lib/auth/session";
 import { hasRoleAtLeast } from "@/lib/auth/constants";
+import { hasStaffPermission } from "@/lib/auth/staffPermissions";
 import LogoutButton from "@/components/LogoutButton";
 
 const NAV_LINKS = [
@@ -13,8 +14,10 @@ const NAV_LINKS = [
 
 export default async function Header() {
   const user = await getCurrentUser();
-  const isStaff = user ? hasRoleAtLeast(user.role, "AGENT") : false;
   const isAdmin = user ? hasRoleAtLeast(user.role, "ADMIN") : false;
+  const canViewStaffTickets = user
+    ? await hasStaffPermission({ sub: user.id, role: user.role }, "canAccessStaffTickets")
+    : false;
   return (
     <header className="sticky top-0 z-40 w-full border-b border-slate-200/70 bg-white/80 backdrop-blur">
       <div className="mx-auto flex h-16 w-full max-w-6xl items-center justify-between px-4 sm:px-6 lg:px-8">
@@ -42,7 +45,7 @@ export default async function Header() {
         <div className="flex items-center gap-2">
           {user ? (
             <>
-              {isStaff ? (
+              {canViewStaffTickets ? (
                 <Link
                   href="/staff/tickets"
                   className="hidden rounded-lg px-3 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-100 hover:text-slate-900 sm:inline-flex"

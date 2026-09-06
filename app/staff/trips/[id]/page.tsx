@@ -1,7 +1,10 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import Header from "@/components/Header";
+import AccessDenied from "@/components/staff/AccessDenied";
 import { prisma } from "@/lib/db";
+import { getSession } from "@/lib/auth/session";
+import { hasStaffPermission } from "@/lib/auth/staffPermissions";
 
 export const dynamic = "force-dynamic";
 
@@ -33,6 +36,11 @@ export default async function StaffTripDetailPage({
 }: {
   params: { id: string };
 }) {
+  const session = await getSession();
+  if (!session || !(await hasStaffPermission(session, "canAccessStaffTrips"))) {
+    return <AccessDenied what="перегляд рейсу та списку пасажирів" />;
+  }
+
   const trip = await prisma.trip.findUnique({
     where: { id: params.id },
     include: {

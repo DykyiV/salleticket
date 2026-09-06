@@ -8,7 +8,16 @@ export const dynamic = "force-dynamic";
 export default async function AdminAgentsPage() {
   const rows = await prisma.user.findMany({
     where: { role: { in: ["AGENT", "ADMIN", "SUPER_ADMIN"] } },
-    select: { id: true, email: true, role: true, commissionType: true, commissionValue: true },
+    select: {
+      id: true,
+      email: true,
+      role: true,
+      commissionType: true,
+      commissionValue: true,
+      canAccessStaffTickets: true,
+      canAccessStaffTrips: true,
+      canMarkPayments: true,
+    },
     orderBy: { email: "asc" },
   });
 
@@ -18,6 +27,9 @@ export default async function AdminAgentsPage() {
     role: r.role,
     commissionType: r.commissionType,
     commissionValue: r.commissionValue,
+    canAccessStaffTickets: r.canAccessStaffTickets,
+    canAccessStaffTrips: r.canAccessStaffTrips,
+    canMarkPayments: r.canMarkPayments,
   }));
 
   return (
@@ -31,12 +43,15 @@ export default async function AdminAgentsPage() {
                 ADMIN
               </span>
               <h1 className="mt-3 text-2xl font-bold tracking-tight text-slate-900">
-                Комісія агентів
+                Агенти
               </h1>
               <p className="mt-1 text-sm text-slate-500">
-                Фіксована сума за квиток або % від фінальної ціни. Береться в
-                момент бронювання й зберігається на квитку — зміна тут не
-                впливає на вже оформлені квитки.
+                Комісія: фіксована сума за квиток або % від фінальної ціни —
+                береться в момент бронювання й зберігається на квитку, зміна
+                тут не впливає на вже оформлені квитки. Доступ до
+                /staff/**: за замовчуванням агент не бачить жодної
+                staff-сторінки, доки ви не увімкнете конкретний дозвіл —
+                ADMIN/SUPER_ADMIN мають повний доступ завжди.
               </p>
             </div>
             <Link

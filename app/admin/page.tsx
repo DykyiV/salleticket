@@ -72,6 +72,28 @@ export default async function AdminPage() {
               </p>
             </Link>
             <Link
+              href="/staff/trips"
+              className="group rounded-2xl border border-slate-200 bg-white p-6 transition hover:-translate-y-0.5 hover:border-brand-300 hover:shadow-md"
+            >
+              <p className="text-sm font-semibold text-slate-900 group-hover:text-brand-700">
+                Рейси
+              </p>
+              <p className="mt-1 text-xs text-slate-500">
+                Найближчі рейси, зупинки маршруту, список пасажирів.
+              </p>
+            </Link>
+            <Link
+              href="/admin/users"
+              className="group rounded-2xl border border-slate-200 bg-white p-6 transition hover:-translate-y-0.5 hover:border-brand-300 hover:shadow-md"
+            >
+              <p className="text-sm font-semibold text-slate-900 group-hover:text-brand-700">
+                Користувачі
+              </p>
+              <p className="mt-1 text-xs text-slate-500">
+                Список усіх акаунтів і призначення ролей.
+              </p>
+            </Link>
+            <Link
               href="/admin/reports"
               className="group rounded-2xl border border-slate-200 bg-white p-6 transition hover:-translate-y-0.5 hover:border-brand-300 hover:shadow-md"
             >
@@ -91,8 +113,8 @@ export default async function AdminPage() {
                 Агенти
               </p>
               <p className="mt-1 text-xs text-slate-500">
-                Налаштування комісії (фіксована сума або %) для кожного
-                агента.
+                Комісія (фіксована сума або %) та дозволи на /staff/**
+                (квитки, рейси, позначення оплати) для кожного агента.
               </p>
             </Link>
             <Link

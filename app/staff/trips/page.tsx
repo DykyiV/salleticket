@@ -1,6 +1,9 @@
 import Link from "next/link";
 import Header from "@/components/Header";
+import AccessDenied from "@/components/staff/AccessDenied";
 import { prisma } from "@/lib/db";
+import { getSession } from "@/lib/auth/session";
+import { hasStaffPermission } from "@/lib/auth/staffPermissions";
 
 export const dynamic = "force-dynamic";
 
@@ -14,6 +17,11 @@ function formatDateTime(d: Date): string {
 }
 
 export default async function StaffTripsPage() {
+  const session = await getSession();
+  if (!session || !(await hasStaffPermission(session, "canAccessStaffTrips"))) {
+    return <AccessDenied what="перегляд списку рейсів" />;
+  }
+
   const trips = await prisma.trip.findMany({
     where: { departureTime: { gte: new Date() } },
     include: {

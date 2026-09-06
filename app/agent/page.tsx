@@ -1,12 +1,20 @@
 import Link from "next/link";
 import Header from "@/components/Header";
-import { getCurrentUser } from "@/lib/auth/session";
+import { getCurrentUser, getSession } from "@/lib/auth/session";
+import { hasStaffPermission } from "@/lib/auth/staffPermissions";
 import { prisma } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
 export default async function AgentPage() {
   const user = await getCurrentUser();
+  const session = await getSession();
+  const canViewTickets = session
+    ? await hasStaffPermission(session, "canAccessStaffTickets")
+    : false;
+  const canViewTrips = session
+    ? await hasStaffPermission(session, "canAccessStaffTrips")
+    : false;
 
   const bookedByMe = user
     ? await prisma.ticket.findMany({
@@ -55,29 +63,44 @@ export default async function AgentPage() {
                 телефонує чи прийшов особисто.
               </p>
             </Link>
-            <Link
-              href="/staff/tickets"
-              className="group rounded-2xl border border-slate-200 bg-white p-5 transition hover:-translate-y-0.5 hover:border-brand-300 hover:shadow-md"
-            >
-              <p className="text-sm font-semibold text-slate-900 group-hover:text-brand-700">
-                Пошук квитків
-              </p>
-              <p className="mt-1 text-xs text-slate-500">
-                Знайти бронювання за номером, ім'ям, прізвищем або телефоном.
-              </p>
-            </Link>
-            <Link
-              href="/staff/trips"
-              className="group rounded-2xl border border-slate-200 bg-white p-5 transition hover:-translate-y-0.5 hover:border-brand-300 hover:shadow-md"
-            >
-              <p className="text-sm font-semibold text-slate-900 group-hover:text-brand-700">
-                Рейси та манифест
-              </p>
-              <p className="mt-1 text-xs text-slate-500">
-                Список найближчих рейсів із зупинками та пасажирами.
-              </p>
-            </Link>
+            {canViewTickets ? (
+              <Link
+                href="/staff/tickets"
+                className="group rounded-2xl border border-slate-200 bg-white p-5 transition hover:-translate-y-0.5 hover:border-brand-300 hover:shadow-md"
+              >
+                <p className="text-sm font-semibold text-slate-900 group-hover:text-brand-700">
+                  Пошук квитків
+                </p>
+                <p className="mt-1 text-xs text-slate-500">
+                  Знайти бронювання за номером, ім'ям, прізвищем або телефоном.
+                </p>
+              </Link>
+            ) : (
+              <LockedCard label="Пошук квитків" />
+            )}
+            {canViewTrips ? (
+              <Link
+                href="/staff/trips"
+                className="group rounded-2xl border border-slate-200 bg-white p-5 transition hover:-translate-y-0.5 hover:border-brand-300 hover:shadow-md"
+              >
+                <p className="text-sm font-semibold text-slate-900 group-hover:text-brand-700">
+                  Рейси та манифест
+                </p>
+                <p className="mt-1 text-xs text-slate-500">
+                  Список найближчих рейсів із зупинками та пасажирами.
+                </p>
+              </Link>
+            ) : (
+              <LockedCard label="Рейси та манифест" />
+            )}
           </div>
+
+          {(!canViewTickets || !canViewTrips) ? (
+            <p className="mt-3 text-xs text-slate-400">
+              🔒 Деякі розділи недоступні — попросіть адміністратора надати
+              дозвіл на сторінці "Агенти".
+            </p>
+          ) : null}
 
           <div className="mt-8">
             <h2 className="text-sm font-semibold text-slate-900">
@@ -124,6 +147,17 @@ export default async function AgentPage() {
           </div>
         </div>
       </main>
+    </div>
+  );
+}
+
+function LockedCard({ label }: { label: string }) {
+  return (
+    <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-5 opacity-70">
+      <p className="flex items-center gap-1.5 text-sm font-semibold text-slate-500">
+        🔒 {label}
+      </p>
+      <p className="mt-1 text-xs text-slate-400">Немає дозволу від адміністратора.</p>
     </div>
   );
 }

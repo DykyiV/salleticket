@@ -14,9 +14,12 @@ const LABELS: Record<PaymentMethod, string> = {
 export default function PaymentMethodCell({
   ticketId,
   value,
+  readOnly = false,
 }: {
   ticketId: string;
   value: PaymentMethod | null;
+  /** True when the viewer (an AGENT without canMarkPayments) may see but not change this. */
+  readOnly?: boolean;
 }) {
   const router = useRouter();
   const [current, setCurrent] = useState<PaymentMethod | "">(value ?? "");
@@ -47,6 +50,14 @@ export default function PaymentMethodCell({
       setSaving(false);
     }
   };
+
+  if (readOnly) {
+    return (
+      <span className="text-xs text-slate-500">
+        {current ? LABELS[current] : "Не позначено"}
+      </span>
+    );
+  }
 
   return (
     <div>

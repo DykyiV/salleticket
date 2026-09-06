@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { TicketStatus, type PaymentMethod } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { requireRole } from "@/lib/auth/guard";
+import { hasStaffPermission } from "@/lib/auth/staffPermissions";
 import { diffChanges, recordTicketHistory, requestMeta } from "@/lib/tickets/history";
 
 export const runtime = "nodejs";
@@ -22,6 +23,12 @@ export async function PATCH(
 ) {
   const guard = await requireRole("AGENT");
   if (!guard.ok) return guard.response;
+  if (!(await hasStaffPermission(guard.session, "canMarkPayments"))) {
+    return NextResponse.json(
+      { error: "You don't have permission to mark payments. Ask an admin to grant it." },
+      { status: 403 }
+    );
+  }
 
   let body: { paymentMethod?: string };
   try {

@@ -1,7 +1,10 @@
 import Link from "next/link";
 import Header from "@/components/Header";
 import PaymentMethodCell from "@/components/staff/PaymentMethodCell";
+import AccessDenied from "@/components/staff/AccessDenied";
 import { prisma } from "@/lib/db";
+import { getSession } from "@/lib/auth/session";
+import { hasStaffPermission } from "@/lib/auth/staffPermissions";
 import type { Prisma } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
@@ -26,6 +29,12 @@ export default async function StaffTicketsPage({
 }: {
   searchParams: SearchParams;
 }) {
+  const session = await getSession();
+  if (!session || !(await hasStaffPermission(session, "canAccessStaffTickets"))) {
+    return <AccessDenied what="перегляд і пошук квитків" />;
+  }
+  const canMarkPayments = await hasStaffPermission(session, "canMarkPayments");
+
   const { reference, firstName, lastName, phone } = searchParams;
   const hasFilters = Boolean(reference || firstName || lastName || phone);
 
@@ -189,6 +198,7 @@ export default async function StaffTicketsPage({
                         <PaymentMethodCell
                           ticketId={b.ticket.id}
                           value={b.ticket.paymentMethod}
+                          readOnly={!canMarkPayments}
                         />
                       </td>
                       <td className="border-t border-slate-100 px-4 py-3 tabular-nums">

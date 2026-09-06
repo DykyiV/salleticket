@@ -9,7 +9,16 @@ export type AgentRow = {
   role: string;
   commissionType: "FIXED" | "PERCENT" | null;
   commissionValue: number | null;
+  canAccessStaffTickets: boolean;
+  canAccessStaffTrips: boolean;
+  canMarkPayments: boolean;
 };
+
+const PERMISSION_FIELDS = [
+  { key: "canAccessStaffTickets", label: "Квитки" },
+  { key: "canAccessStaffTrips", label: "Рейси" },
+  { key: "canMarkPayments", label: "Позначати оплату" },
+] as const;
 
 function formatCommission(row: AgentRow): string {
   if (!row.commissionType || row.commissionValue == null) return "не задано";
@@ -66,6 +75,30 @@ export default function AgentsAdmin({ initialAgents }: { initialAgents: AgentRow
     }
   };
 
+  const togglePermission = async (
+    row: AgentRow,
+    key: (typeof PERMISSION_FIELDS)[number]["key"]
+  ) => {
+    const next = !row[key];
+    setAgents((list) =>
+      list.map((a) => (a.id === row.id ? { ...a, [key]: next } : a))
+    );
+    try {
+      const res = await fetch(`/api/admin/agents/${row.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ [key]: next }),
+      });
+      if (!res.ok) throw new Error("Failed");
+      router.refresh();
+    } catch {
+      setAgents((list) =>
+        list.map((a) => (a.id === row.id ? { ...a, [key]: !next } : a))
+      );
+      setError("Не вдалося змінити дозвіл");
+    }
+  };
+
   const clear = async (userId: string) => {
     setSaving(true);
     setError(null);
@@ -97,6 +130,9 @@ export default function AgentsAdmin({ initialAgents }: { initialAgents: AgentRow
               <th className="border-b border-slate-200 px-4 py-2">Агент</th>
               <th className="border-b border-slate-200 px-4 py-2">Роль</th>
               <th className="border-b border-slate-200 px-4 py-2">Комісія</th>
+              <th className="border-b border-slate-200 px-4 py-2">
+                Доступ до /staff
+              </th>
               <th className="border-b border-slate-200 px-4 py-2 text-right">Дії</th>
             </tr>
           </thead>
@@ -127,6 +163,29 @@ export default function AgentsAdmin({ initialAgents }: { initialAgents: AgentRow
                     </div>
                   ) : (
                     formatCommission(row)
+                  )}
+                </td>
+                <td className="border-t border-slate-100 px-4 py-2">
+                  {row.role === "AGENT" ? (
+                    <div className="flex flex-wrap gap-x-3 gap-y-1">
+                      {PERMISSION_FIELDS.map((f) => (
+                        <label
+                          key={f.key}
+                          className="flex items-center gap-1.5 text-xs text-slate-600"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={row[f.key]}
+                            onChange={() => togglePermission(row, f.key)}
+                          />
+                          {f.label}
+                        </label>
+                      ))}
+                    </div>
+                  ) : (
+                    <span className="text-xs text-slate-400">
+                      Усі права ({row.role})
+                    </span>
                   )}
                 </td>
                 <td className="border-t border-slate-100 px-4 py-2 text-right">
