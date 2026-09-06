@@ -128,6 +128,18 @@ export default async function AdminPage() {
                 Персональні картки клієнтів з незмінною знижкою у %.
               </p>
             </Link>
+            <Link
+              href="/admin/settings"
+              className="group rounded-2xl border border-slate-200 bg-white p-6 transition hover:-translate-y-0.5 hover:border-brand-300 hover:shadow-md"
+            >
+              <p className="text-sm font-semibold text-slate-900 group-hover:text-brand-700">
+                Налаштування
+              </p>
+              <p className="mt-1 text-xs text-slate-500">
+                Політика повернення коштів: скільки повертається пасажиру
+                при скасуванні оплаченого квитка.
+              </p>
+            </Link>
           </div>
         </div>
       </main>

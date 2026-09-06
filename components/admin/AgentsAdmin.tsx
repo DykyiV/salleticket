@@ -12,12 +12,14 @@ export type AgentRow = {
   canAccessStaffTickets: boolean;
   canAccessStaffTrips: boolean;
   canMarkPayments: boolean;
+  canCancelTickets: boolean;
 };
 
 const PERMISSION_FIELDS = [
   { key: "canAccessStaffTickets", label: "Квитки" },
   { key: "canAccessStaffTrips", label: "Рейси" },
   { key: "canMarkPayments", label: "Позначати оплату" },
+  { key: "canCancelTickets", label: "Скасування / повернення" },
 ] as const;
 
 function formatCommission(row: AgentRow): string {

@@ -17,6 +17,7 @@ export default async function AdminAgentsPage() {
       canAccessStaffTickets: true,
       canAccessStaffTrips: true,
       canMarkPayments: true,
+      canCancelTickets: true,
     },
     orderBy: { email: "asc" },
   });
@@ -30,6 +31,7 @@ export default async function AdminAgentsPage() {
     canAccessStaffTickets: r.canAccessStaffTickets,
     canAccessStaffTrips: r.canAccessStaffTrips,
     canMarkPayments: r.canMarkPayments,
+    canCancelTickets: r.canCancelTickets,
   }));
 
   return (

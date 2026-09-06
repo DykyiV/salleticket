@@ -12,6 +12,7 @@ type PatchBody = {
   canAccessStaffTickets?: boolean;
   canAccessStaffTrips?: boolean;
   canMarkPayments?: boolean;
+  canCancelTickets?: boolean;
 };
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
@@ -71,6 +72,9 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   if (body.canMarkPayments !== undefined) {
     data.canMarkPayments = Boolean(body.canMarkPayments);
   }
+  if (body.canCancelTickets !== undefined) {
+    data.canCancelTickets = Boolean(body.canCancelTickets);
+  }
 
   try {
     const updated = await prisma.user.update({
@@ -85,6 +89,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
         canAccessStaffTickets: true,
         canAccessStaffTrips: true,
         canMarkPayments: true,
+        canCancelTickets: true,
       },
     });
     return NextResponse.json({ user: updated });

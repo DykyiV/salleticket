@@ -80,6 +80,10 @@ model User {
   canAccessStaffTickets Boolean @default(false)
   canAccessStaffTrips   Boolean @default(false)
   canMarkPayments       Boolean @default(false)
+  /// Cancel/refund ANY ticket via /staff/tickets (self-service cancellation
+  /// of one's own still-RESERVED ticket doesn't need this — see
+  /// lib/tickets/cancel.ts).
+  canCancelTickets      Boolean @default(false)
 
   /// This user's own referral code (lazily provisioned — see
   /// lib/referrals.ts). Sharing /register?ref=<code> credits referredBy.
@@ -91,12 +95,14 @@ model User {
   /// paid booking, so it's never granted twice.
   referralRewardGranted Boolean @default(false)
 
-  tickets       Ticket[]
-  promos        Promo[]
-  discountCards DiscountCard[]
+  tickets         Ticket[]
+  promos          Promo[]
+  discountCards   DiscountCard[]
   /// Tickets this user (an AGENT/ADMIN) created on behalf of a client while
   /// signed in — separate from `tickets`, which is ticket ownership.
-  bookedTickets Ticket[]       @relation("BookedTickets")
+  bookedTickets   Ticket[]       @relation("BookedTickets")
+  /// Tickets this user (staff) processed a cash refund for.
+  refundedTickets Ticket[]       @relation("RefundedTickets")
 
   @@index([role])
   @@index([referredByUserId])
@@ -303,6 +309,21 @@ model Ticket {
   /// until then. See the PaymentMethod enum doc comment.
   paymentMethod    PaymentMethod?
 
+  /// Cancellation/refund outcome — set once, when the ticket moves to
+  /// CANCELLED (no money involved, both fields stay null) or REFUNDED (see
+  /// lib/tickets/cancel.ts for the RESERVED/PAID_CASH/PAID_ONLINE rules).
+  /// Amount actually returned to the passenger.
+  refundAmount     Float?
+  /// Amount withheld by the agent (paymentMethod CASH_TO_AGENT) or carrier
+  /// (CASH_TO_CARRIER / ONLINE) per the active RefundPolicy at the time of
+  /// cancellation.
+  refundWithheld   Float?
+  refundedAt       DateTime?
+  /// Staff member who processed a cash refund. Null for a self-service
+  /// RESERVED cancellation or an automatic online refund.
+  refundedByUserId String?
+  refundedBy       User?     @relation("RefundedTickets", fields: [refundedByUserId], references: [id], onDelete: SetNull)
+
   tripId String?
   trip   Trip?   @relation(fields: [tripId], references: [id], onDelete: SetNull)
 
@@ -314,7 +335,22 @@ model Ticket {
   @@index([status])
   @@index([tripId])
   @@index([bookedByUserId])
+  @@index([refundedByUserId])
   @@map("tickets")
+}
+
+/// Business-rule config admins can tune without a deploy. Single row
+/// (id "default"). Percentages are the fraction returned to the passenger —
+/// e.g. 0.8 means "80% refunded, 20% withheld".
+model RefundPolicy {
+  id                  String   @id @default("default")
+  cashRefundPercent   Float    @default(0.8)
+  /// Used only until a real payment gateway is wired in and starts telling
+  /// us the actual refunded amount itself — see lib/payments/gateway.ts.
+  onlineRefundPercent Float    @default(0.8)
+  updatedAt           DateTime @updatedAt
+
+  @@map("refund_policy")
 }
 
 /// Audit trail for tickets. Every mutation must append a row with:

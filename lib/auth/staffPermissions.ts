@@ -16,7 +16,8 @@ import { hasRoleAtLeast } from "@/lib/auth/constants";
 export type StaffPermissionKey =
   | "canAccessStaffTickets"
   | "canAccessStaffTrips"
-  | "canMarkPayments";
+  | "canMarkPayments"
+  | "canCancelTickets";
 
 export async function hasStaffPermission(
   session: { sub: string; role: Role },

@@ -2,6 +2,7 @@ import Link from "next/link";
 import Header from "@/components/Header";
 import PaymentMethodCell from "@/components/staff/PaymentMethodCell";
 import AccessDenied from "@/components/staff/AccessDenied";
+import CancelTicketButton from "@/components/CancelTicketButton";
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth/session";
 import { hasStaffPermission } from "@/lib/auth/staffPermissions";
@@ -34,6 +35,7 @@ export default async function StaffTicketsPage({
     return <AccessDenied what="перегляд і пошук квитків" />;
   }
   const canMarkPayments = await hasStaffPermission(session, "canMarkPayments");
+  const canCancelTickets = await hasStaffPermission(session, "canCancelTickets");
 
   const { reference, firstName, lastName, phone } = searchParams;
   const hasFilters = Boolean(reference || firstName || lastName || phone);
@@ -139,12 +141,13 @@ export default async function StaffTicketsPage({
                   <th className="border-b border-slate-200 px-4 py-3">Статус</th>
                   <th className="border-b border-slate-200 px-4 py-3">Оплата</th>
                   <th className="border-b border-slate-200 px-4 py-3">Ціна</th>
+                  <th className="border-b border-slate-200 px-4 py-3">Дії</th>
                 </tr>
               </thead>
               <tbody>
                 {bookings.length === 0 ? (
                   <tr>
-                    <td className="px-4 py-8 text-center text-slate-500" colSpan={8}>
+                    <td className="px-4 py-8 text-center text-slate-500" colSpan={9}>
                       Нічого не знайдено.
                     </td>
                   </tr>
@@ -203,6 +206,25 @@ export default async function StaffTicketsPage({
                       </td>
                       <td className="border-t border-slate-100 px-4 py-3 tabular-nums">
                         €{b.finalPrice.toFixed(2)}
+                      </td>
+                      <td className="border-t border-slate-100 px-4 py-3">
+                        {b.ticket.status === "REFUNDED" ? (
+                          <span className="text-[11px] text-slate-500">
+                            Повернено €{b.ticket.refundAmount?.toFixed(2)}
+                            {b.ticket.refundWithheld
+                              ? ` (утримано €${b.ticket.refundWithheld.toFixed(2)})`
+                              : ""}
+                          </span>
+                        ) : b.ticket.status === "CANCELLED" ? (
+                          <span className="text-[11px] text-slate-400">Скасовано</span>
+                        ) : canCancelTickets &&
+                          (b.ticket.status === "RESERVED" ||
+                            b.ticket.status === "PAID_CASH" ||
+                            b.ticket.status === "PAID_ONLINE") ? (
+                          <CancelTicketButton ticketId={b.ticket.id} status={b.ticket.status} />
+                        ) : (
+                          <span className="text-[11px] text-slate-300">—</span>
+                        )}
                       </td>
                     </tr>
                   ))

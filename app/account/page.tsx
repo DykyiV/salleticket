@@ -2,6 +2,7 @@ import Link from "next/link";
 import Header from "@/components/Header";
 import LogoutButton from "@/components/LogoutButton";
 import ReferralLink from "@/components/ReferralLink";
+import CancelTicketButton from "@/components/CancelTicketButton";
 import { getCurrentUser } from "@/lib/auth/session";
 import {
   getOrCreateReferralCode,
@@ -142,6 +143,7 @@ export default async function AccountPage() {
                       <th className="border-b border-slate-200 py-2 pr-3">Дата</th>
                       <th className="border-b border-slate-200 py-2 pr-3">Статус</th>
                       <th className="border-b border-slate-200 py-2 pr-3">Ціна</th>
+                      <th className="border-b border-slate-200 py-2 pr-3">Дії</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -163,6 +165,17 @@ export default async function AccountPage() {
                         </td>
                         <td className="border-t border-slate-100 py-2 pr-3 tabular-nums">
                           €{t.finalPrice.toFixed(2)}
+                        </td>
+                        <td className="border-t border-slate-100 py-2 pr-3">
+                          {t.status === "RESERVED" ? (
+                            <CancelTicketButton ticketId={t.id} status="RESERVED" />
+                          ) : t.status === "PAID_CASH" || t.status === "PAID_ONLINE" ? (
+                            <span className="text-[11px] text-slate-400">
+                              Для повернення зверніться до підтримки
+                            </span>
+                          ) : (
+                            <span className="text-[11px] text-slate-300">—</span>
+                          )}
                         </td>
                       </tr>
                     ))}
