@@ -156,11 +156,7 @@ export default async function StaffTicketsPage({
                     <tr key={b.id} className="odd:bg-white even:bg-slate-50">
                       <td className="border-t border-slate-100 px-4 py-3">
                         <Link
-                          href={
-                            b.ticket.trip
-                              ? `/staff/trips/${b.ticket.trip.id}`
-                              : "#"
-                          }
+                          href={`/staff/tickets/${b.ticket.id}`}
                           className="font-mono font-semibold text-brand-700 hover:underline"
                         >
                           {b.reference}

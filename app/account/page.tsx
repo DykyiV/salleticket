@@ -150,7 +150,12 @@ export default async function AccountPage() {
                     {myTickets.map((t) => (
                       <tr key={t.id}>
                         <td className="border-t border-slate-100 py-2 pr-3 font-mono">
-                          {t.booking?.reference ?? "—"}
+                          <Link
+                            href={`/account/tickets/${t.id}`}
+                            className="text-brand-700 hover:underline"
+                          >
+                            {t.booking?.reference ?? t.id.slice(0, 8)}
+                          </Link>
                         </td>
                         <td className="border-t border-slate-100 py-2 pr-3">
                           {t.trip ? `${t.trip.fromCity} → ${t.trip.toCity}` : "—"}
