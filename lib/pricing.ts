@@ -65,25 +65,39 @@ export type PriceBreakdown = {
   ageDiscount: number;
   promoCode?: string;
   promoDiscount: number;
+  discountCardCode?: string;
+  discountCardAmount: number;
   finalPrice: number;
   serviceFee: number;
   total: number;
 };
 
+/** Minimal shape computePrice needs from a redeemed discount card. */
+export type DiscountCardLike = { code: string; percent: number };
+
 /**
  * End-to-end price calculation used by the UI preview and the server. Given a
- * base price, age category, and an already-validated promo, returns every
- * intermediate figure so UI and API display identical numbers.
+ * base price, age category, and an already-validated promo and/or discount
+ * card, returns every intermediate figure so UI and API display identical
+ * numbers.
+ *
+ * A booking redeems a promo OR a discount card, never both (enforced by the
+ * caller before this runs) — passing both here would apply both discounts,
+ * so don't.
  */
 export function computePrice(
   basePrice: number,
   ageId: AgeCategoryId,
-  promo?: Promo | null
+  promo?: Promo | null,
+  discountCard?: DiscountCardLike | null
 ): PriceBreakdown {
   const { basePrice: bp, discount: ageDiscount, finalPrice: afterAge } =
     applyAgeDiscount(basePrice, ageId);
   const promoDiscount = promoDiscountAmount(afterAge, promo ?? null);
-  const finalPrice = round2(afterAge - promoDiscount);
+  const cardDiscount = discountCard
+    ? round2(afterAge * discountCard.percent)
+    : 0;
+  const finalPrice = round2(afterAge - promoDiscount - cardDiscount);
   const serviceFee = SERVICE_FEE_EUR;
   const total = round2(finalPrice + serviceFee);
   return {
@@ -91,6 +105,8 @@ export function computePrice(
     ageDiscount,
     promoCode: promo?.code,
     promoDiscount,
+    discountCardCode: discountCard?.code,
+    discountCardAmount: cardDiscount,
     finalPrice,
     serviceFee,
     total,

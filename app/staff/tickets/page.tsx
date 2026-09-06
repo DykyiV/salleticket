@@ -1,5 +1,6 @@
 import Link from "next/link";
 import Header from "@/components/Header";
+import PaymentMethodCell from "@/components/staff/PaymentMethodCell";
 import { prisma } from "@/lib/db";
 import type { Prisma } from "@prisma/client";
 
@@ -127,13 +128,14 @@ export default async function StaffTicketsPage({
                   <th className="border-b border-slate-200 px-4 py-3">Рейс</th>
                   <th className="border-b border-slate-200 px-4 py-3">Дата</th>
                   <th className="border-b border-slate-200 px-4 py-3">Статус</th>
+                  <th className="border-b border-slate-200 px-4 py-3">Оплата</th>
                   <th className="border-b border-slate-200 px-4 py-3">Ціна</th>
                 </tr>
               </thead>
               <tbody>
                 {bookings.length === 0 ? (
                   <tr>
-                    <td className="px-4 py-8 text-center text-slate-500" colSpan={7}>
+                    <td className="px-4 py-8 text-center text-slate-500" colSpan={8}>
                       Нічого не знайдено.
                     </td>
                   </tr>
@@ -182,6 +184,12 @@ export default async function StaffTicketsPage({
                       </td>
                       <td className="border-t border-slate-100 px-4 py-3">
                         <StatusBadge status={b.ticket.status} />
+                      </td>
+                      <td className="border-t border-slate-100 px-4 py-3">
+                        <PaymentMethodCell
+                          ticketId={b.ticket.id}
+                          value={b.ticket.paymentMethod}
+                        />
                       </td>
                       <td className="border-t border-slate-100 px-4 py-3 tabular-nums">
                         €{b.finalPrice.toFixed(2)}

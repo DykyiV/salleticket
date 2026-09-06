@@ -42,6 +42,23 @@ enum SeatStatus {
   BOOKED
 }
 
+enum CommissionType {
+  FIXED
+  PERCENT
+}
+
+/// How a ticket was actually paid for — separate from TicketStatus's
+/// PAID_ONLINE/PAID_CASH (which only says "paid" vs "how"), this says *who
+/// collected the money*: the platform (ONLINE), the booking agent in cash
+/// (CASH_TO_AGENT), or the carrier's driver/office at boarding
+/// (CASH_TO_CARRIER). Staff set this explicitly via /staff/tickets; it's
+/// what /admin/reports splits revenue by.
+enum PaymentMethod {
+  ONLINE
+  CASH_TO_AGENT
+  CASH_TO_CARRIER
+}
+
 model User {
   id        String   @id @default(cuid())
   email     String   @unique
@@ -50,14 +67,58 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  /// Commission this user earns per ticket they book as staff
+  /// (bookedByUserId on Ticket). Only meaningful for AGENT/ADMIN accounts;
+  /// null means "no commission configured".
+  commissionType  CommissionType?
+  commissionValue Float?
+
+  /// This user's own referral code (lazily provisioned — see
+  /// lib/referrals.ts). Sharing /register?ref=<code> credits referredBy.
+  referralCode          String? @unique
+  referredByUserId      String?
+  referredBy            User?   @relation("Referrals", fields: [referredByUserId], references: [id], onDelete: SetNull)
+  referrals             User[]  @relation("Referrals")
+  /// Set once the referrer's reward has been granted for this user's first
+  /// paid booking, so it's never granted twice.
+  referralRewardGranted Boolean @default(false)
+
   tickets       Ticket[]
   promos        Promo[]
+  discountCards DiscountCard[]
   /// Tickets this user (an AGENT/ADMIN) created on behalf of a client while
   /// signed in — separate from `tickets`, which is ticket ownership.
-  bookedTickets Ticket[] @relation("BookedTickets")
+  bookedTickets Ticket[]       @relation("BookedTickets")
 
   @@index([role])
+  @@index([referredByUserId])
   @@map("users")
+}
+
+/// A persistent, reusable discount card — unlike Promo (single campaign
+/// code, often time/usage-limited), a card is issued once to a customer
+/// (manually by an admin, or as a referral reward/welcome gift) and applies
+/// its percent discount to every booking that redeems it, indefinitely.
+model DiscountCard {
+  id        String  @id @default(cuid())
+  code      String  @unique
+  /// Fraction 0..1, e.g. 0.10 for -10%.
+  percent   Float
+  isActive  Boolean @default(true)
+  userId    String?
+  user      User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+  /// How this card was issued: "MANUAL" (admin), "REFERRAL_WELCOME" (given
+  /// to a new user who signed up with a referral code), "REFERRAL_REWARD"
+  /// (given to the referrer after their friend's first booking).
+  source    String  @default("MANUAL")
+  usedCount Int     @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([isActive])
+  @@map("discount_cards")
 }
 
 /// A promo code that can be applied to a booking to get a percentage discount.
@@ -224,8 +285,15 @@ model Ticket {
   /// (e.g. a phone/walk-in booking) rather than the client booking it
   /// themselves — `userId` above still owns the ticket. Null for
   /// self-service bookings.
-  bookedByUserId String?
-  bookedBy       User?   @relation("BookedTickets", fields: [bookedByUserId], references: [id], onDelete: SetNull)
+  bookedByUserId   String?
+  bookedBy         User?          @relation("BookedTickets", fields: [bookedByUserId], references: [id], onDelete: SetNull)
+  /// Snapshot of bookedBy's commission on this ticket at booking time (so a
+  /// later change to the agent's rate doesn't rewrite past reports). Null
+  /// when bookedByUserId is null or the agent had no commission configured.
+  commissionAmount Float?
+  /// Who actually collected payment — set by staff via /staff/tickets, null
+  /// until then. See the PaymentMethod enum doc comment.
+  paymentMethod    PaymentMethod?
 
   tripId String?
   trip   Trip?   @relation(fields: [tripId], references: [id], onDelete: SetNull)
@@ -275,17 +343,20 @@ model TicketHistory {
 }
 
 model Booking {
-  id          String      @id @default(cuid())
-  reference   String      @unique
-  firstName   String
-  lastName    String
-  ageCategory AgeCategory @default(ADULT)
-  phone       String
-  email       String?
-  promoCode   String?
-  finalPrice  Float
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
+  id               String      @id @default(cuid())
+  reference        String      @unique
+  firstName        String
+  lastName         String
+  ageCategory      AgeCategory @default(ADULT)
+  phone            String
+  email            String?
+  promoCode        String?
+  /// Discount card code redeemed for this booking, if any (mutually
+  /// exclusive with promoCode — see lib/discountCards.ts).
+  discountCardCode String?
+  finalPrice       Float
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
 
   ticketId String @unique
   ticket   Ticket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
