@@ -193,6 +193,28 @@ async function main() {
   });
   check("PATCH /api/admin/tickets/[id] as USER returns 403", ticketPatch.status === 403, `got ${ticketPatch.status}`);
 
+  const passengerNoAuth = await fetch(`${BASE_URL}/api/admin/tickets/any-id/passenger`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ firstName: "Hacked" }),
+  });
+  check(
+    "PATCH /api/admin/tickets/[id]/passenger without auth returns 401",
+    passengerNoAuth.status === 401,
+    `got ${passengerNoAuth.status}`
+  );
+
+  const passengerAsUser = await fetch(`${BASE_URL}/api/admin/tickets/any-id/passenger`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", Cookie: cookie },
+    body: JSON.stringify({ firstName: "Hacked" }),
+  });
+  check(
+    "PATCH /api/admin/tickets/[id]/passenger as USER returns 403",
+    passengerAsUser.status === 403,
+    `got ${passengerAsUser.status}`
+  );
+
   const cronNoAuth = await fetch(`${BASE_URL}/api/cron/settlements`, { method: "POST" });
   check(
     "POST /api/cron/settlements without secret returns 401/503",

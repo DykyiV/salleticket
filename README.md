@@ -107,6 +107,11 @@ hashing. Sessions are stored in an **HttpOnly, SameSite=Lax** cookie named
   `RESERVED` ticket (`401` unauthenticated, `404` for foreign/missing ids,
   `409` if the ticket is not cancellable). Writes a `TicketEvent`
   (`CANCELLED_BY_OWNER`, source `ACCOUNT`).
+- `PATCH /api/admin/tickets/[id]/passenger` — ADMIN-only edit of passenger
+  details (`firstName`, `lastName`, `phone`, `email`; empty email clears it).
+  Validated server-side; every real change is recorded in the ticket history
+  as `PASSENGER_UPDATED` with a field-level diff (old → new), rendered on the
+  ticket detail page.
 
 ### UI pages
 

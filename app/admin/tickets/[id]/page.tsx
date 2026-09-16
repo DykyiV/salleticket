@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import Header from "@/components/Header";
+import PassengerEditor from "@/components/admin/PassengerEditor";
 import TicketStatusControl from "@/components/admin/TicketStatusControl";
 import { prisma } from "@/lib/db";
 
@@ -90,6 +91,19 @@ export default async function TicketDetailPage(
                     : "—"
                   }
               />
+              {booking ? (
+                <div className="mt-2">
+                  <PassengerEditor
+                    ticketId={ticket.id}
+                    passenger={{
+                      firstName: booking.firstName,
+                      lastName: booking.lastName,
+                      phone: booking.phone,
+                      email: booking.email,
+                    }}
+                  />
+                </div>
+              ) : null}
             </Section>
 
             <Section title="Trip">
@@ -157,21 +171,24 @@ export default async function TicketDetailPage(
             ) : (
               <ul className="mt-4 divide-y divide-slate-100">
                 {ticket.history.map((h) => (
-                  <li key={h.id} className="flex flex-wrap items-center gap-x-4 gap-y-1 py-3 text-sm">
-                    <span className="tabular-nums text-slate-500">
-                      {h.timestamp.toISOString().slice(0, 16).replace("T", " ")}
-                    </span>
-                    <span className="font-medium text-slate-900">{h.action}</span>
-                    {h.oldStatus || h.newStatus ? (
-                      <span className="text-slate-600">
-                        {h.oldStatus ?? "—"} → {h.newStatus ?? "—"}
+                  <li key={h.id} className="py-3 text-sm">
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+                      <span className="tabular-nums text-slate-500">
+                        {h.timestamp.toISOString().slice(0, 16).replace("T", " ")}
                       </span>
-                    ) : null}
-                    <span className="text-xs text-slate-400">
-                      {h.source ?? "—"}
-                      {h.changedBy ? ` · by ${h.changedBy}` : ""}
-                      {h.ipAddress ? ` · ${h.ipAddress}` : ""}
-                    </span>
+                      <span className="font-medium text-slate-900">{h.action}</span>
+                      {h.oldStatus || h.newStatus ? (
+                        <span className="text-slate-600">
+                          {h.oldStatus ?? "—"} → {h.newStatus ?? "—"}
+                        </span>
+                      ) : null}
+                      <span className="text-xs text-slate-400">
+                        {h.source ?? "—"}
+                        {h.changedBy ? ` · by ${h.changedBy}` : ""}
+                        {h.ipAddress ? ` · ${h.ipAddress}` : ""}
+                      </span>
+                    </div>
+                    <ChangeDiff changes={h.changes} />
                   </li>
                 ))}
               </ul>
@@ -180,6 +197,32 @@ export default async function TicketDetailPage(
         </div>
       </main>
     </div>
+  );
+}
+
+/** Render the JSON field diff stored on a history row, e.g. after a
+ *  passenger edit: "phone: +380… → +380…". */
+function ChangeDiff({ changes }: { changes: string | null }) {
+  if (!changes) return null;
+  let parsed: Record<string, { from: unknown; to: unknown }>;
+  try {
+    parsed = JSON.parse(changes);
+  } catch {
+    return null;
+  }
+  // Status transitions are already shown via the old → new badges above.
+  const entries = Object.entries(parsed).filter(([field]) => field !== "status");
+  if (entries.length === 0) return null;
+  const fmt = (v: unknown) => (v === null || v === undefined ? "—" : String(v));
+  return (
+    <ul className="mt-1 flex flex-col gap-0.5 pl-1 text-xs text-slate-500">
+      {entries.map(([field, { from, to }]) => (
+        <li key={field}>
+          <span className="font-medium text-slate-600">{field}</span>:{" "}
+          {fmt(from)} → {fmt(to)}
+        </li>
+      ))}
+    </ul>
   );
 }
 
