@@ -2,7 +2,9 @@
 
 Bus ticket marketplace (Grandes Tour style) built with **Next.js (App Router)**, **TypeScript** and **Tailwind CSS**.
 
-This is the frontend-only scaffold — no backend yet.
+Full-stack app: Next.js API routes + Prisma (SQLite locally, Postgres-ready) handle
+search, booking, auth, promo codes, and admin/agent dashboards. Trip data currently
+comes from a mock carrier adapter — see "Adding a new carrier integration" below.
 
 ## Stack
 
@@ -21,18 +23,31 @@ app/
   page.tsx                Homepage (hero + search block + features)
   globals.css             Tailwind entry
   results/page.tsx        Trip results list
-  booking/page.tsx        Passenger details + confirmation
+  booking/page.tsx        Booking flow (seat selection → passenger form → confirmation)
+  login|register/page.tsx Auth pages
+  account/page.tsx        User account (protected)
+  admin/ + agent/         Role-gated dashboards (incl. promo/discount management)
   api/
     search/route.ts       GET/POST /api/search  (carrier registry)
-    booking/route.ts      POST/GET /api/booking (in-memory store)
+    booking/route.ts      POST/GET /api/booking (persisted via Prisma)
+    auth/*                register / login / logout / me
+    promo/check/route.ts  GET — live promo-code validation
+    admin/*               users, bookings, discounts (ADMIN-only)
 components/
   Header.tsx              Sticky header with "Asol BUS" logo
   SearchForm.tsx          From / To / Date + Search
   TripCard.tsx            Ticket-style result card
+  BookingFlow.tsx         Multi-step booking wizard
+  SeatMap.tsx             Interactive seat selection
   BookingForm.tsx         Passenger form + POST /api/booking
+  AuthForm.tsx            Shared login/register form
+  admin/DiscountsAdmin.tsx Promo/discount management UI
 lib/
   db.ts                   Prisma client singleton
   mockTrips.ts            Fake trip data generator
+  pricing.ts              Age-category discounts + promo price computation
+  promo.ts                Promo validation rules
+  seats.ts                Seat map helpers
   carriers/
     types.ts              CarrierAdapter + Booking types
     registry.ts           Parallel fan-out across adapters
@@ -43,9 +58,13 @@ lib/
     jwt.ts                jose sign / verify (Edge-compatible)
     session.ts            cookie helpers, getSession, getCurrentUser
     guard.ts              requireRole / requireAuth
+  tickets/
+    service.ts            Ticket operations
+    history.ts            Audit trail for ticket/booking changes
 middleware.ts              Edge middleware: role-based route protection
 prisma/
-  schema.prisma           User / Ticket / Booking / Carrier / Trip + enums
+  schema.prisma           User / Ticket / Booking / Carrier / Trip / Promo + enums
+  seed.ts                 Seeds promo codes (DISCOUNT10, VIP20)
 ```
 
 ## Database schema
@@ -98,15 +117,16 @@ hashing. Sessions are stored in an **HttpOnly, SameSite=Lax** cookie named
 
 | Path            | Required role | Unauth / under-privileged |
 |-----------------|---------------|---------------------------|
-| `/booking/**`   | `USER`        | redirect → `/login?next=…` |
 | `/account/**`   | `USER`        | redirect → `/login?next=…` / `/?error=forbidden` |
 | `/agent/**`     | `AGENT`       | redirect as above |
 | `/admin/**`     | `ADMIN`       | redirect as above |
 | `/api/agent/**` | `AGENT`       | `401` / `403` JSON |
 | `/api/admin/**` | `ADMIN`       | `401` / `403` JSON |
 
-`POST /api/booking` additionally calls `requireAuth()` inside its handler so
-it returns `401` JSON rather than a redirect when called without a session.
+`/booking` is intentionally **public** so guests can fill the form; the actual
+booking creation (`POST /api/booking`) calls `requireAuth()` inside its handler
+and returns `401` JSON without a session — the client then redirects to
+`/login?next=…` so users sign in before the booking is created.
 
 The middleware verifies the JWT with `jose` and forwards identity as request
 headers (`x-user-id`, `x-user-email`, `x-user-role`) to downstream handlers.
@@ -193,7 +213,9 @@ Returns `201` with `{ booking, carrierReference, fees }`.
 2. Register the adapter in `lib/carriers/registry.ts`.
 3. The `/api/search`, `/api/booking`, and `/results` pages will start using it automatically.
 
-The booking store in `lib/bookings/store.ts` is in-memory — swap it for a real database before production.
+Bookings are persisted in the database (Prisma transaction creating Carrier →
+Trip → Ticket → Booking). For production, switch the datasource to Postgres and
+wire a real payment + carrier adapter before taking money.
 
 ## Getting started
 
@@ -219,6 +241,9 @@ Defaults use SQLite and a local dev JWT secret:
 DATABASE_URL="file:./dev.db"
 JWT_SECRET="super-secret-key-12345"
 ```
+
+> ⚠️ **Never deploy with the example `JWT_SECRET`.** Generate a strong one with
+> `openssl rand -base64 48` and keep it out of version control.
 
 The SQLite file will be created at `prisma/dev.db` on first push / migrate.
 
@@ -258,3 +283,18 @@ Open [http://localhost:3000](http://localhost:3000).
 
 The old `pages/` directory is removed — the project fully uses the App Router
 (`app/` directory). UI is responsive and mobile-first.
+
+## Known security advisories (npm audit)
+
+`npm audit` currently reports 5 remaining advisories that require **breaking
+changes** to resolve, so they are intentionally left as-is:
+
+| Package | Severity | Why it stays |
+|---------|----------|--------------|
+| `next` (14.2.x) | critical | Fix requires upgrading to Next.js 16 — a major migration (React 19, async request APIs). Plan it as a separate task. |
+| `postcss` (bundled in `next`) | high | Same — resolved by the Next.js upgrade. |
+| `prisma` / `@prisma/config` / `deepmerge-ts` | high | Advisory affects the Prisma CLI's config loader (dev-time only, not shipped to production). The npm-suggested "fix" is a *downgrade* to prisma@6.12.0, which loses newer patches — not worth it. Revisit when a patched stable release lands. |
+
+Everything else reported by `npm audit` has been fixed (`next` pinned to the
+latest 14.2.x patch, `postcss` ^8.5.28, `tsx` updated to pull a patched
+`esbuild`).
