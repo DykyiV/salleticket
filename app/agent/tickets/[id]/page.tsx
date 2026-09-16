@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import Header from "@/components/Header";
 import PassengerEditor from "@/components/PassengerEditor";
+import TicketComments from "@/components/TicketComments";
 import { getCurrentUser } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 
@@ -48,6 +49,7 @@ export default async function AgentTicketDetailPage(
       user: { select: { email: true, role: true } },
       trip: { include: { carrier: true } },
       history: { orderBy: { timestamp: "desc" } },
+      comments: { orderBy: { createdAt: "asc" } },
     },
   });
   if (!ticket) notFound();
@@ -194,6 +196,17 @@ export default async function AgentTicketDetailPage(
                 ))}
               </ul>
             )}
+          </section>
+
+          <section className="mt-8 rounded-2xl bg-white p-6 ring-1 ring-slate-200">
+            <h2 className="text-base font-semibold text-slate-900">Comments</h2>
+            <div className="mt-4">
+              <TicketComments
+                ticketId={ticket.id}
+                comments={ticket.comments}
+                canComment={canEdit}
+              />
+            </div>
           </section>
         </div>
       </main>

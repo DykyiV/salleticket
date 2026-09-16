@@ -225,6 +225,51 @@ async function main() {
     `got ${ownEdit.status}: ${JSON.stringify(ownEditBody).slice(0, 200)}`
   );
 
+  // --- Ticket comments ---------------------------------------------------------
+  const commentNoAuth = await fetch(`${BASE_URL}/api/tickets/${ownTicketId}/comments`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text: "hi" }),
+  });
+  check(
+    "POST /api/tickets/[id]/comments without auth returns 401",
+    commentNoAuth.status === 401,
+    `got ${commentNoAuth.status}`
+  );
+
+  const commentEmpty = await fetch(`${BASE_URL}/api/tickets/${ownTicketId}/comments`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Cookie: cookie },
+    body: JSON.stringify({ text: "  " }),
+  });
+  check(
+    "POST /api/tickets/[id]/comments with empty text returns 400",
+    commentEmpty.status === 400,
+    `got ${commentEmpty.status}`
+  );
+
+  const commentAdd = await fetch(`${BASE_URL}/api/tickets/${ownTicketId}/comments`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Cookie: cookie },
+    body: JSON.stringify({ text: "Smoke comment" }),
+  });
+  check(
+    "owner can add a comment to own ticket",
+    commentAdd.status === 201,
+    `got ${commentAdd.status}`
+  );
+
+  const commentList = await fetch(`${BASE_URL}/api/tickets/${ownTicketId}/comments`, {
+    headers: { Cookie: cookie },
+  });
+  const commentListBody = await commentList.json();
+  check(
+    "GET /api/tickets/[id]/comments lists the new comment",
+    commentList.status === 200 &&
+      commentListBody.comments?.some((c) => c.text === "Smoke comment"),
+    `got ${commentList.status}`
+  );
+
   // --- PDF tickets -----------------------------------------------------------
   const pdfNoAuth = await fetch(`${BASE_URL}/api/tickets/${ownTicketId}/pdf`);
   check(

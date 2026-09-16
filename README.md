@@ -8,6 +8,10 @@ Full-stack app: Next.js API routes + Prisma (SQLite locally, Postgres-ready) han
 search, booking, auth, promo codes, and admin/agent dashboards. Trip data currently
 comes from a mock carrier adapter — see "Adding a new carrier integration" below.
 
+> **Структура сайту:** повний опис розділів і логіки (пошук, квитки, виїзди,
+> чат, налаштування, довідник, сайт, звіти, статистика) зі статусом
+> реалізації — у [docs/STRUCTURE.md](docs/STRUCTURE.md).
+
 ## Stack
 
 - Next.js 16 (App Router) + Edge proxy (formerly "middleware")

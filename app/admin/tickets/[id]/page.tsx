@@ -2,6 +2,8 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import Header from "@/components/Header";
 import PassengerEditor from "@/components/PassengerEditor";
+import TicketComments from "@/components/TicketComments";
+import SendSmsButton from "@/components/admin/SendSmsButton";
 import TicketStatusControl from "@/components/admin/TicketStatusControl";
 import { prisma } from "@/lib/db";
 
@@ -35,6 +37,7 @@ export default async function TicketDetailPage(
       user: { select: { email: true, role: true } },
       trip: { include: { carrier: true } },
       history: { orderBy: { timestamp: "desc" } },
+      comments: { orderBy: { createdAt: "asc" } },
       settlement: { select: { invoiceNumber: true, period: true, status: true } },
     },
   });
@@ -85,7 +88,17 @@ export default async function TicketDetailPage(
           </p>
 
           <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
-            <Section title="Passenger">
+            <Section
+              title="Passenger"
+              action={
+                booking ? (
+                  <SendSmsButton
+                    ticketId={ticket.id}
+                    passengerName={`${booking.firstName} ${booking.lastName}`}
+                  />
+                ) : undefined
+              }
+            >
               <Row label="Name" value={booking ? `${booking.firstName} ${booking.lastName}` : "—"} />
               <Row label="Phone" value={booking?.phone ?? "—"} />
               <Row label="Email" value={booking?.email ?? "—"} />
@@ -202,6 +215,17 @@ export default async function TicketDetailPage(
               </ul>
             )}
           </section>
+
+          <section className="mt-8 rounded-2xl bg-white p-6 ring-1 ring-slate-200">
+            <h2 className="text-base font-semibold text-slate-900">Comments</h2>
+            <div className="mt-4">
+              <TicketComments
+                ticketId={ticket.id}
+                comments={ticket.comments}
+                canComment
+              />
+            </div>
+          </section>
         </div>
       </main>
     </div>
@@ -236,14 +260,19 @@ function ChangeDiff({ changes }: { changes: string | null }) {
 
 function Section({
   title,
+  action,
   children,
 }: {
   title: string;
+  action?: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
     <section className="rounded-2xl bg-white p-6 ring-1 ring-slate-200">
-      <h2 className="text-base font-semibold text-slate-900">{title}</h2>
+      <div className="flex items-center justify-between">
+        <h2 className="text-base font-semibold text-slate-900">{title}</h2>
+        {action}
+      </div>
       <dl className="mt-4 flex flex-col gap-2.5">{children}</dl>
     </section>
   );

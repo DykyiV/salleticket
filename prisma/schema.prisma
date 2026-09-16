@@ -144,6 +144,10 @@ model Trip {
   id            String   @id @default(cuid())
   fromCity      String
   toCity        String
+  /// Country names for filtering departures by country (backfilled from the
+  /// city→country map in lib/geo.ts; empty string when unknown).
+  fromCountry   String   @default("")
+  toCountry     String   @default("")
   departureTime DateTime
   arrivalTime   DateTime
   price         Float
@@ -188,8 +192,9 @@ model Ticket {
   settlementId String?
   settlement   Settlement? @relation(fields: [settlementId], references: [id], onDelete: SetNull)
 
-  booking Booking?
-  history TicketHistory[]
+  booking  Booking?
+  history  TicketHistory[]
+  comments TicketComment[]
 
   @@index([userId])
   @@index([status])
@@ -301,6 +306,25 @@ model TicketHistory {
   @@index([timestamp])
   @@index([source])
   @@map("ticket_history")
+}
+
+/// Free-text comments on a ticket ("коментар щоб фіксувати різні
+/// коментарі"). Separate from TicketHistory: history is the audit trail of
+/// changes, comments are human notes. Keeps an email snapshot so the note
+/// stays readable even if the author's account changes.
+model TicketComment {
+  id          String   @id @default(cuid())
+  text        String
+  authorId    String?
+  authorEmail String
+  createdAt   DateTime @default(now())
+
+  ticketId String
+  ticket   Ticket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  @@index([ticketId])
+  @@index([createdAt])
+  @@map("ticket_comments")
 }
 
 model Booking {

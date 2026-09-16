@@ -10,10 +10,21 @@ export const dynamic = "force-dynamic";
 
 const eur = (n: number) => `€${n.toFixed(2)}`;
 
+const PASSENGER_SORTS: Record<string, string> = {
+  city: "За містами",
+  purchased: "За датою купівлі",
+  alpha: "За алфавітом",
+};
+
 export default async function DepartureDetailPage(
-  props: { params: Promise<{ id: string }> }
+  props: { params: Promise<{ id: string }>; searchParams: Promise<{ sort?: string }> }
 ) {
   const { id } = await props.params;
+  const searchParams = await props.searchParams;
+  const sort = PASSENGER_SORTS[searchParams.sort ?? ""]
+    ? searchParams.sort!
+    : "city";
+
   const trip = await prisma.trip.findUnique({
     where: { id },
     include: {
@@ -29,6 +40,21 @@ export default async function DepartureDetailPage(
   });
   if (!trip) notFound();
 
+  // Passenger ordering: by cities (destination city → arrival time, so the
+  // list reads from the first stop to the last — meaningful once trips have
+  // intermediate stops; today all tickets on a departure share the route),
+  // by purchase date, or alphabetically by passenger surname.
+  const sortedTickets = [...trip.tickets];
+  if (sort === "alpha") {
+    sortedTickets.sort((a, b) =>
+      `${a.booking?.lastName ?? ""}${a.booking?.firstName ?? ""}`.localeCompare(
+        `${b.booking?.lastName ?? ""}${b.booking?.firstName ?? ""}`,
+        "uk"
+      )
+    );
+  }
+  // "city" and "purchased" keep the createdAt-asc order from the query.
+
   const active = trip.tickets.filter(
     (t) => t.status !== "CANCELLED" && t.status !== "REFUNDED"
   );
@@ -39,7 +65,7 @@ export default async function DepartureDetailPage(
     return acc;
   }, {});
 
-  const rows: BulkTicketRow[] = trip.tickets.map((t) => ({
+  const rows: BulkTicketRow[] = sortedTickets.map((t) => ({
     id: t.id,
     reference: t.booking?.reference ?? t.id.slice(-8),
     passenger: t.booking ? `${t.booking.firstName} ${t.booking.lastName}` : "—",
@@ -85,7 +111,24 @@ export default async function DepartureDetailPage(
             />
           </div>
 
-          <div className="mt-6">
+          <div className="mt-5 flex flex-wrap items-center gap-2">
+            <span className="text-xs font-medium text-slate-500">Сортування:</span>
+            {Object.entries(PASSENGER_SORTS).map(([value, label]) => (
+              <Link
+                key={value}
+                href={`/admin/departures/${trip.id}?sort=${value}`}
+                className={`rounded-full px-3.5 py-1.5 text-xs font-medium transition ${
+                  sort === value
+                    ? "bg-brand-600 text-white"
+                    : "bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-slate-100"
+                }`}
+              >
+                {label}
+              </Link>
+            ))}
+          </div>
+
+          <div className="mt-4">
             <TicketsBulkTable
               rows={rows}
               variant="departure"

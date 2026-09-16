@@ -159,7 +159,14 @@ export default function TicketsBulkTable({
                       {r.reference}
                     </Link>
                   </td>
-                  <td className="px-4 py-3 text-slate-700">{r.passenger}</td>
+                  <td className="px-4 py-3 text-slate-700">
+                    <Link
+                      href={`/admin/tickets/${r.id}`}
+                      className="hover:text-brand-700 hover:underline"
+                    >
+                      {r.passenger}
+                    </Link>
+                  </td>
                   {variant === "tickets" ? (
                     <>
                       <td className="px-4 py-3 text-slate-700">{r.route}</td>
