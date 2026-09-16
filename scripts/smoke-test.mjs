@@ -225,6 +225,58 @@ async function main() {
     `got ${ownEdit.status}: ${JSON.stringify(ownEditBody).slice(0, 200)}`
   );
 
+  // --- PDF tickets -----------------------------------------------------------
+  const pdfNoAuth = await fetch(`${BASE_URL}/api/tickets/${ownTicketId}/pdf`);
+  check(
+    "GET /api/tickets/[id]/pdf without auth returns 401",
+    pdfNoAuth.status === 401,
+    `got ${pdfNoAuth.status}`
+  );
+
+  const ownPdf = await fetch(`${BASE_URL}/api/tickets/${ownTicketId}/pdf`, {
+    headers: { Cookie: cookie },
+  });
+  const pdfBytes = Buffer.from(await ownPdf.arrayBuffer());
+  check(
+    "owner can download own ticket PDF",
+    ownPdf.status === 200 &&
+      ownPdf.headers.get("content-type") === "application/pdf" &&
+      pdfBytes.subarray(0, 5).toString() === "%PDF-",
+    `got ${ownPdf.status} ${ownPdf.headers.get("content-type")}`
+  );
+
+  const bulkPdfAsUser = await fetch(`${BASE_URL}/api/admin/tickets/pdf?ids=${ownTicketId}`, {
+    headers: { Cookie: cookie },
+  });
+  check(
+    "GET /api/admin/tickets/pdf as USER returns 403",
+    bulkPdfAsUser.status === 403,
+    `got ${bulkPdfAsUser.status}`
+  );
+
+  // --- Bulk SMS ---------------------------------------------------------------
+  const smsNoAuth = await fetch(`${BASE_URL}/api/admin/sms`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ticketIds: [ownTicketId], message: "test" }),
+  });
+  check(
+    "POST /api/admin/sms without auth returns 401",
+    smsNoAuth.status === 401,
+    `got ${smsNoAuth.status}`
+  );
+
+  const smsAsUser = await fetch(`${BASE_URL}/api/admin/sms`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Cookie: cookie },
+    body: JSON.stringify({ ticketIds: [ownTicketId], message: "test" }),
+  });
+  check(
+    "POST /api/admin/sms as USER returns 403",
+    smsAsUser.status === 403,
+    `got ${smsAsUser.status}`
+  );
+
   // --- Route protection ------------------------------------------------------
   const account = await fetch(`${BASE_URL}/account`, { redirect: "manual" });
   const accountLocation = account.headers.get("location") ?? "";

@@ -120,6 +120,16 @@ hashing. Sessions are stored in an **HttpOnly, SameSite=Lax** cookie named
   anything (`403` otherwise, `404` for unknown tickets). History source is
   recorded as `ACCOUNT` (owner), `AGENT_PANEL` (permitted non-owner) or
   `ADMIN_PANEL`.
+- `GET /api/tickets/[id]/pdf` — the e-ticket as a PDF (A5 landscape, embedded
+  DejaVu Sans for Cyrillic names, QR code of the booking reference). Same
+  visibility rules as viewing the ticket: owner, `canViewAllTickets`, admins.
+- `GET /api/admin/tickets/pdf?ids=id1,id2,…` — ADMIN-only bulk print: one
+  PDF with a page per ticket (max 100), in the requested order.
+- `POST /api/admin/sms` — ADMIN-only bulk SMS: `{ ticketIds, message }`
+  (max 100 tickets, 500 chars) sends the same text to every selected
+  passenger phone and records `SMS_SENT` / `SMS_FAILED` in each ticket's
+  history with the message text. The sender is a mock adapter (`lib/sms.ts`)
+  until a real provider is configured via `SMS_PROVIDER`.
 
 ### UI pages
 
@@ -130,9 +140,12 @@ hashing. Sessions are stored in an **HttpOnly, SameSite=Lax** cookie named
 - `/admin`, `/agent` — role-gated dashboards.
 - `/agent/tickets/[id]` — ticket detail for agents: passenger, trip, payment
   and history; passenger edit shown when the user is the owner, has
-  `canEditAllTickets`, or is an admin.
+  `canEditAllTickets`, or is an admin. PDF download button included.
 - `/admin/users` — user management: role select plus `canViewAllTickets` and
   `canEditAllTickets` toggles per user.
+- `/admin/tickets` and `/admin/departures/[id]` — ticket tables with row
+  checkboxes: print the selected tickets as a single PDF or send the same
+  SMS to all selected passengers.
 
 ### Ticket visibility and editing
 

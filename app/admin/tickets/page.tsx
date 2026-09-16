@@ -1,19 +1,14 @@
 import Link from "next/link";
 import Header from "@/components/Header";
+import TicketsBulkTable, {
+  type BulkTicketRow,
+} from "@/components/admin/TicketsBulkTable";
 import { prisma } from "@/lib/db";
 import { TicketStatus } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
 
 const eur = (n: number) => `€${n.toFixed(2)}`;
-
-export const STATUS_STYLES: Record<string, string> = {
-  RESERVED: "bg-amber-50 text-amber-700 ring-amber-200",
-  PAID_ONLINE: "bg-emerald-50 text-emerald-700 ring-emerald-200",
-  PAID_CASH: "bg-sky-50 text-sky-700 ring-sky-200",
-  CANCELLED: "bg-rose-50 text-rose-700 ring-rose-200",
-  REFUNDED: "bg-slate-100 text-slate-600 ring-slate-200",
-};
 
 const FILTERS: { value: string; label: string }[] = [
   { value: "", label: "All" },
@@ -44,6 +39,18 @@ export default async function TicketsPage(
     take: 200,
   });
 
+  const rows: BulkTicketRow[] = tickets.map((t) => ({
+    id: t.id,
+    reference: t.booking?.reference ?? t.id.slice(-8),
+    passenger: t.booking ? `${t.booking.firstName} ${t.booking.lastName}` : "—",
+    route: t.trip ? `${t.trip.fromCity} → ${t.trip.toCity}` : "—",
+    carrier: t.trip?.carrier.name ?? "—",
+    bookedBy: t.user.email,
+    price: eur(t.finalPrice),
+    status: t.status,
+    created: t.createdAt.toISOString().slice(0, 10),
+  }));
+
   return (
     <div className="flex min-h-screen flex-col">
       <Header />
@@ -57,7 +64,8 @@ export default async function TicketsPage(
           </h1>
           <p className="mt-1 text-sm text-slate-500">
             All sold tickets. Open a ticket for full details, status changes
-            and its history.
+            and its history. Select tickets with the checkboxes to print them
+            as one PDF or send the same SMS to all selected passengers.
           </p>
 
           <div className="mt-5 flex flex-wrap gap-2">
@@ -79,89 +87,15 @@ export default async function TicketsPage(
             })}
           </div>
 
-          <div className="mt-5 overflow-x-auto rounded-2xl bg-white ring-1 ring-slate-200">
-            <table className="min-w-full divide-y divide-slate-200 text-sm">
-              <thead className="bg-slate-50">
-                <tr>
-                  <Th>Reference</Th>
-                  <Th>Passenger</Th>
-                  <Th>Route</Th>
-                  <Th>Carrier</Th>
-                  <Th>Booked by</Th>
-                  <Th className="text-right">Price</Th>
-                  <Th>Status</Th>
-                  <Th>Created</Th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {tickets.length === 0 ? (
-                  <tr>
-                    <td colSpan={8} className="px-4 py-10 text-center text-sm text-slate-500">
-                      No tickets found.
-                    </td>
-                  </tr>
-                ) : (
-                  tickets.map((t) => (
-                    <tr key={t.id} className="transition hover:bg-slate-50">
-                      <td className="px-4 py-3">
-                        <Link
-                          href={`/admin/tickets/${t.id}`}
-                          className="font-medium text-brand-700 hover:underline"
-                        >
-                          {t.booking?.reference ?? t.id.slice(-8)}
-                        </Link>
-                      </td>
-                      <td className="px-4 py-3 text-slate-700">
-                        {t.booking
-                          ? `${t.booking.firstName} ${t.booking.lastName}`
-                          : "—"}
-                      </td>
-                      <td className="px-4 py-3 text-slate-700">
-                        {t.trip ? `${t.trip.fromCity} → ${t.trip.toCity}` : "—"}
-                      </td>
-                      <td className="px-4 py-3 text-slate-700">
-                        {t.trip?.carrier.name ?? "—"}
-                      </td>
-                      <td className="px-4 py-3 text-slate-500">{t.user.email}</td>
-                      <td className="px-4 py-3 text-right tabular-nums text-slate-900">
-                        {eur(t.finalPrice)}
-                      </td>
-                      <td className="px-4 py-3">
-                        <span
-                          className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ring-1 ring-inset ${
-                            STATUS_STYLES[t.status]
-                          }`}
-                        >
-                          {t.status}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 tabular-nums text-slate-500">
-                        {t.createdAt.toISOString().slice(0, 10)}
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
+          <div className="mt-5">
+            <TicketsBulkTable
+              rows={rows}
+              variant="tickets"
+              emptyText="No tickets found."
+            />
           </div>
         </div>
       </main>
     </div>
-  );
-}
-
-function Th({
-  children,
-  className = "",
-}: {
-  children?: React.ReactNode;
-  className?: string;
-}) {
-  return (
-    <th
-      className={`px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 ${className}`}
-    >
-      {children}
-    </th>
   );
 }

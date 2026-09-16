@@ -148,6 +148,14 @@ export default async function AccountPage() {
                         </p>
                       </div>
                       <div className="flex items-center gap-3">
+                        <a
+                          href={`/api/tickets/${t.id}/pdf`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs font-medium text-brand-700 hover:underline"
+                        >
+                          PDF
+                        </a>
                         <span className="text-sm font-bold tabular-nums text-slate-900">
                           {eur(t.finalPrice)}
                         </span>

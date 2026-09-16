@@ -1,19 +1,14 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import Header from "@/components/Header";
+import TicketsBulkTable, {
+  type BulkTicketRow,
+} from "@/components/admin/TicketsBulkTable";
 import { prisma } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
 const eur = (n: number) => `€${n.toFixed(2)}`;
-
-const STATUS_STYLES: Record<string, string> = {
-  RESERVED: "bg-amber-50 text-amber-700 ring-amber-200",
-  PAID_ONLINE: "bg-emerald-50 text-emerald-700 ring-emerald-200",
-  PAID_CASH: "bg-sky-50 text-sky-700 ring-sky-200",
-  CANCELLED: "bg-rose-50 text-rose-700 ring-rose-200",
-  REFUNDED: "bg-slate-100 text-slate-600 ring-slate-200",
-};
 
 export default async function DepartureDetailPage(
   props: { params: Promise<{ id: string }> }
@@ -43,6 +38,19 @@ export default async function DepartureDetailPage(
     acc[t.status] = (acc[t.status] ?? 0) + 1;
     return acc;
   }, {});
+
+  const rows: BulkTicketRow[] = trip.tickets.map((t) => ({
+    id: t.id,
+    reference: t.booking?.reference ?? t.id.slice(-8),
+    passenger: t.booking ? `${t.booking.firstName} ${t.booking.lastName}` : "—",
+    type: `${t.booking?.ageCategory ?? "—"}${
+      t.booking?.promoCode ? ` · ${t.booking.promoCode}` : ""
+    }`,
+    bookedBy: t.user.email,
+    price: eur(t.finalPrice),
+    status: t.status,
+    created: t.createdAt.toISOString().slice(0, 10),
+  }));
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -77,67 +85,12 @@ export default async function DepartureDetailPage(
             />
           </div>
 
-          <div className="mt-6 overflow-x-auto rounded-2xl bg-white ring-1 ring-slate-200">
-            <table className="min-w-full divide-y divide-slate-200 text-sm">
-              <thead className="bg-slate-50">
-                <tr>
-                  <Th>Reference</Th>
-                  <Th>Passenger</Th>
-                  <Th>Type</Th>
-                  <Th>Booked by</Th>
-                  <Th className="text-right">Price</Th>
-                  <Th>Status</Th>
-                  <Th />
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {trip.tickets.length === 0 ? (
-                  <tr>
-                    <td colSpan={7} className="px-4 py-10 text-center text-sm text-slate-500">
-                      No tickets on this departure yet.
-                    </td>
-                  </tr>
-                ) : (
-                  trip.tickets.map((t) => (
-                    <tr key={t.id} className="transition hover:bg-slate-50">
-                      <td className="px-4 py-3 font-medium text-slate-900">
-                        {t.booking?.reference ?? t.id.slice(-8)}
-                      </td>
-                      <td className="px-4 py-3 text-slate-700">
-                        {t.booking
-                          ? `${t.booking.firstName} ${t.booking.lastName}`
-                          : "—"}
-                      </td>
-                      <td className="px-4 py-3 text-slate-600">
-                        {t.booking?.ageCategory ?? "—"}
-                        {t.booking?.promoCode ? ` · ${t.booking.promoCode}` : ""}
-                      </td>
-                      <td className="px-4 py-3 text-slate-500">{t.user.email}</td>
-                      <td className="px-4 py-3 text-right tabular-nums text-slate-900">
-                        {eur(t.finalPrice)}
-                      </td>
-                      <td className="px-4 py-3">
-                        <span
-                          className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ring-1 ring-inset ${
-                            STATUS_STYLES[t.status]
-                          }`}
-                        >
-                          {t.status}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-right">
-                        <Link
-                          href={`/admin/tickets/${t.id}`}
-                          className="text-xs font-medium text-brand-700 hover:underline"
-                        >
-                          Details →
-                        </Link>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
+          <div className="mt-6">
+            <TicketsBulkTable
+              rows={rows}
+              variant="departure"
+              emptyText="No tickets on this departure yet."
+            />
           </div>
         </div>
       </main>
@@ -167,21 +120,5 @@ function Stat({
         {value}
       </p>
     </div>
-  );
-}
-
-function Th({
-  children,
-  className = "",
-}: {
-  children?: React.ReactNode;
-  className?: string;
-}) {
-  return (
-    <th
-      className={`px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 ${className}`}
-    >
-      {children}
-    </th>
   );
 }

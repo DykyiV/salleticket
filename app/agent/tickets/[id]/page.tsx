@@ -88,6 +88,14 @@ export default async function AgentTicketDetailPage(
             >
               {ticket.status}
             </span>
+            <a
+              href={`/api/tickets/${ticket.id}/pdf`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-brand-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-brand-700"
+            >
+              ⬇ PDF ticket
+            </a>
           </div>
           <p className="mt-1 text-sm text-slate-500">
             Created {ticket.createdAt.toISOString().slice(0, 16).replace("T", " ")}
