@@ -3,11 +3,23 @@
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 
+type TransportType = "BUS" | "FLIGHT" | "TRAIN";
+
 type SearchValues = {
   from: string;
   to: string;
   date: string;
 };
+
+const TRANSPORT_OPTIONS: {
+  id: TransportType;
+  label: string;
+  icon: (className: string) => React.ReactNode;
+}[] = [
+  { id: "BUS", label: "Bus", icon: (c) => <BusIcon className={c} /> },
+  { id: "FLIGHT", label: "Flight", icon: (c) => <PlaneIcon className={c} /> },
+  { id: "TRAIN", label: "Train", icon: (c) => <TrainIcon className={c} /> },
+];
 
 const POPULAR_CITIES = [
   "Kyiv",
@@ -22,6 +34,7 @@ const POPULAR_CITIES = [
 
 export default function SearchForm() {
   const router = useRouter();
+  const [transport, setTransport] = useState<TransportType>("BUS");
   const [values, setValues] = useState<SearchValues>({
     from: "",
     to: "",
@@ -41,6 +54,7 @@ export default function SearchForm() {
   const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const params = new URLSearchParams();
+    params.set("transport", transport);
     if (values.from) params.set("from", values.from);
     if (values.to) params.set("to", values.to);
     if (values.date) params.set("date", values.date);
@@ -53,6 +67,33 @@ export default function SearchForm() {
       onSubmit={handleSubmit}
       className="w-full rounded-2xl bg-white p-4 shadow-xl ring-1 ring-slate-200/80 sm:p-6"
     >
+      <div
+        role="tablist"
+        aria-label="Transport type"
+        className="mb-4 inline-flex rounded-xl bg-slate-100 p-1"
+      >
+        {TRANSPORT_OPTIONS.map((option) => {
+          const active = transport === option.id;
+          return (
+            <button
+              key={option.id}
+              type="button"
+              role="tab"
+              aria-selected={active}
+              onClick={() => setTransport(option.id)}
+              className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition ${
+                active
+                  ? "bg-white text-brand-700 shadow-sm ring-1 ring-slate-200"
+                  : "text-slate-500 hover:text-slate-800"
+              }`}
+            >
+              {option.icon("h-4 w-4")}
+              {option.label}
+            </button>
+          );
+        })}
+      </div>
+
       <div className="grid grid-cols-1 gap-3 md:grid-cols-[1fr_auto_1fr_1fr_auto] md:items-end">
         <Field
           id="from"
@@ -250,6 +291,71 @@ function SwapIcon({ className }: { className?: string }) {
       <path d="M3 7h18" />
       <path d="M7 21l-4-4 4-4" />
       <path d="M21 17H3" />
+    </svg>
+  );
+}
+
+function BusIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden="true"
+    >
+      <path d="M8 6v6" />
+      <path d="M16 6v6" />
+      <path d="M2 12h19.6" />
+      <path d="M18 18h3s.5-1.7.8-2.8c.1-.4.2-.8.2-1.2V6c0-1.1-.9-2-2-2H4a2 2 0 0 0-2 2v8c0 .5.2 1 .6 1.4L4 18" />
+      <circle cx="7" cy="18" r="2" />
+      <circle cx="17" cy="18" r="2" />
+    </svg>
+  );
+}
+
+function PlaneIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden="true"
+    >
+      <path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z" />
+    </svg>
+  );
+}
+
+function TrainIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden="true"
+    >
+      <rect width="16" height="16" x="4" y="3" rx="2" />
+      <path d="M4 11h16" />
+      <path d="M12 3v8" />
+      <path d="m8 19-2 3" />
+      <path d="m18 22-2-3" />
+      <path d="M8 15h.01" />
+      <path d="M16 15h.01" />
     </svg>
   );
 }

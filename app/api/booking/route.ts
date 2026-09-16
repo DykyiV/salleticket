@@ -5,6 +5,7 @@ import { findCarrier } from "@/lib/carriers/registry";
 import { requireAuth } from "@/lib/auth/guard";
 import { computePrice, type AgeCategoryId } from "@/lib/pricing";
 import { PromoError, validatePromo } from "@/lib/promo";
+import { resolveCommission } from "@/lib/commission";
 import { recordTicketHistory, requestMeta } from "@/lib/tickets/history";
 import type { BookingPassenger, Trip } from "@/lib/carriers/types";
 
@@ -310,9 +311,21 @@ export async function POST(req: NextRequest) {
           departureTime: departureAt,
           arrivalTime: arrivalAt,
           price: basePrice,
+          transportType: snapshot.transportType ?? "BUS",
           carrierId: carrier.id,
         },
       });
+
+      // Snapshot the agency commission at booking time: route-specific rule
+      // first, carrier default otherwise. Stored on the ticket so monthly
+      // settlements are immune to later rule changes.
+      const commission = await resolveCommission(
+        tx,
+        carrier.id,
+        trip.fromCity,
+        trip.toCity,
+        finalPrice
+      );
 
       const ticket = await tx.ticket.create({
         data: {
@@ -321,6 +334,9 @@ export async function POST(req: NextRequest) {
           status: TicketStatus.RESERVED,
           basePrice,
           finalPrice,
+          commissionPercent: commission.percent,
+          commissionAmount: commission.commissionAmount,
+          carrierAmount: commission.carrierAmount,
         },
       });
 
@@ -385,6 +401,14 @@ export async function POST(req: NextRequest) {
             },
           },
           promoCode: { from: null, to: booking.promoCode },
+          commission: {
+            from: null,
+            to: {
+              percent: ticket.commissionPercent,
+              agencyAmount: ticket.commissionAmount,
+              carrierAmount: ticket.carrierAmount,
+            },
+          },
           trip: {
             from: null,
             to: {

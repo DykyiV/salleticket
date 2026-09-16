@@ -23,7 +23,18 @@ function buildBookingHref(trip: Trip, date?: string): string {
   return `/booking?${params.toString()}`;
 }
 
+const TRANSPORT_META: Record<
+  string,
+  { label: string; Glyph: (props: { className?: string }) => React.ReactNode }
+> = {
+  BUS: { label: "Bus", Glyph: BusGlyph },
+  FLIGHT: { label: "Flight", Glyph: PlaneGlyph },
+  TRAIN: { label: "Train", Glyph: TrainGlyph },
+};
+
 export default function TripCard({ trip, date }: Props) {
+  const meta = TRANSPORT_META[trip.transportType] ?? TRANSPORT_META.BUS;
+  const Glyph = meta.Glyph;
   return (
     <article className="group relative flex flex-col overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-slate-200 transition hover:shadow-lg hover:ring-brand-300 md:flex-row">
       <div className="flex flex-1 flex-col gap-5 p-5 sm:p-6">
@@ -36,7 +47,9 @@ export default function TripCard({ trip, date }: Props) {
               <p className="truncate text-sm font-semibold text-slate-900">
                 {trip.carrier}
               </p>
-              <p className="truncate text-xs text-slate-500">{trip.busType}</p>
+              <p className="truncate text-xs text-slate-500">
+                {meta.label} · {trip.busType}
+              </p>
             </div>
           </div>
 
@@ -63,7 +76,7 @@ export default function TripCard({ trip, date }: Props) {
             <div className="mt-1 flex w-full items-center gap-1.5">
               <span className="h-2 w-2 shrink-0 rounded-full bg-brand-500" />
               <span className="h-px flex-1 bg-gradient-to-r from-brand-500 via-brand-300 to-brand-500" />
-              <BusGlyph className="h-4 w-4 shrink-0 text-brand-500" />
+              <Glyph className="h-4 w-4 shrink-0 text-brand-500" />
               <span className="h-px flex-1 bg-gradient-to-r from-brand-500 via-brand-300 to-brand-500" />
               <span className="h-2 w-2 shrink-0 rounded-full bg-brand-500" />
             </div>
@@ -190,6 +203,48 @@ function BusGlyph({ className }: { className?: string }) {
       <path d="M18 18h3s.5-1.7.8-2.8c.1-.4.2-.8.2-1.2V6c0-1.1-.9-2-2-2H4a2 2 0 0 0-2 2v8c0 .5.2 1 .6 1.4L4 18" />
       <circle cx="7" cy="18" r="2" />
       <circle cx="17" cy="18" r="2" />
+    </svg>
+  );
+}
+
+function PlaneGlyph({ className }: { className?: string }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden="true"
+    >
+      <path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z" />
+    </svg>
+  );
+}
+
+function TrainGlyph({ className }: { className?: string }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden="true"
+    >
+      <rect width="16" height="16" x="4" y="3" rx="2" />
+      <path d="M4 11h16" />
+      <path d="M12 3v8" />
+      <path d="m8 19-2 3" />
+      <path d="m18 22-2-3" />
+      <path d="M8 15h.01" />
+      <path d="M16 15h.01" />
     </svg>
   );
 }

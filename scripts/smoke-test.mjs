@@ -63,6 +63,24 @@ async function main() {
   check("GET /api/search returns trips", searchRes.ok && search.trips?.length > 0);
   const trip = search.trips?.[1] ?? search.trips?.[0];
 
+  const flightRes = await fetch(`${BASE_URL}/api/search?from=Kyiv&to=Madrid&transport=FLIGHT`);
+  const flights = await flightRes.json();
+  check(
+    "GET /api/search?transport=FLIGHT returns only flights",
+    flightRes.ok &&
+      flights.trips?.length > 0 &&
+      flights.trips.every((t) => t.transportType === "FLIGHT")
+  );
+
+  const trainRes = await fetch(`${BASE_URL}/api/search?from=Kyiv&to=Lviv&transport=TRAIN`);
+  const trains = await trainRes.json();
+  check(
+    "GET /api/search?transport=TRAIN returns only trains",
+    trainRes.ok &&
+      trains.trips?.length > 0 &&
+      trains.trips.every((t) => t.transportType === "TRAIN")
+  );
+
   // --- Auth ---------------------------------------------------------------
   const email = `smoke-${Date.now()}@example.com`;
   const password = "smoke-test-password-1";
@@ -161,6 +179,16 @@ async function main() {
 
   const adminApi = await fetch(`${BASE_URL}/api/admin/users`, { headers: { Cookie: cookie } });
   check("GET /api/admin/users as USER returns 403", adminApi.status === 403, `got ${adminApi.status}`);
+
+  const settlementsApi = await fetch(`${BASE_URL}/api/admin/settlements`, { headers: { Cookie: cookie } });
+  check("GET /api/admin/settlements as USER returns 403", settlementsApi.status === 403, `got ${settlementsApi.status}`);
+
+  const cronNoAuth = await fetch(`${BASE_URL}/api/cron/settlements`, { method: "POST" });
+  check(
+    "POST /api/cron/settlements without secret returns 401/503",
+    [401, 503].includes(cronNoAuth.status),
+    `got ${cronNoAuth.status}`
+  );
 
   // --- Logout -----------------------------------------------------------------
   const logout = await fetch(`${BASE_URL}/api/auth/logout`, {

@@ -159,7 +159,7 @@ openssl rand -base64 48
 
 ## API
 
-### `GET /api/search?from=Kyiv&to=Lviv&date=2026-05-01`
+### `GET /api/search?from=Kyiv&to=Lviv&date=2026-05-01&transport=BUS`
 Fans out across every registered `CarrierAdapter` in parallel and returns:
 
 ```jsonc
@@ -173,6 +173,11 @@ Fans out across every registered `CarrierAdapter` in parallel and returns:
 ```
 
 Failures in any single carrier are isolated and reported in `carriers[].error` / `errors[]`.
+
+The optional `transport` parameter (`BUS` | `FLIGHT` | `TRAIN`) narrows the
+fan-out to carriers of that transport type; omit it to search across all of
+them. The homepage search form exposes the same choice as Bus / Flight /
+Train tabs above the From/To fields.
 
 ### `POST /api/booking`
 
@@ -205,6 +210,41 @@ single transaction that:
 Returns `201` with `{ booking, carrierReference, fees }`.
 - `GET /api/booking?reference=AB-XXXXXX` — returns a single booking (owner or admin only).
 - `GET /api/booking` — lists the caller's bookings (admins get all).
+
+At booking time the agency commission is snapshotted onto the ticket
+(`commissionPercent` / `commissionAmount` / `carrierAmount`) — see the next
+section.
+
+## Carrier commissions & monthly settlements
+
+Every ticket sale is split between the agency and the carrier:
+
+- **Commission resolution** (`lib/commission.ts`): a route-specific
+  `CommissionRule` (carrier + fromCity + toCity) wins; otherwise the carrier's
+  default `commissionPercent` applies. The split is stored on the ticket at
+  booking time, so editing rules never rewrites history.
+- **Sales report**: `GET /api/admin/settlements?period=YYYY-MM` (ADMIN) and
+  the `/admin/settlements` page show, per carrier: tickets sold, gross sales,
+  our commission and the carrier payout — e.g. 10 tickets for €1000 at a 20%
+  commission → €200 stays with us, €800 is payable to the carrier.
+- **Settlement generation**: `POST /api/admin/settlements { "period" }`
+  creates one `Settlement` per carrier (idempotent per carrier+period),
+  assigns sequential invoice (`INV-YYYY-MM-NNNN`) and act (`ACT-…`) numbers,
+  and locks the included tickets. Legacy tickets without a commission
+  snapshot are backfilled from the current rules at generation time.
+- **Documents**: `GET /api/admin/settlements/[id]/invoice` and `…/act`
+  render printable Ukrainian рахунок-фактура / акт наданих послуг (HTML).
+- **Automatic monthly run**: `.github/workflows/settlements.yml` fires on the
+  7th of each month (06:17 UTC) and calls `POST /api/cron/settlements` with
+  `Authorization: Bearer $CRON_SECRET`, which generates settlements for the
+  previous month and marks them SENT. Configure the `APP_URL` repository
+  variable and the `CRON_SECRET` repository secret (and the same
+  `CRON_SECRET` in the app's environment) to enable it.
+  Email delivery is a deliberate stub — wire SMTP/transactional email in
+  `markSettlementSent` (`lib/settlements.ts`) when credentials exist.
+
+Seed data (`npm run db:seed`) includes sample carriers with default
+commissions (8–15%) and a route rule (Grandes Tour, Kyiv → Lviv: 20%).
 
 ## Adding a new carrier integration
 

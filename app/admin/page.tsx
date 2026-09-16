@@ -47,6 +47,18 @@ export default async function AdminPage() {
                 usage limit and per-user binding.
               </p>
             </Link>
+            <Link
+              href="/admin/settlements"
+              className="group rounded-2xl border border-slate-200 bg-white p-6 transition hover:-translate-y-0.5 hover:border-brand-300 hover:shadow-md"
+            >
+              <p className="text-sm font-semibold text-slate-900 group-hover:text-brand-700">
+                Carrier settlements
+              </p>
+              <p className="mt-1 text-xs text-slate-500">
+                Monthly sales report per carrier: tickets sold, agency
+                commission, carrier payout, invoices and acts.
+              </p>
+            </Link>
           </div>
         </div>
       </main>

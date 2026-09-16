@@ -1,9 +1,19 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { searchAllCarriers } from "@/lib/carriers/registry";
-import type { SearchQuery } from "@/lib/carriers/types";
+import type { SearchQuery, TransportType } from "@/lib/carriers/types";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
+
+const TRANSPORT_TYPES: TransportType[] = ["BUS", "FLIGHT", "TRAIN"];
+
+function parseTransport(raw: string | null): TransportType | undefined {
+  if (!raw) return undefined;
+  const normalized = raw.trim().toUpperCase();
+  return TRANSPORT_TYPES.includes(normalized as TransportType)
+    ? (normalized as TransportType)
+    : undefined;
+}
 
 function parseQuery(searchParams: URLSearchParams): {
   ok: true;
@@ -17,6 +27,7 @@ function parseQuery(searchParams: URLSearchParams): {
   const date = searchParams.get("date")?.trim() || undefined;
   const passengersRaw = searchParams.get("passengers");
   const passengers = passengersRaw ? Number.parseInt(passengersRaw, 10) : 1;
+  const transport = parseTransport(searchParams.get("transport"));
 
   if (!from) return { ok: false, error: "`from` is required" };
   if (!to) return { ok: false, error: "`to` is required" };
@@ -24,7 +35,7 @@ function parseQuery(searchParams: URLSearchParams): {
     return { ok: false, error: "`passengers` must be a positive integer" };
   }
 
-  return { ok: true, query: { from, to, date, passengers } };
+  return { ok: true, query: { from, to, date, passengers, transport } };
 }
 
 export async function GET(req: NextRequest) {
@@ -81,7 +92,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const { from, to, date, passengers } = (body ?? {}) as Partial<SearchQuery>;
+  const { from, to, date, passengers, transport } = (body ?? {}) as Partial<SearchQuery>;
   if (!from || !to) {
     return NextResponse.json(
       { error: "`from` and `to` are required" },
@@ -94,6 +105,7 @@ export async function POST(req: NextRequest) {
     to,
     date,
     passengers: passengers ?? 1,
+    transport,
   });
   const trips = results.flatMap((r) => r.trips);
 

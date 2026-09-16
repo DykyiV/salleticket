@@ -1,4 +1,4 @@
-import { getMockTrips, type Trip } from "@/lib/mockTrips";
+import { getMockFlights, type Trip } from "@/lib/mockTrips";
 import type {
   BookingRequest,
   BookingStatus,
@@ -7,18 +7,17 @@ import type {
 } from "@/lib/carriers/types";
 
 /**
- * Mock carrier adapter. Generates deterministic fake trips and simulates
- * booking with an in-memory fake PNR. Replace (or augment) with real carrier
- * adapters by implementing CarrierAdapter.
+ * Mock airline adapter. Simulates a flight inventory + PNR booking API.
+ * Replace with a real GDS / airline NDC integration by implementing the
+ * same CarrierAdapter interface — the rest of the app needs no changes.
  */
-export class MockCarrierAdapter implements CarrierAdapter {
-  readonly id = "mock";
-  readonly name = "Asol Mock Network";
-  readonly transportType = "BUS" as const;
+export class MockFlightAdapter implements CarrierAdapter {
+  readonly id = "mock-air";
+  readonly name = "Asol Mock Airlines";
+  readonly transportType = "FLIGHT" as const;
 
   async search(query: SearchQuery): Promise<Trip[]> {
-    const trips = getMockTrips(query.from, query.to);
-    return trips;
+    return getMockFlights(query.from, query.to);
   }
 
   async book(request: BookingRequest): Promise<{
@@ -35,7 +34,8 @@ export class MockCarrierAdapter implements CarrierAdapter {
   }> {
     const snapshot = request.tripSnapshot ?? {};
     return {
-      carrierReference: `MOCK-${Math.random()
+      // Simulated airline PNR locator.
+      carrierReference: `PNR-${Math.random()
         .toString(36)
         .slice(2, 8)
         .toUpperCase()}`,
@@ -52,4 +52,4 @@ export class MockCarrierAdapter implements CarrierAdapter {
   }
 }
 
-export const mockCarrierAdapter = new MockCarrierAdapter();
+export const mockFlightAdapter = new MockFlightAdapter();

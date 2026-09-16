@@ -1,4 +1,4 @@
-import { getMockTrips, type Trip } from "@/lib/mockTrips";
+import { getMockTrains, type Trip } from "@/lib/mockTrips";
 import type {
   BookingRequest,
   BookingStatus,
@@ -7,18 +7,17 @@ import type {
 } from "@/lib/carriers/types";
 
 /**
- * Mock carrier adapter. Generates deterministic fake trips and simulates
- * booking with an in-memory fake PNR. Replace (or augment) with real carrier
- * adapters by implementing CarrierAdapter.
+ * Mock rail adapter. Simulates a rail inventory + reservation API.
+ * Replace with a real rail carrier integration (e.g. national railway API)
+ * by implementing the same CarrierAdapter interface.
  */
-export class MockCarrierAdapter implements CarrierAdapter {
-  readonly id = "mock";
-  readonly name = "Asol Mock Network";
-  readonly transportType = "BUS" as const;
+export class MockTrainAdapter implements CarrierAdapter {
+  readonly id = "mock-rail";
+  readonly name = "Asol Mock Rail";
+  readonly transportType = "TRAIN" as const;
 
   async search(query: SearchQuery): Promise<Trip[]> {
-    const trips = getMockTrips(query.from, query.to);
-    return trips;
+    return getMockTrains(query.from, query.to);
   }
 
   async book(request: BookingRequest): Promise<{
@@ -35,7 +34,7 @@ export class MockCarrierAdapter implements CarrierAdapter {
   }> {
     const snapshot = request.tripSnapshot ?? {};
     return {
-      carrierReference: `MOCK-${Math.random()
+      carrierReference: `RAIL-${Math.random()
         .toString(36)
         .slice(2, 8)
         .toUpperCase()}`,
@@ -52,4 +51,4 @@ export class MockCarrierAdapter implements CarrierAdapter {
   }
 }
 
-export const mockCarrierAdapter = new MockCarrierAdapter();
+export const mockTrainAdapter = new MockTrainAdapter();

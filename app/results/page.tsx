@@ -8,6 +8,13 @@ type SearchParams = {
   from?: string;
   to?: string;
   date?: string;
+  transport?: string;
+};
+
+const TRANSPORT_LABELS: Record<string, string> = {
+  BUS: "Bus",
+  FLIGHT: "Flight",
+  TRAIN: "Train",
 };
 
 type SearchApiResponse = {
@@ -54,9 +61,14 @@ export default async function ResultsPage(
   const from = searchParams.from || "Kyiv";
   const to = searchParams.to || "Lviv";
   const date = searchParams.date;
+  const transport = searchParams.transport?.toUpperCase();
+  const transportLabel = transport
+    ? TRANSPORT_LABELS[transport] ?? null
+    : null;
 
   const params = new URLSearchParams({ from, to });
   if (date) params.set("date", date);
+  if (transportLabel) params.set("transport", transport as string);
 
   let trips: Trip[] = [];
   let failedCarriers: { carrierId: string; carrierName: string; error: string }[] = [];
@@ -136,6 +148,7 @@ export default async function ResultsPage(
                 <span>{to}</span>
               </h1>
               <p className="mt-0.5 text-sm text-slate-500">
+                {transportLabel ? `${transportLabel} · ` : ""}
                 {formatDate(date)} · {trips.length} trips found
                 {trips.length > 0 ? (
                   <>

@@ -37,6 +37,18 @@ enum PromoType {
   FIXED
 }
 
+enum TransportType {
+  BUS
+  FLIGHT
+  TRAIN
+}
+
+enum SettlementStatus {
+  GENERATED
+  SENT
+  PAID
+}
+
 model User {
   id        String   @id @default(cuid())
   email     String   @unique
@@ -86,12 +98,37 @@ model Carrier {
   id        String   @id @default(cuid())
   name      String   @unique
   rating    Float    @default(0)
+  /// Default agency commission, percent 0..100, applied to ticket sales when
+  /// no route-specific CommissionRule matches.
+  commissionPercent Float @default(10)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  trips Trip[]
+  trips           Trip[]
+  commissionRules CommissionRule[]
+  settlements     Settlement[]
 
   @@map("carriers")
+}
+
+/// Route-specific commission override: what percentage of each sold ticket
+/// the agency keeps for this carrier on this exact route (fromCity → toCity).
+/// The remainder is payable to the carrier in the monthly settlement.
+model CommissionRule {
+  id       String @id @default(cuid())
+  fromCity String
+  toCity   String
+  /// Agency commission, percent 0..100 (e.g. 20 = agency keeps 20%).
+  percent  Float
+
+  carrierId String
+  carrier   Carrier @relation(fields: [carrierId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([carrierId, fromCity, toCity])
+  @@map("commission_rules")
 }
 
 model Trip {
@@ -101,6 +138,7 @@ model Trip {
   departureTime DateTime
   arrivalTime   DateTime
   price         Float
+  transportType TransportType @default(BUS)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
@@ -121,6 +159,13 @@ model Ticket {
   /// The charged price after age + promo discounts. Stored under the existing
   /// `price` column so older rows keep working after the rename.
   finalPrice Float        @map("price")
+  /// Commission snapshot captured at booking time (never recomputed later, so
+  /// changing commission rules does not rewrite history):
+  ///   commissionAmount = finalPrice * commissionPercent / 100  (agency keeps)
+  ///   carrierAmount    = finalPrice - commissionAmount         (owed to carrier)
+  commissionPercent Float?
+  commissionAmount  Float?
+  carrierAmount     Float?
   createdAt  DateTime     @default(now())
   updatedAt  DateTime     @updatedAt
 
@@ -130,13 +175,50 @@ model Ticket {
   tripId String?
   trip   Trip?   @relation(fields: [tripId], references: [id], onDelete: SetNull)
 
+  /// Set once the ticket is included in a monthly settlement invoice.
+  settlementId String?
+  settlement   Settlement? @relation(fields: [settlementId], references: [id], onDelete: SetNull)
+
   booking Booking?
   history TicketHistory[]
 
   @@index([userId])
   @@index([status])
   @@index([tripId])
+  @@index([settlementId])
   @@map("tickets")
+}
+
+/// Monthly settlement with a carrier: aggregates all tickets sold in the
+/// period, the agency commission and the amount payable to the carrier.
+/// One settlement per carrier per period (YYYY-MM).
+model Settlement {
+  id           String           @id @default(cuid())
+  /// Period in YYYY-MM format (calendar month the sales belong to).
+  period       String
+  ticketCount  Int
+  /// Sum of ticket finalPrice (what passengers paid, before our service fee).
+  grossAmount  Float
+  /// Agency earnings: sum of ticket commissionAmount.
+  commissionAmount Float
+  /// Payable to the carrier: sum of ticket carrierAmount.
+  carrierAmount    Float
+  status       SettlementStatus @default(GENERATED)
+  /// Sequential invoice number, e.g. INV-2026-08-0001.
+  invoiceNumber String          @unique
+  actNumber    String?
+  sentAt       DateTime?
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  carrierId String
+  carrier   Carrier @relation(fields: [carrierId], references: [id], onDelete: Restrict)
+
+  tickets Ticket[]
+
+  @@unique([carrierId, period])
+  @@index([period])
+  @@map("settlements")
 }
 
 /// Audit trail for tickets. Every mutation must append a row with:
