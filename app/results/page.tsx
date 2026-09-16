@@ -23,8 +23,8 @@ type SearchApiResponse = {
  * This keeps the frontend talking to the backend through /api/* rather than
  * importing server code directly.
  */
-function getBaseUrl(): string {
-  const h = headers();
+async function getBaseUrl(): Promise<string> {
+  const h = await headers();
   const host = h.get("x-forwarded-host") ?? h.get("host");
   const proto = h.get("x-forwarded-proto") ?? "http";
   if (host) return `${proto}://${host}`;
@@ -45,11 +45,12 @@ function formatDate(dateStr?: string): string {
 
 export const dynamic = "force-dynamic";
 
-export default async function ResultsPage({
-  searchParams,
-}: {
-  searchParams: SearchParams;
-}) {
+export default async function ResultsPage(
+  props: {
+    searchParams: Promise<SearchParams>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const from = searchParams.from || "Kyiv";
   const to = searchParams.to || "Lviv";
   const date = searchParams.date;
@@ -62,7 +63,7 @@ export default async function ResultsPage({
   let fetchError: string | null = null;
 
   try {
-    const res = await fetch(`${getBaseUrl()}/api/search?${params.toString()}`, {
+    const res = await fetch(`${await getBaseUrl()}/api/search?${params.toString()}`, {
       cache: "no-store",
     });
     if (!res.ok) {

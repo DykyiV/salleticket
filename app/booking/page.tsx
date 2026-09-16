@@ -18,11 +18,12 @@ type SearchParams = {
   price?: string;
 };
 
-export default async function BookingPage({
-  searchParams,
-}: {
-  searchParams: SearchParams;
-}) {
+export default async function BookingPage(
+  props: {
+    searchParams: Promise<SearchParams>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const user = await getCurrentUser();
 
   const carrier = searchParams.carrier || "Grandes Tour";

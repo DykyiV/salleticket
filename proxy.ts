@@ -35,7 +35,7 @@ function matchRule(pathname: string): Rule | null {
   return RULES.find((r) => r.match(pathname)) ?? null;
 }
 
-export async function middleware(req: NextRequest) {
+export async function proxy(req: NextRequest) {
   const { pathname, search } = req.nextUrl;
   const rule = matchRule(pathname);
   if (!rule) return NextResponse.next();

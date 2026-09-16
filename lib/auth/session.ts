@@ -14,7 +14,7 @@ import type { Role } from "@prisma/client";
  * Returns null if the cookie is missing or invalid.
  */
 export async function getSession(): Promise<SessionPayload | null> {
-  const token = cookies().get(SESSION_COOKIE)?.value;
+  const token = (await cookies()).get(SESSION_COOKIE)?.value;
   if (!token) return null;
   return verifySession(token);
 }

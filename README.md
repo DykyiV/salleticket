@@ -8,8 +8,8 @@ comes from a mock carrier adapter — see "Adding a new carrier integration" bel
 
 ## Stack
 
-- Next.js 14 (App Router) + Edge middleware
-- React 18
+- Next.js 16 (App Router) + Edge proxy (formerly "middleware")
+- React 19
 - TypeScript
 - Tailwind CSS 3
 - Prisma ORM 6 (SQLite by default for local dev; swap the datasource to Postgres for production)
@@ -61,7 +61,7 @@ lib/
   tickets/
     service.ts            Ticket operations
     history.ts            Audit trail for ticket/booking changes
-middleware.ts              Edge middleware: role-based route protection
+proxy.ts                   Edge proxy (route protection, formerly middleware.ts)
 prisma/
   schema.prisma           User / Ticket / Booking / Carrier / Trip / Promo + enums
   seed.ts                 Seeds promo codes (DISCOUNT10, VIP20)
@@ -103,16 +103,16 @@ hashing. Sessions are stored in an **HttpOnly, SameSite=Lax** cookie named
 ### UI pages
 
 - `/login` and `/register` — AuthForm with validation + redirect to `?next=…`.
-- `/account` — protected by middleware; shows email, role badge, and role-aware links.
+- `/account` — protected by the Edge proxy; shows email, role badge, and role-aware links.
 - `/admin`, `/agent` — role-gated dashboards.
 
 ### Role hierarchy
 
 `USER < AGENT < ADMIN < SUPER_ADMIN`. See `lib/auth/constants.ts` (`ROLE_RANK`, `hasRoleAtLeast`).
 
-### Middleware
+### Edge proxy (route protection)
 
-`middleware.ts` runs at the Edge and guards these prefixes (configured via
+`proxy.ts` runs at the Edge and guards these prefixes (configured via
 `matcher`, so public routes pay zero overhead):
 
 | Path            | Required role | Unauth / under-privileged |
@@ -128,7 +128,7 @@ booking creation (`POST /api/booking`) calls `requireAuth()` inside its handler
 and returns `401` JSON without a session — the client then redirects to
 `/login?next=…` so users sign in before the booking is created.
 
-The middleware verifies the JWT with `jose` and forwards identity as request
+The proxy verifies the JWT with `jose` and forwards identity as request
 headers (`x-user-id`, `x-user-email`, `x-user-role`) to downstream handlers.
 
 ### Route-handler guard
@@ -286,15 +286,12 @@ The old `pages/` directory is removed — the project fully uses the App Router
 
 ## Known security advisories (npm audit)
 
-`npm audit` currently reports 5 remaining advisories that require **breaking
-changes** to resolve, so they are intentionally left as-is:
+After the Next.js 16 upgrade, `npm audit` reports only 3 remaining advisories,
+all in the Prisma CLI toolchain:
 
 | Package | Severity | Why it stays |
 |---------|----------|--------------|
-| `next` (14.2.x) | critical | Fix requires upgrading to Next.js 16 — a major migration (React 19, async request APIs). Plan it as a separate task. |
-| `postcss` (bundled in `next`) | high | Same — resolved by the Next.js upgrade. |
 | `prisma` / `@prisma/config` / `deepmerge-ts` | high | Advisory affects the Prisma CLI's config loader (dev-time only, not shipped to production). The npm-suggested "fix" is a *downgrade* to prisma@6.12.0, which loses newer patches — not worth it. Revisit when a patched stable release lands. |
 
-Everything else reported by `npm audit` has been fixed (`next` pinned to the
-latest 14.2.x patch, `postcss` ^8.5.28, `tsx` updated to pull a patched
-`esbuild`).
+The previous `next` / `postcss` advisories were resolved by upgrading to
+Next.js 16 (+ React 19) and `postcss` ^8.5.28.

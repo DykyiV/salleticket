@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, type FormEvent } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   AGE_CATEGORIES,
@@ -85,8 +86,14 @@ export default function BookingForm({
 
   const [loginHref, setLoginHref] = useState("/login");
   useEffect(() => {
-    const next = window.location.pathname + window.location.search;
-    setLoginHref(`/login?next=${encodeURIComponent(next)}`);
+    // window.location is client-only, so read it after mount. Deferred via
+    // setTimeout to avoid a synchronous setState inside the effect body
+    // (react-hooks/set-state-in-effect).
+    const timer = window.setTimeout(() => {
+      const next = window.location.pathname + window.location.search;
+      setLoginHref(`/login?next=${encodeURIComponent(next)}`);
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, []);
   const [values, setValues] = useState<Values>({
     firstName: "",
@@ -111,13 +118,16 @@ export default function BookingForm({
   // per-user binding if set) without incrementing usedCount.
   useEffect(() => {
     const raw = values.promoCode.trim();
-    if (!raw) {
-      setPromoState({ status: "empty" });
-      return;
-    }
-    setPromoState({ status: "checking" });
     const ac = new AbortController();
+    // All setState calls live inside the debounced callback so the effect
+    // body stays free of synchronous state updates
+    // (react-hooks/set-state-in-effect).
     const timer = window.setTimeout(async () => {
+      if (!raw) {
+        setPromoState({ status: "empty" });
+        return;
+      }
+      setPromoState({ status: "checking" });
       try {
         const res = await fetch(
           `/api/promo/check?code=${encodeURIComponent(raw)}`,
@@ -348,18 +358,18 @@ export default function BookingForm({
         </p>
 
         <div className="mt-6 flex flex-wrap gap-2">
-          <a
+          <Link
             href="/"
             className="inline-flex items-center justify-center rounded-xl bg-brand-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-700"
           >
             Book another trip
-          </a>
-          <a
+          </Link>
+          <Link
             href="/results"
             className="inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-brand-300 hover:text-brand-700"
           >
             Back to results
-          </a>
+          </Link>
         </div>
       </div>
     );
