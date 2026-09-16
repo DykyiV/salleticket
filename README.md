@@ -1,5 +1,7 @@
 # Asol BUS
 
+[![CI](https://github.com/DykyiV/salleticket/actions/workflows/ci.yml/badge.svg)](https://github.com/DykyiV/salleticket/actions/workflows/ci.yml)
+
 Bus ticket marketplace (Grandes Tour style) built with **Next.js (App Router)**, **TypeScript** and **Tailwind CSS**.
 
 Full-stack app: Next.js API routes + Prisma (SQLite locally, Postgres-ready) handle
@@ -278,6 +280,24 @@ Open [http://localhost:3000](http://localhost:3000).
 - `npm run build` — production build
 - `npm run start` — run the production build
 - `npm run lint` — lint the project
+- `npm run test:smoke` — run the API smoke tests (needs a running server)
+
+## Testing
+
+`scripts/smoke-test.mjs` runs 18 end-to-end checks against a running
+production server: public pages, trip search, registration/login/logout,
+promo-code validation, booking creation (including client price-tampering
+protection and discount math), booking listing, and role-based route
+protection.
+
+```bash
+npm run build
+npm run start -- -p 3100 &   # serve the production build
+npm run test:smoke           # 18 checks, exits non-zero on failure
+```
+
+The same suite runs in CI (`.github/workflows/ci.yml`) on every push and
+pull request to `main`, after lint and build.
 
 ## Notes
 
