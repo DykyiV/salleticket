@@ -223,6 +223,9 @@ Every ticket sale is split between the agency and the carrier:
   `CommissionRule` (carrier + fromCity + toCity) wins; otherwise the carrier's
   default `commissionPercent` applies. The split is stored on the ticket at
   booking time, so editing rules never rewrites history.
+- **Commission management**: the `/admin/commissions` page (ADMIN) edits
+  carrier defaults and route rules via `GET/PATCH/POST/DELETE
+  /api/admin/commissions`. Changes affect future bookings only.
 - **Sales report**: `GET /api/admin/settlements?period=YYYY-MM` (ADMIN) and
   the `/admin/settlements` page show, per carrier: tickets sold, gross sales,
   our commission and the carrier payout — e.g. 10 tickets for €1000 at a 20%

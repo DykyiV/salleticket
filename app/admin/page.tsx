@@ -59,6 +59,18 @@ export default async function AdminPage() {
                 commission, carrier payout, invoices and acts.
               </p>
             </Link>
+            <Link
+              href="/admin/commissions"
+              className="group rounded-2xl border border-slate-200 bg-white p-6 transition hover:-translate-y-0.5 hover:border-brand-300 hover:shadow-md"
+            >
+              <p className="text-sm font-semibold text-slate-900 group-hover:text-brand-700">
+                Carrier commissions
+              </p>
+              <p className="mt-1 text-xs text-slate-500">
+                Set the agency commission per carrier and per route. Applies
+                to future bookings only.
+              </p>
+            </Link>
           </div>
         </div>
       </main>

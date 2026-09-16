@@ -183,6 +183,9 @@ async function main() {
   const settlementsApi = await fetch(`${BASE_URL}/api/admin/settlements`, { headers: { Cookie: cookie } });
   check("GET /api/admin/settlements as USER returns 403", settlementsApi.status === 403, `got ${settlementsApi.status}`);
 
+  const commissionsApi = await fetch(`${BASE_URL}/api/admin/commissions`, { headers: { Cookie: cookie } });
+  check("GET /api/admin/commissions as USER returns 403", commissionsApi.status === 403, `got ${commissionsApi.status}`);
+
   const cronNoAuth = await fetch(`${BASE_URL}/api/cron/settlements`, { method: "POST" });
   check(
     "POST /api/cron/settlements without secret returns 401/503",
