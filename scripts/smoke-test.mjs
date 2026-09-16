@@ -186,6 +186,13 @@ async function main() {
   const commissionsApi = await fetch(`${BASE_URL}/api/admin/commissions`, { headers: { Cookie: cookie } });
   check("GET /api/admin/commissions as USER returns 403", commissionsApi.status === 403, `got ${commissionsApi.status}`);
 
+  const ticketPatch = await fetch(`${BASE_URL}/api/admin/tickets/any-id`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", Cookie: cookie },
+    body: JSON.stringify({ status: "PAID_ONLINE" }),
+  });
+  check("PATCH /api/admin/tickets/[id] as USER returns 403", ticketPatch.status === 403, `got ${ticketPatch.status}`);
+
   const cronNoAuth = await fetch(`${BASE_URL}/api/cron/settlements`, { method: "POST" });
   check(
     "POST /api/cron/settlements without secret returns 401/503",

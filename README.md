@@ -215,6 +215,23 @@ At booking time the agency commission is snapshotted onto the ticket
 (`commissionPercent` / `commissionAmount` / `carrierAmount`) — see the next
 section.
 
+## Admin: tickets & departures
+
+- **`/admin/tickets`** — all sold tickets (filter by status). The detail page
+  `/admin/tickets/[id]` shows everything about a ticket: passenger (name,
+  phone, email), route and schedule, carrier, who booked it, base/final
+  price, ticket type (age category + promo), commission split, settlement
+  link — plus **status change buttons** and the full audit **history**.
+- **Status changes** go through `PATCH /api/admin/tickets/[id]` (ADMIN) with
+  validated transitions: `RESERVED → PAID_ONLINE | PAID_CASH | CANCELLED`,
+  `PAID_* → REFUNDED | CANCELLED`; `CANCELLED`/`REFUNDED` are terminal.
+  Every change is recorded in `TicketHistory` with the admin as actor.
+  Paid-online vs paid-cash determines the payment point used by the
+  settlement balance.
+- **`/admin/departures`** — trips grouped by route with ticket counts and
+  revenue; `/admin/departures/[id]` lists every ticket on a specific
+  departure with per-status stats and links into the ticket details.
+
 ## Carrier commissions & monthly settlements
 
 Every ticket sale is split between the agency and the carrier:

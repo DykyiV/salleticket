@@ -71,6 +71,30 @@ export default async function AdminPage() {
                 to future bookings only.
               </p>
             </Link>
+            <Link
+              href="/admin/tickets"
+              className="group rounded-2xl border border-slate-200 bg-white p-6 transition hover:-translate-y-0.5 hover:border-brand-300 hover:shadow-md"
+            >
+              <p className="text-sm font-semibold text-slate-900 group-hover:text-brand-700">
+                Tickets
+              </p>
+              <p className="mt-1 text-xs text-slate-500">
+                All sold tickets with full details, status changes
+                (paid online / cash / cancel) and per-ticket history.
+              </p>
+            </Link>
+            <Link
+              href="/admin/departures"
+              className="group rounded-2xl border border-slate-200 bg-white p-6 transition hover:-translate-y-0.5 hover:border-brand-300 hover:shadow-md"
+            >
+              <p className="text-sm font-semibold text-slate-900 group-hover:text-brand-700">
+                Departures
+              </p>
+              <p className="mt-1 text-xs text-slate-500">
+                Trips by route with every ticket sold on each departure and
+                revenue stats.
+              </p>
+            </Link>
           </div>
         </div>
       </main>
