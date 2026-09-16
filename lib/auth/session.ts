@@ -47,6 +47,7 @@ export async function getCurrentUser() {
         id: true,
         email: true,
         role: true,
+        canViewAllTickets: true,
         createdAt: true,
       },
     });
@@ -58,6 +59,7 @@ export async function getCurrentUser() {
     id: session.sub,
     email: session.email,
     role: session.role,
+    canViewAllTickets: false,
     createdAt: new Date(0),
   };
 }

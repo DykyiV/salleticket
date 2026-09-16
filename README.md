@@ -72,7 +72,8 @@ prisma/
 ## Database schema
 
 ```
-User (id, email, password, role: USER|AGENT|ADMIN|SUPER_ADMIN, createdAt) 1 ── * Ticket
+User (id, email, password, role: USER|AGENT|ADMIN|SUPER_ADMIN,
+      canViewAllTickets, createdAt)                                1 ── * Ticket
 Trip (id, fromCity, toCity, departureTime, arrivalTime, price, carrierId) 1 ── * Ticket
 Carrier (id, name, rating)                                                1 ── * Trip
 Ticket (id, userId, tripId?, status, price, createdAt)                    1 ── 1 Booking
@@ -99,14 +100,30 @@ hashing. Sessions are stored in an **HttpOnly, SameSite=Lax** cookie named
 - `POST /api/auth/login` — `{ email, password }`. Generic `401` on failure.
 - `POST /api/auth/logout` — clears the session cookie.
 - `GET  /api/auth/me` — `{ user }` or `{ user: null }`.
-- `GET/PATCH /api/admin/users` — example ADMIN-only route. `PATCH` assigning
-  `ADMIN` / `SUPER_ADMIN` requires SUPER_ADMIN.
+- `GET/PATCH /api/admin/users` — ADMIN-only route. `PATCH` accepts `role`
+  and/or `canViewAllTickets`; assigning `ADMIN` / `SUPER_ADMIN` requires
+  SUPER_ADMIN. Returns `canViewAllTickets` for every user.
+- `POST /api/account/tickets/[id]/cancel` — owner-only cancellation of a
+  `RESERVED` ticket (`401` unauthenticated, `404` for foreign/missing ids,
+  `409` if the ticket is not cancellable). Writes a `TicketEvent`
+  (`CANCELLED_BY_OWNER`, source `ACCOUNT`).
 
 ### UI pages
 
 - `/login` and `/register` — AuthForm with validation + redirect to `?next=…`.
-- `/account` — protected by the Edge proxy; shows email, role badge, and role-aware links.
+- `/account` — protected by the Edge proxy; profile block plus the user's own
+  tickets with a cancel button for `RESERVED` ones.
 - `/admin`, `/agent` — role-gated dashboards.
+- `/admin/users` — user management: role select and a `canViewAllTickets`
+  toggle per user.
+
+### Ticket visibility
+
+Agents see **only their own** tickets on `/agent` by default. An admin can
+grant the "view all tickets" right per user in `/admin/users`
+(`User.canViewAllTickets`); users with that flag (and all admins) see every
+ticket. The same flag is enforced server-side wherever ticket lists are
+scoped.
 
 ### Role hierarchy
 

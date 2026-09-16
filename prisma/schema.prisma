@@ -54,6 +54,10 @@ model User {
   email     String   @unique
   password  String
   role      Role     @default(USER)
+  /// Agent permission granted by an admin on the Users tab: when true, the
+  /// agent console shows tickets of ALL passengers; when false, the agent
+  /// sees only tickets booked under their own account.
+  canViewAllTickets Boolean @default(false)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

@@ -95,6 +95,18 @@ export default async function AdminPage() {
                 revenue stats.
               </p>
             </Link>
+            <Link
+              href="/admin/users"
+              className="group rounded-2xl border border-slate-200 bg-white p-6 transition hover:-translate-y-0.5 hover:border-brand-300 hover:shadow-md"
+            >
+              <p className="text-sm font-semibold text-slate-900 group-hover:text-brand-700">
+                Users
+              </p>
+              <p className="mt-1 text-xs text-slate-500">
+                Roles and agent permissions — grant access to all
+                passengers&apos; tickets per user.
+              </p>
+            </Link>
           </div>
         </div>
       </main>

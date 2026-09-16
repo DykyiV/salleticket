@@ -200,6 +200,23 @@ async function main() {
     `got ${cronNoAuth.status}`
   );
 
+  const cancelNoAuth = await fetch(`${BASE_URL}/api/account/tickets/any-id/cancel`, { method: "POST" });
+  check(
+    "POST /api/account/tickets/[id]/cancel without auth returns 401",
+    cancelNoAuth.status === 401,
+    `got ${cancelNoAuth.status}`
+  );
+
+  const cancelForeign = await fetch(`${BASE_URL}/api/account/tickets/nonexistent-id/cancel`, {
+    method: "POST",
+    headers: { Cookie: cookie },
+  });
+  check(
+    "cancelling a non-existent/foreign ticket returns 404",
+    cancelForeign.status === 404,
+    `got ${cancelForeign.status}`
+  );
+
   // --- Logout -----------------------------------------------------------------
   const logout = await fetch(`${BASE_URL}/api/auth/logout`, {
     method: "POST",
