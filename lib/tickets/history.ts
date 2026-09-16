@@ -14,6 +14,7 @@ import type {
 export type TicketHistorySource =
   | "BOOKING_FORM"   // end-user creating a booking
   | "ADMIN_PANEL"    // /admin/** admin action
+  | "AGENT_PANEL"    // /agent/** agent action (e.g. editing a foreign ticket)
   | "ACCOUNT"        // user cancelling their own ticket etc.
   | "API"            // external API integration / carrier callback
   | "SYSTEM";        // scheduled jobs, internal system changes

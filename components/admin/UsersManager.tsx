@@ -8,6 +8,7 @@ type ManagedUser = {
   email: string;
   role: string;
   canViewAllTickets: boolean;
+  canEditAllTickets: boolean;
   createdAt: string | Date;
 };
 
@@ -64,6 +65,7 @@ export default function UsersManager({
             <Th>Email</Th>
             <Th>Role</Th>
             <Th>Can view all tickets</Th>
+            <Th>Can edit all tickets</Th>
             <Th>Joined</Th>
           </tr>
         </thead>
@@ -111,6 +113,29 @@ export default function UsersManager({
                 </button>
                 <span className="ml-2 text-xs text-slate-500">
                   {u.canViewAllTickets ? "all passengers" : "own only"}
+                </span>
+              </td>
+              <td className="px-4 py-3">
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={u.canEditAllTickets}
+                  disabled={busy === u.id}
+                  onClick={() =>
+                    patch(u.id, { canEditAllTickets: !u.canEditAllTickets })
+                  }
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition disabled:opacity-50 ${
+                    u.canEditAllTickets ? "bg-brand-600" : "bg-slate-200"
+                  }`}
+                >
+                  <span
+                    className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition ${
+                      u.canEditAllTickets ? "translate-x-6" : "translate-x-1"
+                    }`}
+                  />
+                </button>
+                <span className="ml-2 text-xs text-slate-500">
+                  {u.canEditAllTickets ? "any ticket" : "own only"}
                 </span>
               </td>
               <td className="px-4 py-3 tabular-nums text-slate-500">

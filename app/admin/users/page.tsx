@@ -14,6 +14,7 @@ export default async function AdminUsersPage() {
         email: true,
         role: true,
         canViewAllTickets: true,
+        canEditAllTickets: true,
         createdAt: true,
       },
       orderBy: { createdAt: "desc" },
@@ -32,10 +33,12 @@ export default async function AdminUsersPage() {
             Users
           </h1>
           <p className="mt-1 text-sm text-slate-500">
-            Manage roles and agent permissions. The toggle controls whether an
-            agent sees all passengers&apos; tickets in the agent console or
-            only tickets booked under their own account. Assigning ADMIN /
-            SUPER_ADMIN roles requires SUPER_ADMIN.
+            Manage roles and agent permissions. &quot;View&quot; controls
+            whether an agent sees all passengers&apos; tickets or only their
+            own; &quot;Edit&quot; controls whether they may change passenger
+            details on any ticket (everyone can always edit their own
+            passengers). Assigning ADMIN / SUPER_ADMIN roles requires
+            SUPER_ADMIN.
           </p>
 
           <div className="mt-6">

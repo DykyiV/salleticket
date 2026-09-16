@@ -168,6 +168,63 @@ async function main() {
     listBody.bookings?.some((b) => b.reference === bookingBody.booking?.reference)
   );
 
+  // --- Passenger editing (shared /api/tickets/[id]/passenger) ----------------
+  const detail = await fetch(
+    `${BASE_URL}/api/booking?reference=${bookingBody.booking?.reference}`,
+    { headers: { Cookie: cookie } }
+  );
+  const detailBody = await detail.json();
+  const ownTicketId = detailBody.booking?.ticket?.id;
+  check("GET /api/booking?reference= returns the ticket id", Boolean(ownTicketId));
+
+  const passNoAuth = await fetch(`${BASE_URL}/api/tickets/${ownTicketId}/passenger`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ firstName: "Hacked" }),
+  });
+  check(
+    "PATCH /api/tickets/[id]/passenger without auth returns 401",
+    passNoAuth.status === 401,
+    `got ${passNoAuth.status}`
+  );
+
+  const passNotFound = await fetch(`${BASE_URL}/api/tickets/nonexistent-id/passenger`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", Cookie: cookie },
+    body: JSON.stringify({ firstName: "Hacked" }),
+  });
+  check(
+    "PATCH /api/tickets/[id]/passenger on missing ticket returns 404",
+    passNotFound.status === 404,
+    `got ${passNotFound.status}`
+  );
+
+  const passNoFields = await fetch(`${BASE_URL}/api/tickets/${ownTicketId}/passenger`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", Cookie: cookie },
+    body: JSON.stringify({}),
+  });
+  check(
+    "PATCH /api/tickets/[id]/passenger without fields returns 400",
+    passNoFields.status === 400,
+    `got ${passNoFields.status}`
+  );
+
+  const ownEdit = await fetch(`${BASE_URL}/api/tickets/${ownTicketId}/passenger`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", Cookie: cookie },
+    body: JSON.stringify({ firstName: "Edited", phone: "+380501112233" }),
+  });
+  const ownEditBody = await ownEdit.json();
+  check(
+    "owner can edit own passenger details",
+    ownEdit.status === 200 &&
+      ownEditBody.changed === true &&
+      ownEditBody.booking?.firstName === "Edited" &&
+      ownEditBody.booking?.phone === "+380501112233",
+    `got ${ownEdit.status}: ${JSON.stringify(ownEditBody).slice(0, 200)}`
+  );
+
   // --- Route protection ------------------------------------------------------
   const account = await fetch(`${BASE_URL}/account`, { redirect: "manual" });
   const accountLocation = account.headers.get("location") ?? "";

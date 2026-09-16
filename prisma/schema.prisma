@@ -58,6 +58,11 @@ model User {
   /// agent console shows tickets of ALL passengers; when false, the agent
   /// sees only tickets booked under their own account.
   canViewAllTickets Boolean @default(false)
+  /// Agent permission granted by an admin on the Users tab: when true, the
+  /// agent may edit passenger details on ANY ticket; when false, only on
+  /// tickets booked under their own account. Owners can always edit their
+  /// own passenger data; admins can always edit everything.
+  canEditAllTickets Boolean @default(false)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

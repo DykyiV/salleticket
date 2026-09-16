@@ -11,16 +11,19 @@ type Passenger = {
 };
 
 /**
- * Inline editor for passenger details on the admin ticket page. Saves via
- * PATCH /api/admin/tickets/[id]/passenger; the server records the change in
- * the ticket history with a field-level diff.
+ * Inline editor for passenger details on ticket pages. Saves via PATCH to
+ * `endpoint` (defaults to the shared /api/tickets/[id]/passenger route,
+ * which enforces owner / canEditAllTickets / ADMIN permissions); the server
+ * records the change in the ticket history with a field-level diff.
  */
 export default function PassengerEditor({
   ticketId,
   passenger,
+  endpoint,
 }: {
   ticketId: string;
   passenger: Passenger;
+  endpoint?: string;
 }) {
   const router = useRouter();
   const [editing, setEditing] = useState(false);
@@ -44,7 +47,7 @@ export default function PassengerEditor({
     setBusy(true);
     setError(null);
     try {
-      const res = await fetch(`/api/admin/tickets/${ticketId}/passenger`, {
+      const res = await fetch(endpoint ?? `/api/tickets/${ticketId}/passenger`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

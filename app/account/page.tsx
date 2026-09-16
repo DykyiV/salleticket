@@ -2,6 +2,7 @@ import Link from "next/link";
 import Header from "@/components/Header";
 import LogoutButton from "@/components/LogoutButton";
 import CancelTicketButton from "@/components/CancelTicketButton";
+import PassengerEditor from "@/components/PassengerEditor";
 import { getCurrentUser } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 
@@ -103,7 +104,8 @@ export default async function AccountPage() {
           <section className="mt-8">
             <h2 className="text-lg font-semibold text-slate-900">My tickets</h2>
             <p className="mt-1 text-sm text-slate-500">
-              Your bookings. Reserved (unpaid) tickets can be cancelled here.
+              Your bookings. Reserved (unpaid) tickets can be cancelled here;
+              passenger details can be edited on any of your tickets.
             </p>
 
             <div className="mt-4 flex flex-col gap-3">
@@ -119,46 +121,61 @@ export default async function AccountPage() {
                 tickets.map((t) => (
                   <div
                     key={t.id}
-                    className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-white p-4 ring-1 ring-slate-200"
+                    className="rounded-2xl bg-white p-4 ring-1 ring-slate-200"
                   >
-                    <div className="min-w-0">
-                      <p className="text-sm font-semibold text-slate-900">
-                        {t.trip
-                          ? `${t.trip.fromCity} → ${t.trip.toCity}`
-                          : "—"}
-                        <span className="ml-2 text-xs font-normal text-slate-400">
-                          {t.booking?.reference}
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-slate-900">
+                          {t.trip
+                            ? `${t.trip.fromCity} → ${t.trip.toCity}`
+                            : "—"}
+                          <span className="ml-2 text-xs font-normal text-slate-400">
+                            {t.booking?.reference}
+                          </span>
+                        </p>
+                        <p className="mt-0.5 text-xs text-slate-500">
+                          {t.trip
+                            ? `${t.trip.departureTime
+                                .toISOString()
+                                .slice(0, 16)
+                                .replace("T", " ")} · ${t.trip.carrier.name} · ${
+                                t.trip.transportType
+                              }`
+                            : ""}
+                          {t.booking
+                            ? ` · ${t.booking.firstName} ${t.booking.lastName} · ${t.booking.phone}`
+                            : ""}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <span className="text-sm font-bold tabular-nums text-slate-900">
+                          {eur(t.finalPrice)}
                         </span>
-                      </p>
-                      <p className="mt-0.5 text-xs text-slate-500">
-                        {t.trip
-                          ? `${t.trip.departureTime
-                              .toISOString()
-                              .slice(0, 16)
-                              .replace("T", " ")} · ${t.trip.carrier.name} · ${
-                              t.trip.transportType
-                            }`
-                          : ""}
-                        {t.booking
-                          ? ` · ${t.booking.firstName} ${t.booking.lastName}`
-                          : ""}
-                      </p>
+                        <span
+                          className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ring-1 ring-inset ${
+                            STATUS_STYLES[t.status]
+                          }`}
+                        >
+                          {t.status}
+                        </span>
+                        {t.status === "RESERVED" ? (
+                          <CancelTicketButton ticketId={t.id} />
+                        ) : null}
+                      </div>
                     </div>
-                    <div className="flex items-center gap-3">
-                      <span className="text-sm font-bold tabular-nums text-slate-900">
-                        {eur(t.finalPrice)}
-                      </span>
-                      <span
-                        className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ring-1 ring-inset ${
-                          STATUS_STYLES[t.status]
-                        }`}
-                      >
-                        {t.status}
-                      </span>
-                      {t.status === "RESERVED" ? (
-                        <CancelTicketButton ticketId={t.id} />
-                      ) : null}
-                    </div>
+                    {t.booking ? (
+                      <div className="mt-3 border-t border-slate-100 pt-3">
+                        <PassengerEditor
+                          ticketId={t.id}
+                          passenger={{
+                            firstName: t.booking.firstName,
+                            lastName: t.booking.lastName,
+                            phone: t.booking.phone,
+                            email: t.booking.email,
+                          }}
+                        />
+                      </div>
+                    ) : null}
                   </div>
                 ))
               )}

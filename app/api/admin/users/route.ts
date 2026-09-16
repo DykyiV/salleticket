@@ -12,6 +12,7 @@ const USER_SELECT = {
   email: true,
   role: true,
   canViewAllTickets: true,
+  canEditAllTickets: true,
   createdAt: true,
 } as const;
 
@@ -30,6 +31,7 @@ type PatchBody = {
   userId?: string;
   role?: Role;
   canViewAllTickets?: boolean;
+  canEditAllTickets?: boolean;
 };
 
 export async function PATCH(req: NextRequest) {
@@ -49,14 +51,22 @@ export async function PATCH(req: NextRequest) {
       { status: 400 }
     );
   }
-  if (body.role === undefined && body.canViewAllTickets === undefined) {
+  if (
+    body.role === undefined &&
+    body.canViewAllTickets === undefined &&
+    body.canEditAllTickets === undefined
+  ) {
     return NextResponse.json(
-      { error: "Provide `role` and/or `canViewAllTickets`" },
+      { error: "Provide `role`, `canViewAllTickets` and/or `canEditAllTickets`" },
       { status: 400 }
     );
   }
 
-  const data: { role?: Role; canViewAllTickets?: boolean } = {};
+  const data: {
+    role?: Role;
+    canViewAllTickets?: boolean;
+    canEditAllTickets?: boolean;
+  } = {};
 
   if (body.role !== undefined) {
     if (!(body.role in ROLE_RANK)) {
@@ -79,6 +89,12 @@ export async function PATCH(req: NextRequest) {
   // any ADMIN may grant or revoke it.
   if (body.canViewAllTickets !== undefined) {
     data.canViewAllTickets = Boolean(body.canViewAllTickets);
+  }
+
+  // The "edit any ticket's passenger details" permission; any ADMIN may
+  // grant or revoke it. Owners can always edit their own passenger data.
+  if (body.canEditAllTickets !== undefined) {
+    data.canEditAllTickets = Boolean(body.canEditAllTickets);
   }
 
   try {

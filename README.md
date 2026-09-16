@@ -73,7 +73,7 @@ prisma/
 
 ```
 User (id, email, password, role: USER|AGENT|ADMIN|SUPER_ADMIN,
-      canViewAllTickets, createdAt)                                1 ── * Ticket
+      canViewAllTickets, canEditAllTickets, createdAt)             1 ── * Ticket
 Trip (id, fromCity, toCity, departureTime, arrivalTime, price, carrierId) 1 ── * Ticket
 Carrier (id, name, rating)                                                1 ── * Trip
 Ticket (id, userId, tripId?, status, price, createdAt)                    1 ── 1 Booking
@@ -100,9 +100,10 @@ hashing. Sessions are stored in an **HttpOnly, SameSite=Lax** cookie named
 - `POST /api/auth/login` — `{ email, password }`. Generic `401` on failure.
 - `POST /api/auth/logout` — clears the session cookie.
 - `GET  /api/auth/me` — `{ user }` or `{ user: null }`.
-- `GET/PATCH /api/admin/users` — ADMIN-only route. `PATCH` accepts `role`
-  and/or `canViewAllTickets`; assigning `ADMIN` / `SUPER_ADMIN` requires
-  SUPER_ADMIN. Returns `canViewAllTickets` for every user.
+- `GET/PATCH /api/admin/users` — ADMIN-only route. `PATCH` accepts `role`,
+  `canViewAllTickets` and/or `canEditAllTickets`; assigning `ADMIN` /
+  `SUPER_ADMIN` requires SUPER_ADMIN. Returns both permission flags for
+  every user.
 - `POST /api/account/tickets/[id]/cancel` — owner-only cancellation of a
   `RESERVED` ticket (`401` unauthenticated, `404` for foreign/missing ids,
   `409` if the ticket is not cancellable). Writes a `TicketEvent`
@@ -112,23 +113,42 @@ hashing. Sessions are stored in an **HttpOnly, SameSite=Lax** cookie named
   Validated server-side; every real change is recorded in the ticket history
   as `PASSENGER_UPDATED` with a field-level diff (old → new), rendered on the
   ticket detail page.
+- `PATCH /api/tickets/[id]/passenger` — shared passenger-edit endpoint used
+  by the account, agent and admin UIs. Permissions: the ticket owner may
+  always edit their own passenger data; users with the admin-granted
+  `canEditAllTickets` flag may edit any ticket; ADMIN/SUPER_ADMIN may edit
+  anything (`403` otherwise, `404` for unknown tickets). History source is
+  recorded as `ACCOUNT` (owner), `AGENT_PANEL` (permitted non-owner) or
+  `ADMIN_PANEL`.
 
 ### UI pages
 
 - `/login` and `/register` — AuthForm with validation + redirect to `?next=…`.
 - `/account` — protected by the Edge proxy; profile block plus the user's own
-  tickets with a cancel button for `RESERVED` ones.
+  tickets with a cancel button for `RESERVED` ones and an inline passenger
+  editor.
 - `/admin`, `/agent` — role-gated dashboards.
-- `/admin/users` — user management: role select and a `canViewAllTickets`
-  toggle per user.
+- `/agent/tickets/[id]` — ticket detail for agents: passenger, trip, payment
+  and history; passenger edit shown when the user is the owner, has
+  `canEditAllTickets`, or is an admin.
+- `/admin/users` — user management: role select plus `canViewAllTickets` and
+  `canEditAllTickets` toggles per user.
 
-### Ticket visibility
+### Ticket visibility and editing
 
 Agents see **only their own** tickets on `/agent` by default. An admin can
 grant the "view all tickets" right per user in `/admin/users`
 (`User.canViewAllTickets`); users with that flag (and all admins) see every
 ticket. The same flag is enforced server-side wherever ticket lists are
 scoped.
+
+Ticket details are visible to everyone who can see the ticket — via
+`/agent/tickets/[id]` for agents (and `/admin/tickets/[id]` for admins).
+Passenger details (name, phone, email) can be edited by the ticket owner
+always — from `/account` or the agent console — and on **any** ticket by
+users with the admin-granted `canEditAllTickets` flag (second toggle in
+`/admin/users`) and by admins. All edits are audited in the ticket history
+with a field-level diff.
 
 ### Role hierarchy
 

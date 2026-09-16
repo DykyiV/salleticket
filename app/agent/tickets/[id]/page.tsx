@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import Header from "@/components/Header";
 import PassengerEditor from "@/components/PassengerEditor";
-import TicketStatusControl from "@/components/admin/TicketStatusControl";
+import { getCurrentUser } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
@@ -24,10 +24,23 @@ const AGE_LABELS: Record<string, string> = {
   SENIOR_60: "Senior 60+",
 };
 
-export default async function TicketDetailPage(
+/**
+ * Agent ticket detail page.
+ *
+ * View permission: the ticket owner, users with the admin-granted
+ * `canViewAllTickets` flag, and admins.
+ * Edit permission (passenger details): the ticket owner, users with the
+ * admin-granted `canEditAllTickets` flag, and admins.
+ */
+export default async function AgentTicketDetailPage(
   props: { params: Promise<{ id: string }> }
 ) {
   const { id } = await props.params;
+  const user = await getCurrentUser();
+  if (!user) notFound();
+
+  const isAdmin = user.role === "ADMIN" || user.role === "SUPER_ADMIN";
+
   const ticket = await prisma.ticket.findUnique({
     where: { id },
     include: {
@@ -35,10 +48,15 @@ export default async function TicketDetailPage(
       user: { select: { email: true, role: true } },
       trip: { include: { carrier: true } },
       history: { orderBy: { timestamp: "desc" } },
-      settlement: { select: { invoiceNumber: true, period: true, status: true } },
     },
   });
   if (!ticket) notFound();
+
+  const isOwner = ticket.userId === user.id;
+  const canView = isAdmin || isOwner || user.canViewAllTickets;
+  if (!canView) notFound();
+
+  const canEdit = isAdmin || isOwner || user.canEditAllTickets;
 
   const booking = ticket.booking;
   const trip = ticket.trip;
@@ -53,10 +71,10 @@ export default async function TicketDetailPage(
       <main className="flex-1 bg-slate-50">
         <div className="mx-auto max-w-5xl px-4 py-10 sm:px-6 lg:px-8">
           <Link
-            href="/admin/tickets"
+            href="/agent"
             className="text-sm font-medium text-brand-700 hover:underline"
           >
-            ← All tickets
+            ← Agent console
           </Link>
 
           <div className="mt-3 flex flex-wrap items-center gap-3">
@@ -91,7 +109,7 @@ export default async function TicketDetailPage(
                     : "—"
                   }
               />
-              {booking ? (
+              {booking && canEdit ? (
                 <div className="mt-2">
                   <PassengerEditor
                     ticketId={ticket.id}
@@ -103,6 +121,13 @@ export default async function TicketDetailPage(
                     }}
                   />
                 </div>
+              ) : null}
+              {booking && !canEdit ? (
+                <p className="mt-2 text-xs text-slate-400">
+                  You can view this ticket but not edit it — an administrator
+                  can grant the &quot;edit all tickets&quot; permission on the
+                  Users tab.
+                </p>
               ) : null}
             </Section>
 
@@ -130,37 +155,6 @@ export default async function TicketDetailPage(
                 value={discount > 0 ? `−${eur(discount)}` : "—"}
               />
               <Row label="Final price" value={eur(ticket.finalPrice)} highlight />
-              <Row
-                label="Agency commission"
-                value={
-                  ticket.commissionAmount != null
-                    ? `${eur(ticket.commissionAmount)} (${ticket.commissionPercent}%)`
-                    : "—"
-                }
-              />
-              <Row
-                label="Carrier share"
-                value={ticket.carrierAmount != null ? eur(ticket.carrierAmount) : "—"}
-              />
-              <Row
-                label="Settlement"
-                value={
-                  ticket.settlement
-                    ? `${ticket.settlement.invoiceNumber} (${ticket.settlement.status})`
-                    : "not invoiced"
-                }
-              />
-            </Section>
-
-            <Section title="Change status">
-              <TicketStatusControl
-                ticketId={ticket.id}
-                currentStatus={ticket.status}
-              />
-              <p className="mt-3 text-xs text-slate-400">
-                Paid online → money with the agency; paid cash → money with
-                the carrier. This drives the settlement balance.
-              </p>
             </Section>
           </div>
 
@@ -185,7 +179,6 @@ export default async function TicketDetailPage(
                       <span className="text-xs text-slate-400">
                         {h.source ?? "—"}
                         {h.changedBy ? ` · by ${h.changedBy}` : ""}
-                        {h.ipAddress ? ` · ${h.ipAddress}` : ""}
                       </span>
                     </div>
                     <ChangeDiff changes={h.changes} />
@@ -200,8 +193,7 @@ export default async function TicketDetailPage(
   );
 }
 
-/** Render the JSON field diff stored on a history row, e.g. after a
- *  passenger edit: "phone: +380… → +380…". */
+/** Render the JSON field diff stored on a history row. */
 function ChangeDiff({ changes }: { changes: string | null }) {
   if (!changes) return null;
   let parsed: Record<string, { from: unknown; to: unknown }>;
@@ -210,7 +202,6 @@ function ChangeDiff({ changes }: { changes: string | null }) {
   } catch {
     return null;
   }
-  // Status transitions are already shown via the old → new badges above.
   const entries = Object.entries(parsed).filter(([field]) => field !== "status");
   if (entries.length === 0) return null;
   const fmt = (v: unknown) => (v === null || v === undefined ? "—" : String(v));

@@ -1,3 +1,4 @@
+import Link from "next/link";
 import Header from "@/components/Header";
 import { getCurrentUser } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
@@ -93,7 +94,12 @@ export default async function AgentPage() {
                   tickets.map((t) => (
                     <tr key={t.id}>
                       <td className="px-4 py-3 font-medium text-slate-900">
-                        {t.booking?.reference ?? t.id.slice(-8)}
+                        <Link
+                          href={`/agent/tickets/${t.id}`}
+                          className="text-brand-700 hover:underline"
+                        >
+                          {t.booking?.reference ?? t.id.slice(-8)}
+                        </Link>
                       </td>
                       <td className="px-4 py-3 text-slate-700">
                         {t.booking
