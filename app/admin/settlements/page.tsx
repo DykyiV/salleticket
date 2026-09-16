@@ -1,11 +1,13 @@
 import Header from "@/components/Header";
 import {
   getPeriodReport,
+  getSettlementHistory,
   isValidPeriod,
   previousPeriod,
 } from "@/lib/settlements";
 import {
   GenerateSettlementsButton,
+  MarkPaidButton,
   MarkSentButton,
 } from "@/components/admin/SettlementActions";
 
@@ -19,13 +21,22 @@ const STATUS_STYLES: Record<string, string> = {
   PAID: "bg-emerald-50 text-emerald-700 ring-emerald-200",
 };
 
+const BALANCE_LABELS: Record<string, string> = {
+  TO_CARRIER: "We owe carrier",
+  TO_AGENT: "Carrier owes us",
+  ZERO: "Settled",
+};
+
 export default async function SettlementsPage(
   props: { searchParams: Promise<{ period?: string }> }
 ) {
   const searchParams = await props.searchParams;
   const requested = searchParams.period ?? previousPeriod();
   const period = isValidPeriod(requested) ? requested : previousPeriod();
-  const report = await getPeriodReport(period);
+  const [report, history] = await Promise.all([
+    getPeriodReport(period),
+    getSettlementHistory(30),
+  ]);
 
   const totals = report.reduce(
     (acc, row) => ({
@@ -41,7 +52,7 @@ export default async function SettlementsPage(
     <div className="flex min-h-screen flex-col">
       <Header />
       <main className="flex-1 bg-slate-50">
-        <div className="mx-auto max-w-6xl px-4 py-10 sm:px-6 lg:px-8">
+        <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
           <span className="inline-flex items-center gap-1 rounded-full bg-brand-50 px-2.5 py-1 text-xs font-medium text-brand-700 ring-1 ring-inset ring-brand-100">
             ADMIN
           </span>
@@ -49,10 +60,10 @@ export default async function SettlementsPage(
             Carrier settlements
           </h1>
           <p className="mt-1 text-sm text-slate-500">
-            Sales per carrier for the period, the agency commission and the
-            payout due to each carrier. Settlements (invoice + act) are
-            generated automatically on the 7th of each month for the previous
-            month — or manually below.
+            Sales per carrier with the payment-point split: money collected by
+            us (online) vs by the carrier (cash) — the balance shows who owes
+            whom. Settlements are generated automatically on the 7th of each
+            month, or manually below.
           </p>
 
           <form className="mt-6 flex flex-wrap items-end gap-3" method="get">
@@ -76,15 +87,18 @@ export default async function SettlementsPage(
             <GenerateSettlementsButton period={period} />
           </form>
 
-          <div className="mt-6 overflow-hidden rounded-2xl bg-white ring-1 ring-slate-200">
+          <div className="mt-6 overflow-x-auto rounded-2xl bg-white ring-1 ring-slate-200">
             <table className="min-w-full divide-y divide-slate-200 text-sm">
               <thead className="bg-slate-50">
                 <tr>
                   <Th>Carrier</Th>
                   <Th className="text-right">Tickets</Th>
-                  <Th className="text-right">Gross sales</Th>
+                  <Th className="text-right">Gross</Th>
+                  <Th className="text-right">Paid to us (online)</Th>
+                  <Th className="text-right">Paid to carrier (cash)</Th>
+                  <Th className="text-right">Unpaid</Th>
                   <Th className="text-right">Our commission</Th>
-                  <Th className="text-right">Carrier payout</Th>
+                  <Th className="text-right">Balance</Th>
                   <Th>Status</Th>
                   <Th>Documents</Th>
                 </tr>
@@ -93,7 +107,7 @@ export default async function SettlementsPage(
                 {report.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={7}
+                      colSpan={10}
                       className="px-4 py-10 text-center text-sm text-slate-500"
                     >
                       No sales recorded for {period}.
@@ -107,15 +121,25 @@ export default async function SettlementsPage(
                       </td>
                       <TdNum>{row.ticketCount}</TdNum>
                       <TdNum>{eur(row.grossAmount)}</TdNum>
+                      <TdNum>{eur(row.collectedByAgent)}</TdNum>
+                      <TdNum>{eur(row.collectedByCarrier)}</TdNum>
+                      <TdNum>
+                        <span className="text-slate-400">
+                          {eur(row.unpaidAmount)}
+                        </span>
+                      </TdNum>
                       <TdNum>
                         <span className="font-medium text-emerald-700">
                           {eur(row.commissionAmount)}
                         </span>
                       </TdNum>
                       <TdNum>
-                        <span className="font-medium text-slate-900">
-                          {eur(row.carrierAmount)}
-                        </span>
+                        <div className="font-semibold text-slate-900">
+                          {eur(row.balanceAmount)}
+                        </div>
+                        <div className="text-[11px] font-normal text-slate-500">
+                          {BALANCE_LABELS[row.balanceDirection]}
+                        </div>
                       </TdNum>
                       <td className="px-4 py-3">
                         {row.settled ? (
@@ -152,6 +176,10 @@ export default async function SettlementsPage(
                             {row.settlementStatus === "GENERATED" ? (
                               <MarkSentButton settlementId={row.settlementId} />
                             ) : null}
+                            {row.settlementStatus === "SENT" ||
+                            row.settlementStatus === "GENERATED" ? (
+                              <MarkPaidButton settlementId={row.settlementId} />
+                            ) : null}
                           </div>
                         ) : (
                           <span className="text-xs text-slate-400">—</span>
@@ -167,13 +195,15 @@ export default async function SettlementsPage(
                     <td className="px-4 py-3">Total</td>
                     <TdNum>{totals.ticketCount}</TdNum>
                     <TdNum>{eur(totals.grossAmount)}</TdNum>
+                    <TdNum>{eur(report.reduce((s, r) => s + r.collectedByAgent, 0))}</TdNum>
+                    <TdNum>{eur(report.reduce((s, r) => s + r.collectedByCarrier, 0))}</TdNum>
+                    <TdNum>{eur(report.reduce((s, r) => s + r.unpaidAmount, 0))}</TdNum>
                     <TdNum>
                       <span className="text-emerald-700">
                         {eur(totals.commissionAmount)}
                       </span>
                     </TdNum>
-                    <TdNum>{eur(totals.carrierAmount)}</TdNum>
-                    <td colSpan={2} />
+                    <td colSpan={3} />
                   </tr>
                 </tfoot>
               ) : null}
@@ -181,11 +211,72 @@ export default async function SettlementsPage(
           </div>
 
           <p className="mt-4 text-xs text-slate-400">
-            Commission is snapshotted on every ticket at booking time
-            (route-specific rule → carrier default), so historical reports do
-            not change when rules are edited. Cancelled and refunded tickets
-            are excluded.
+            Commission is snapshotted on every ticket at booking time.
+            Balance = carrier share of online sales − our commission on cash
+            sales. Cancelled and refunded tickets are excluded.
           </p>
+
+          <section className="mt-10">
+            <h2 className="text-lg font-semibold text-slate-900">
+              Calculation history
+            </h2>
+            <p className="mt-1 text-sm text-slate-500">
+              Every settlement event: generated, sent, paid — with actor and
+              timestamp.
+            </p>
+            <div className="mt-4 overflow-hidden rounded-2xl bg-white ring-1 ring-slate-200">
+              <table className="min-w-full divide-y divide-slate-200 text-sm">
+                <thead className="bg-slate-50">
+                  <tr>
+                    <Th>When</Th>
+                    <Th>Carrier</Th>
+                    <Th>Invoice</Th>
+                    <Th>Event</Th>
+                    <Th>Actor</Th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {history.length === 0 ? (
+                    <tr>
+                      <td
+                        colSpan={5}
+                        className="px-4 py-8 text-center text-sm text-slate-500"
+                      >
+                        No settlement events yet.
+                      </td>
+                    </tr>
+                  ) : (
+                    history.map((event) => (
+                      <tr key={event.id}>
+                        <td className="px-4 py-2.5 tabular-nums text-slate-500">
+                          {event.createdAt.toISOString().slice(0, 16).replace("T", " ")}
+                        </td>
+                        <td className="px-4 py-2.5 font-medium text-slate-900">
+                          {event.settlement.carrier.name}
+                        </td>
+                        <td className="px-4 py-2.5 text-slate-600">
+                          {event.settlement.invoiceNumber}
+                        </td>
+                        <td className="px-4 py-2.5">
+                          <span
+                            className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset ${
+                              STATUS_STYLES[event.action] ??
+                              "bg-slate-100 text-slate-600 ring-slate-200"
+                            }`}
+                          >
+                            {event.action}
+                          </span>
+                        </td>
+                        <td className="px-4 py-2.5 text-slate-600">
+                          {event.actor ?? "—"}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </section>
         </div>
       </main>
     </div>

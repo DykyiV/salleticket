@@ -21,7 +21,7 @@ export async function POST(
 
   const { id } = await ctx.params;
   try {
-    const settlement = await markSettlementSent(id);
+    const settlement = await markSettlementSent(id, guard.session.email);
     return NextResponse.json({ settlement });
   } catch {
     return NextResponse.json({ error: "Settlement not found" }, { status: 404 });

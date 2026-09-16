@@ -92,12 +92,22 @@ function linesTable(data: SettlementData): string {
 
 function totals(data: SettlementData): string {
   const s = data.settlement;
+  const balanceLine =
+    s.balanceDirection === "TO_AGENT"
+      ? `<div class="grand"><span>Сальдо: перевізник сплачує агенту</span><span>€${eur(s.balanceAmount)}</span></div>`
+      : s.balanceDirection === "ZERO"
+        ? `<div class="grand"><span>Сальдо</span><span>€0,00 — взаєморозрахунок закрито</span></div>`
+        : `<div class="grand"><span>Сальдо: агент сплачує перевізнику</span><span>€${eur(s.balanceAmount)}</span></div>`;
   return `
   <div class="totals">
     <div><span>Продано квитків</span><span>${s.ticketCount}</span></div>
     <div><span>Загальна сума продажів</span><span>€${eur(s.grossAmount)}</span></div>
+    <div><span>· оплачено агенту (онлайн)</span><span>€${eur(s.collectedByAgent)}</span></div>
+    <div><span>· оплачено перевізнику (готівка)</span><span>€${eur(s.collectedByCarrier)}</span></div>
+    <div><span>· ще не оплачено</span><span>€${eur(s.unpaidAmount)}</span></div>
     <div><span>Винагорода агента (залишається у нас)</span><span>€${eur(s.commissionAmount)}</span></div>
-    <div class="grand"><span>До виплати перевізнику</span><span>€${eur(s.carrierAmount)}</span></div>
+    <div><span>Частка перевізника</span><span>€${eur(s.carrierAmount)}</span></div>
+    ${balanceLine}
   </div>`;
 }
 

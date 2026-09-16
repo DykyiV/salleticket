@@ -33,11 +33,11 @@ export async function POST(req: NextRequest) {
   }
 
   const period = previousPeriod();
-  const generated = await generateSettlements(period);
+  const generated = await generateSettlements(period, "cron");
 
   const sent = [];
   for (const s of generated) {
-    const updated = await markSettlementSent(s.id);
+    const updated = await markSettlementSent(s.id, "cron");
     sent.push({ id: updated.id, invoiceNumber: updated.invoiceNumber, sentAt: updated.sentAt });
   }
 

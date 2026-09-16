@@ -190,8 +190,13 @@ model Ticket {
 }
 
 /// Monthly settlement with a carrier: aggregates all tickets sold in the
-/// period, the agency commission and the amount payable to the carrier.
+/// period, the agency commission and the net balance direction.
 /// One settlement per carrier per period (YYYY-MM).
+///
+/// Payment point matters: for tickets paid ONLINE the money sits with the
+/// agency (we owe the carrier its share); for tickets paid CASH to the
+/// carrier the money sits with the carrier (it owes us the commission).
+/// The net balance is stored as balanceAmount + balanceDirection.
 model Settlement {
   id           String           @id @default(cuid())
   /// Period in YYYY-MM format (calendar month the sales belong to).
@@ -201,13 +206,26 @@ model Settlement {
   grossAmount  Float
   /// Agency earnings: sum of ticket commissionAmount.
   commissionAmount Float
-  /// Payable to the carrier: sum of ticket carrierAmount.
+  /// Carrier share: sum of ticket carrierAmount.
   carrierAmount    Float
+  /// Gross collected by the agency (tickets PAID_ONLINE).
+  collectedByAgent   Float @default(0)
+  /// Gross collected by the carrier (tickets PAID_CASH).
+  collectedByCarrier Float @default(0)
+  /// Gross not yet paid by passengers (tickets RESERVED).
+  unpaidAmount       Float @default(0)
+  /// Net balance, absolute value. Direction in balanceDirection:
+  ///   TO_CARRIER — agency must pay the carrier this amount
+  ///   TO_AGENT   — carrier must pay the agency this amount
+  ///   ZERO       — nothing owed
+  balanceAmount    Float  @default(0)
+  balanceDirection String @default("TO_CARRIER")
   status       SettlementStatus @default(GENERATED)
   /// Sequential invoice number, e.g. INV-2026-08-0001.
   invoiceNumber String          @unique
   actNumber    String?
   sentAt       DateTime?
+  paidAt       DateTime?
   createdAt    DateTime         @default(now())
   updatedAt    DateTime         @updatedAt
 
@@ -215,10 +233,32 @@ model Settlement {
   carrier   Carrier @relation(fields: [carrierId], references: [id], onDelete: Restrict)
 
   tickets Ticket[]
+  events  SettlementEvent[]
 
   @@unique([carrierId, period])
   @@index([period])
   @@map("settlements")
+}
+
+/// Audit trail of everything that happened to a settlement: generation,
+/// sending, payment. Answers "was this report calculated/sent/paid, by whom
+/// and when" without parsing logs.
+model SettlementEvent {
+  id           String   @id @default(cuid())
+  /// GENERATED | SENT | PAID
+  action       String
+  /// Who did it: user email, or "cron" for the monthly job.
+  actor        String?
+  /// Optional JSON details (amounts at the time, etc.).
+  details      String?
+  createdAt    DateTime @default(now())
+
+  settlementId String
+  settlement   Settlement @relation(fields: [settlementId], references: [id], onDelete: Cascade)
+
+  @@index([settlementId])
+  @@index([createdAt])
+  @@map("settlement_events")
 }
 
 /// Audit trail for tickets. Every mutation must append a row with:

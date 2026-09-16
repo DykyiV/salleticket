@@ -3,6 +3,7 @@ import { requireRole } from "@/lib/auth/guard";
 import {
   generateSettlements,
   getPeriodReport,
+  getSettlementHistory,
   isValidPeriod,
   listSettlements,
   previousPeriod,
@@ -14,7 +15,8 @@ export const dynamic = "force-dynamic";
 /**
  * GET /api/admin/settlements?period=YYYY-MM
  * Live per-carrier sales report for the period plus already-generated
- * settlements. Defaults to the previous calendar month.
+ * settlements and the recent calculation history. Defaults to the previous
+ * calendar month.
  */
 export async function GET(req: NextRequest) {
   const guard = await requireRole("ADMIN");
@@ -28,12 +30,13 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  const [report, settlements] = await Promise.all([
+  const [report, settlements, history] = await Promise.all([
     getPeriodReport(period),
     listSettlements(period),
+    getSettlementHistory(50),
   ]);
 
-  return NextResponse.json({ period, report, settlements });
+  return NextResponse.json({ period, report, settlements, history });
 }
 
 /**
@@ -60,7 +63,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const generated = await generateSettlements(period);
+  const generated = await generateSettlements(period, guard.session.email);
   return NextResponse.json(
     { period, generated, count: generated.length },
     { status: generated.length > 0 ? 201 : 200 }

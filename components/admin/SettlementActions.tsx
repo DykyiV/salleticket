@@ -81,3 +81,31 @@ export function MarkSentButton({ settlementId }: { settlementId: string }) {
     </button>
   );
 }
+
+export function MarkPaidButton({ settlementId }: { settlementId: string }) {
+  const router = useRouter();
+  const [loading, setLoading] = useState(false);
+
+  const handlePay = async () => {
+    setLoading(true);
+    try {
+      await fetch(`/api/admin/settlements/${settlementId}/pay`, {
+        method: "POST",
+      });
+      router.refresh();
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={handlePay}
+      disabled={loading}
+      className="rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700 transition hover:border-emerald-300 hover:bg-emerald-100 disabled:opacity-50"
+    >
+      {loading ? "…" : "Mark paid"}
+    </button>
+  );
+}

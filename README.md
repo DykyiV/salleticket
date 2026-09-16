@@ -230,6 +230,16 @@ Every ticket sale is split between the agency and the carrier:
   the `/admin/settlements` page show, per carrier: tickets sold, gross sales,
   our commission and the carrier payout — e.g. 10 tickets for €1000 at a 20%
   commission → €200 stays with us, €800 is payable to the carrier.
+- **Payment point**: the report splits sales by where the money landed —
+  `PAID_ONLINE` (collected by us) vs `PAID_CASH` (collected by the carrier)
+  vs unpaid reservations. The net **balance** is computed automatically:
+  carrier share of online sales − our commission on cash sales, with the
+  direction "we owe carrier" / "carrier owes us".
+- **Status lifecycle**: `GENERATED → SENT → PAID`
+  (`POST /api/admin/settlements/[id]/send` and `…/pay`). Every transition —
+  including generation — is recorded in `SettlementEvent` with actor and
+  timestamp; the admin page shows this calculation history, and the API
+  returns it under `history`.
 - **Settlement generation**: `POST /api/admin/settlements { "period" }`
   creates one `Settlement` per carrier (idempotent per carrier+period),
   assigns sequential invoice (`INV-YYYY-MM-NNNN`) and act (`ACT-…`) numbers,
