@@ -27,11 +27,18 @@ export function canManageTemplates(user: PermissionFlags): boolean {
   return isAdminRole(user.role);
 }
 
+export function canBulkEditDepartures(user: PermissionFlags): boolean {
+  return (
+    canEditDepartures(user) || canHideStops(user) || canHideSeats(user)
+  );
+}
+
 export function departureCapabilities(user: PermissionFlags) {
   return {
     canEdit: canEditDepartures(user),
     canHideStops: canHideStops(user),
     canHideSeats: canHideSeats(user),
+    canBulk: canBulkEditDepartures(user),
     canManageTemplates: canManageTemplates(user),
   };
 }

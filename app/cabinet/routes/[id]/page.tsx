@@ -16,6 +16,7 @@ export default async function EditCabinetRoutePage({
       where: { id: params.id },
       include: {
         country: true,
+        originCountry: true,
         stops: { orderBy: { sortOrder: "asc" } },
         _count: { select: { departures: true } },
       },

@@ -211,7 +211,8 @@ model Country {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  templates RouteTemplate[]
+  templates       RouteTemplate[] @relation("RouteDestinationCountry")
+  originTemplates RouteTemplate[] @relation("RouteOriginCountry")
 
   @@map("countries")
 }
@@ -220,7 +221,9 @@ model Country {
 model RouteTemplate {
   id          String  @id @default(cuid())
   countryId   String
-  country     Country @relation(fields: [countryId], references: [id], onDelete: Restrict)
+  country     Country @relation("RouteDestinationCountry", fields: [countryId], references: [id], onDelete: Restrict)
+  originCountryId String?
+  originCountry   Country? @relation("RouteOriginCountry", fields: [originCountryId], references: [id], onDelete: Restrict)
   name        String
   originCity  String
   destinationCity String
@@ -242,6 +245,7 @@ model RouteTemplate {
   departures Departure[]
 
   @@index([countryId])
+  @@index([originCountryId])
   @@index([isActive])
   @@map("route_templates")
 }

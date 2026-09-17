@@ -7,6 +7,7 @@ import type {
 } from "@prisma/client";
 import { formatWeekdays, parseWeekdays } from "@/lib/routes/weekdays";
 import { toIsoDate } from "@/lib/routes/dates";
+import { resolveDirection } from "@/lib/routes/countries";
 
 export type TemplateStopDTO = {
   id: string;
@@ -27,6 +28,10 @@ export type TemplateDTO = {
   id: string;
   countryId: string;
   countryName: string;
+  countryCode: string;
+  originCountryId: string | null;
+  originCountryName: string;
+  originCountryCode: string;
   name: string;
   originCity: string;
   destinationCity: string;
@@ -68,6 +73,10 @@ export type DepartureDTO = {
   templateName: string;
   countryId: string;
   countryName: string;
+  countryCode: string;
+  originCountryId: string | null;
+  originCountryName: string;
+  originCountryCode: string;
   date: string;
   weekday: number;
   busPhone: string | null;
@@ -83,6 +92,7 @@ export type DepartureDTO = {
 
 type TemplateRecord = RouteTemplate & {
   country: Country;
+  originCountry?: Country | null;
   stops: RouteTemplateStop[];
   _count?: { departures: number };
 };
@@ -106,10 +116,15 @@ export function toTemplateStopDTO(stop: RouteTemplateStop): TemplateStopDTO {
 
 export function toTemplateDTO(row: TemplateRecord): TemplateDTO {
   const days = parseWeekdays(row.departureWeekdays);
+  const direction = resolveDirection(row.originCountry, row.country);
   return {
     id: row.id,
     countryId: row.countryId,
     countryName: row.country.name,
+    countryCode: direction.destinationCode,
+    originCountryId: row.originCountryId,
+    originCountryName: direction.originName,
+    originCountryCode: direction.originCode,
     name: row.name,
     originCity: row.originCity,
     destinationCity: row.destinationCity,
@@ -151,17 +166,28 @@ export function toDepartureStopDTO(stop: DepartureStop): DepartureStopDTO {
 }
 
 type DepartureRecord = Departure & {
-  template: RouteTemplate & { country: Country };
+  template: RouteTemplate & {
+    country: Country;
+    originCountry?: Country | null;
+  };
   stops: DepartureStop[];
 };
 
 export function toDepartureDTO(row: DepartureRecord): DepartureDTO {
+  const direction = resolveDirection(
+    row.template.originCountry,
+    row.template.country
+  );
   return {
     id: row.id,
     templateId: row.templateId,
     templateName: row.template.name,
     countryId: row.template.countryId,
     countryName: row.template.country.name,
+    countryCode: direction.destinationCode,
+    originCountryId: row.template.originCountryId,
+    originCountryName: direction.originName,
+    originCountryCode: direction.originCode,
     date: toIsoDate(row.date),
     weekday: row.weekday,
     busPhone: row.busPhone,

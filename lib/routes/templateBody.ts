@@ -31,6 +31,7 @@ function parseOptionalWeekday(raw: unknown, label: string): number | null {
 
 export type ParsedTemplateBody = {
   countryId: string;
+  originCountryId: string | null;
   name: string;
   originCity: string;
   destinationCity: string;
@@ -53,11 +54,13 @@ export function parseTemplateBody(body: Record<string, unknown>): ParsedTemplate
   );
   const name =
     parseOptionalText(body.name) ?? `${originCity} — ${destinationCity}`;
-  const countryId = parseRequiredText(body.countryId, "Країна");
+  const countryId = parseRequiredText(body.countryId, "Країна прибуття");
+  const originCountryId = parseOptionalText(body.originCountryId);
   const departureWeekdays = parseWeekdayList(body.departureWeekdays);
   const stops = parseStops(body.stops);
   return {
     countryId,
+    originCountryId,
     name,
     originCity,
     destinationCity,

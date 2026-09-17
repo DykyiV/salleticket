@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import Field, { btnGhost, btnPrimary, inputClass } from "@/components/admin/Field";
-import { formatUkDate } from "@/lib/routes/dates";
-import { weekdayShort } from "@/lib/routes/weekdays";
+import CountryFlags from "@/components/cabinet/CountryFlags";
 import { mapsUrl } from "@/lib/routes/boarding";
+import { groupDeparturesByDayAndDirection } from "@/lib/routes/groupDepartures";
+import { DEPARTURE_PAGE_SIZE } from "@/lib/routes/listDepartures";
 import type { DepartureDTO } from "@/lib/routes/serialize";
 import type { BulkAction } from "@/lib/routes/bulk";
 
@@ -12,6 +13,7 @@ export type Capabilities = {
   canEdit: boolean;
   canHideStops: boolean;
   canHideSeats: boolean;
+  canBulk: boolean;
   canManageTemplates: boolean;
 };
 
@@ -20,22 +22,42 @@ type Props = {
   initialFrom: string;
   initialTo: string;
   initialTemplateId?: string;
+  initialPage?: number;
+  initialTotal?: number;
+  initialTotalPages?: number;
   initialDepartures?: DepartureDTO[];
   capabilities: Capabilities;
 };
 
-type Group = {
-  templateId: string;
-  templateName: string;
-  countryName: string;
-  items: DepartureDTO[];
-};
+const BULK_ACTIONS: {
+  value: BulkAction;
+  label: string;
+  key: "canEdit" | "canHideStops" | "canHideSeats";
+}[] = [
+    { value: "hideStops", label: "Приховати міста", key: "canHideStops" },
+    { value: "showStops", label: "Показати міста", key: "canHideStops" },
+    { value: "setSaleEnabled", label: "Продаж місць у місті", key: "canHideSeats" },
+    { value: "setStopTime", label: "Змінити години", key: "canEdit" },
+  ];
+
+function ukCount(n: number): string {
+  const mod10 = n % 10;
+  const mod100 = n % 100;
+  if (mod10 === 1 && mod100 !== 11) return `${n} виїзд`;
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) {
+    return `${n} виїзди`;
+  }
+  return `${n} виїздів`;
+}
 
 export default function DeparturesBoard({
   mode,
   initialFrom,
   initialTo,
   initialTemplateId,
+  initialPage = 1,
+  initialTotal = 0,
+  initialTotalPages = 1,
   initialDepartures = [],
   capabilities,
 }: Props) {
@@ -46,15 +68,23 @@ export default function DeparturesBoard({
       ? "/api/admin/departures/bulk"
       : "/api/agent/departures/bulk";
 
+  const allowedActions = BULK_ACTIONS.filter((item) => capabilities[item.key]);
+  const canBulk = capabilities.canBulk && allowedActions.length > 0;
+
   const [from, setFrom] = useState(initialFrom);
   const [to, setTo] = useState(initialTo);
-  const [templateId, setTemplateId] = useState(initialTemplateId ?? "");
+  const [templateId] = useState(initialTemplateId ?? "");
+  const [page, setPage] = useState(initialPage);
+  const [total, setTotal] = useState(initialTotal);
+  const [totalPages, setTotalPages] = useState(initialTotalPages);
   const [departures, setDepartures] = useState<DepartureDTO[]>(initialDepartures);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [action, setAction] = useState<BulkAction>("hideStops");
+  const [action, setAction] = useState<BulkAction>(
+    allowedActions[0]?.value ?? "hideStops"
+  );
   const [city, setCity] = useState("");
   const [sortFrom, setSortFrom] = useState("1");
   const [sortTo, setSortTo] = useState("4");
@@ -63,39 +93,29 @@ export default function DeparturesBoard({
   const [saleEnabled, setSaleEnabled] = useState(false);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
-  const load = async () => {
+  const load = async (nextPage = 1) => {
     setError(null);
-    const params = new URLSearchParams({ from, to });
+    const params = new URLSearchParams({
+      from,
+      to,
+      page: String(nextPage),
+      pageSize: String(DEPARTURE_PAGE_SIZE),
+    });
     if (templateId) params.set("templateId", templateId);
     const res = await fetch(`${listUrl}?${params.toString()}`);
     const data = await res.json();
     if (!res.ok) throw new Error(data?.error ?? "Не вдалося завантажити виїзди");
     setDepartures(data.departures ?? []);
+    setTotal(data.total ?? 0);
+    setTotalPages(data.totalPages ?? 1);
+    setPage(data.page ?? nextPage);
     setSelected(new Set());
   };
 
-  useEffect(() => {
-    load().catch((err) =>
-      setError(err instanceof Error ? err.message : "Помилка завантаження")
-    );
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const groups = useMemo<Group[]>(() => {
-    const map = new Map<string, Group>();
-    for (const row of departures) {
-      const key = row.templateId;
-      const bucket = map.get(key) ?? {
-        templateId: row.templateId,
-        templateName: row.templateName,
-        countryName: row.countryName,
-        items: [],
-      };
-      bucket.items.push(row);
-      map.set(key, bucket);
-    }
-    return [...map.values()];
-  }, [departures]);
+  const days = useMemo(
+    () => groupDeparturesByDayAndDirection(departures),
+    [departures]
+  );
 
   const toggleOne = (id: string) => {
     setSelected((prev) => {
@@ -156,7 +176,7 @@ export default function DeparturesBoard({
       setMessage(
         `Оновлено зупинок: ${data.updatedStops} у ${data.updatedDepartures} виїздах.`
       );
-      await load();
+      await load(page);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Помилка");
     } finally {
@@ -165,11 +185,15 @@ export default function DeparturesBoard({
   };
 
   const actionAllowed =
-    (action === "hideStops" || action === "showStops"
-      ? capabilities.canHideStops
-      : action === "setSaleEnabled"
-        ? capabilities.canHideSeats
-        : capabilities.canEdit) && selected.size > 0;
+    canBulk &&
+    selected.size > 0 &&
+    allowedActions.some((item) => item.value === action);
+
+  const goPage = (next: number) => {
+    load(next).catch((err) =>
+      setError(err instanceof Error ? err.message : "Помилка")
+    );
+  };
 
   return (
     <div className="space-y-5">
@@ -195,7 +219,7 @@ export default function DeparturesBoard({
             type="button"
             className={btnGhost}
             onClick={() =>
-              load().catch((err) =>
+              load(1).catch((err) =>
                 setError(err instanceof Error ? err.message : "Помилка")
               )
             }
@@ -205,219 +229,287 @@ export default function DeparturesBoard({
         </div>
       </div>
 
-      <section className="rounded-2xl bg-white p-4 ring-1 ring-slate-200">
-        <h2 className="text-sm font-semibold text-slate-900">
-          Масове редагування ({selected.size} вибрано)
-        </h2>
-        <p className="mt-1 text-xs text-slate-500">
-          Відмітьте однакові маршрути й змініть видимість міст, продаж місць або
-          години. Наприклад: сховати міста 1–4 або показати Марбелью в четвергових
-          виїздах.
-        </p>
-        <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <Field label="Дія">
-            <select
-              className={inputClass}
-              value={action}
-              onChange={(e) => setAction(e.target.value as BulkAction)}
-            >
-              <option value="hideStops">Приховати міста</option>
-              <option value="showStops">Показати міста</option>
-              <option value="setSaleEnabled">Продаж місць у місті</option>
-              <option value="setStopTime">Змінити години</option>
-            </select>
-          </Field>
-          <Field label="Місто (або залиште порожнім)">
-            <input
-              className={inputClass}
-              value={city}
-              onChange={(e) => setCity(e.target.value)}
-              placeholder="Марбелья"
-            />
-          </Field>
-          <Field label="№ з">
-            <input
-              type="number"
-              min={1}
-              className={inputClass}
-              value={sortFrom}
-              onChange={(e) => setSortFrom(e.target.value)}
-            />
-          </Field>
-          <Field label="№ по">
-            <input
-              type="number"
-              min={1}
-              className={inputClass}
-              value={sortTo}
-              onChange={(e) => setSortTo(e.target.value)}
-            />
-          </Field>
-          {action === "setStopTime" ? (
-            <>
-              <Field label="Новий час туди">
-                <input
-                  type="time"
-                  className={inputClass}
-                  value={outboundTime}
-                  onChange={(e) => setOutboundTime(e.target.value)}
-                />
-              </Field>
-              <Field label="Новий час назад">
-                <input
-                  type="time"
-                  className={inputClass}
-                  value={returnTime}
-                  onChange={(e) => setReturnTime(e.target.value)}
-                />
-              </Field>
-            </>
-          ) : null}
-          {action === "setSaleEnabled" ? (
-            <label className="flex items-end gap-2 text-sm text-slate-700">
+      {canBulk ? (
+        <section className="rounded-2xl bg-white p-4 ring-1 ring-slate-200">
+          <h2 className="text-sm font-semibold text-slate-900">
+            Масове редагування ({selected.size} вибрано)
+          </h2>
+          <p className="mt-1 text-xs text-slate-500">
+            Відмітьте однакові маршрути й змініть видимість міст, продаж місць або
+            години. Доступно адміну та агенту з відповідним правом.
+          </p>
+          <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <Field label="Дія">
+              <select
+                className={inputClass}
+                value={action}
+                onChange={(e) => setAction(e.target.value as BulkAction)}
+              >
+                {allowedActions.map((item) => (
+                  <option key={item.value} value={item.value}>
+                    {item.label}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Місто (або залиште порожнім)">
               <input
-                type="checkbox"
-                checked={saleEnabled}
-                onChange={(e) => setSaleEnabled(e.target.checked)}
+                className={inputClass}
+                value={city}
+                onChange={(e) => setCity(e.target.value)}
+                placeholder="Марбелья"
               />
-              Дозволити продаж
-            </label>
-          ) : null}
-        </div>
-        <div className="mt-3">
-          <button
-            type="button"
-            className={btnPrimary}
-            disabled={busy || !actionAllowed}
-            onClick={apply}
-          >
-            Застосувати до вибраних
-          </button>
-          {!actionAllowed && selected.size > 0 ? (
-            <span className="ml-2 text-xs text-amber-700">
-              Немає права на цю дію.
-            </span>
-          ) : null}
-        </div>
-      </section>
+            </Field>
+            <Field label="№ з">
+              <input
+                type="number"
+                min={1}
+                className={inputClass}
+                value={sortFrom}
+                onChange={(e) => setSortFrom(e.target.value)}
+              />
+            </Field>
+            <Field label="№ по">
+              <input
+                type="number"
+                min={1}
+                className={inputClass}
+                value={sortTo}
+                onChange={(e) => setSortTo(e.target.value)}
+              />
+            </Field>
+            {action === "setStopTime" ? (
+              <>
+                <Field label="Новий час туди">
+                  <input
+                    type="time"
+                    className={inputClass}
+                    value={outboundTime}
+                    onChange={(e) => setOutboundTime(e.target.value)}
+                  />
+                </Field>
+                <Field label="Новий час назад">
+                  <input
+                    type="time"
+                    className={inputClass}
+                    value={returnTime}
+                    onChange={(e) => setReturnTime(e.target.value)}
+                  />
+                </Field>
+              </>
+            ) : null}
+            {action === "setSaleEnabled" ? (
+              <label className="flex items-end gap-2 text-sm text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={saleEnabled}
+                  onChange={(e) => setSaleEnabled(e.target.checked)}
+                />
+                Дозволити продаж
+              </label>
+            ) : null}
+          </div>
+          <div className="mt-3">
+            <button
+              type="button"
+              className={btnPrimary}
+              disabled={busy || !actionAllowed}
+              onClick={apply}
+            >
+              Застосувати до вибраних
+            </button>
+            {!actionAllowed && selected.size > 0 ? (
+              <span className="ml-2 text-xs text-amber-700">
+                Немає права на цю дію.
+              </span>
+            ) : null}
+          </div>
+        </section>
+      ) : null}
 
       {error ? <p className="text-sm text-rose-700">{error}</p> : null}
       {message ? <p className="text-sm text-emerald-700">{message}</p> : null}
 
-      {groups.length === 0 ? (
+      <p className="text-xs text-slate-500">
+        {total === 0
+          ? "Немає виїздів у цьому періоді."
+          : `Показано ${departures.length} з ${total} виїздів · сторінка ${page} з ${totalPages}`}
+      </p>
+
+      {days.length === 0 ? (
         <p className="rounded-2xl bg-white p-6 text-sm text-slate-500 ring-1 ring-slate-200">
           Немає виїздів у цьому періоді. Створіть їх зі сторінки шаблону маршруту.
         </p>
       ) : (
-        groups.map((group) => {
-          const allOn = group.items.every((i) => selected.has(i.id));
-          return (
-            <section
-              key={group.templateId}
-              className="overflow-hidden rounded-2xl bg-white ring-1 ring-slate-200"
-            >
-              <header className="flex flex-wrap items-center gap-3 border-b border-slate-200 bg-slate-50 px-4 py-3">
-                <label className="inline-flex items-center gap-2 text-sm font-semibold text-slate-900">
-                  <input
-                    type="checkbox"
-                    checked={allOn}
-                    onChange={() => toggleGroup(group.items)}
-                  />
-                  {group.templateName}
-                </label>
-                <span className="text-xs text-slate-500">{group.countryName}</span>
-                <span className="text-xs text-slate-400">
-                  {group.items.length} виїздів
-                </span>
-              </header>
-              <div className="divide-y divide-slate-100">
-                {group.items.map((row) => (
-                  <div key={row.id} className="px-4 py-3">
-                    <div className="flex flex-wrap items-center gap-3">
-                      <input
-                        type="checkbox"
-                        checked={selected.has(row.id)}
-                        onChange={() => toggleOne(row.id)}
+        days.map((day) => (
+          <section
+            key={day.date}
+            className="overflow-hidden rounded-2xl bg-white ring-1 ring-slate-200"
+          >
+            <header className="border-b border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-900">
+              {day.label}
+            </header>
+            <div className="divide-y divide-slate-100">
+              {day.directions.map((dir) => {
+                const allOn = dir.items.every((i) => selected.has(i.id));
+                return (
+                  <div key={`${day.date}-${dir.key}`}>
+                    <div className="flex flex-wrap items-center gap-3 bg-slate-50/70 px-4 py-2">
+                      {canBulk ? (
+                        <input
+                          type="checkbox"
+                          checked={allOn}
+                          onChange={() => toggleGroup(dir.items)}
+                          aria-label={`Вибрати ${dir.originShort} — ${dir.destinationShort}`}
+                        />
+                      ) : null}
+                      <CountryFlags
+                        originCode={dir.originCode}
+                        destinationCode={dir.destinationCode}
+                        originShort={dir.originShort}
+                        destinationShort={dir.destinationShort}
+                        originName={dir.originName}
+                        destinationName={dir.destinationName}
                       />
-                      <button
-                        type="button"
-                        className="text-left text-sm font-medium text-slate-900"
-                        onClick={() => toggleExpand(row.id)}
-                      >
-                        {formatUkDate(row.date)} · {weekdayShort(row.weekday)}
-                      </button>
-                      <span className="text-xs text-slate-500">
-                        {row.originCity} → {row.destinationCity}
-                      </span>
                       <span className="text-xs text-slate-400">
-                        {row.defaultBus ?? "автобус не вказано"} ·{" "}
-                        {row.busPhone ?? "немає тел."}
+                        {ukCount(dir.items.length)}
                       </span>
-                      <button
-                        type="button"
-                        className="ml-auto text-xs text-brand-700"
-                        onClick={() => toggleExpand(row.id)}
-                      >
-                        {expanded.has(row.id) ? "згорнути" : "міста"}
-                      </button>
                     </div>
-                    {expanded.has(row.id) ? (
-                      <table className="mt-3 w-full text-xs">
-                        <thead className="text-left text-slate-500">
-                          <tr>
-                            <th className="py-1">№</th>
-                            <th>Місто</th>
-                            <th>Туди</th>
-                            <th>Назад</th>
-                            <th>Посадка</th>
-                            <th>Видиме</th>
-                            <th>Продаж</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {row.stops.map((stop) => {
-                            const url = mapsUrl(stop);
-                            return (
-                              <tr key={stop.id} className="border-t border-slate-100">
-                                <td className="py-1 pr-2">{stop.sortOrder}</td>
-                                <td>{stop.city}</td>
-                                <td>
-                                  д.{stop.outboundDay} {stop.outboundTime}
-                                </td>
-                                <td>
-                                  д.{stop.returnDay} {stop.returnTime}
-                                </td>
-                                <td>
-                                  {stop.addressLabel || stop.boardingAddress || "—"}
-                                  {url ? (
-                                    <>
-                                      {" "}
-                                      <a
-                                        href={url}
-                                        target="_blank"
-                                        rel="noreferrer"
-                                        className="text-brand-700"
-                                      >
-                                        карта
-                                      </a>
-                                    </>
-                                  ) : null}
-                                </td>
-                                <td>{stop.isVisible ? "так" : "ні"}</td>
-                                <td>{stop.saleEnabled ? "так" : "ні"}</td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    ) : null}
+                    {dir.items.map((row) => {
+                      const first = row.stops[0];
+                      return (
+                        <div key={row.id} className="px-4 py-3">
+                          <div className="flex flex-wrap items-center gap-3">
+                            {canBulk ? (
+                              <input
+                                type="checkbox"
+                                checked={selected.has(row.id)}
+                                onChange={() => toggleOne(row.id)}
+                              />
+                            ) : null}
+                            <CountryFlags
+                              size="sm"
+                              originCode={dir.originCode}
+                              destinationCode={dir.destinationCode}
+                              originShort={dir.originShort}
+                              destinationShort={dir.destinationShort}
+                              originName={dir.originName}
+                              destinationName={dir.destinationName}
+                            />
+                            <button
+                              type="button"
+                              className="text-left text-sm font-medium text-slate-900"
+                              onClick={() => toggleExpand(row.id)}
+                            >
+                              {row.originCity} → {row.destinationCity}
+                            </button>
+                            <span className="text-xs text-slate-500">
+                              {first
+                                ? `${first.outboundTime} · д.${first.outboundDay}`
+                                : row.templateName}
+                            </span>
+                            <span className="text-xs text-slate-400">
+                              {row.defaultBus ?? "автобус не вказано"}
+                            </span>
+                            <button
+                              type="button"
+                              className="ml-auto text-xs text-brand-700"
+                              onClick={() => toggleExpand(row.id)}
+                            >
+                              {expanded.has(row.id) ? "згорнути" : "міста"}
+                            </button>
+                          </div>
+                          {expanded.has(row.id) ? (
+                            <table className="mt-3 w-full text-xs">
+                              <thead className="text-left text-slate-500">
+                                <tr>
+                                  <th className="py-1">№</th>
+                                  <th>Місто</th>
+                                  <th>Туди</th>
+                                  <th>Назад</th>
+                                  <th>Посадка</th>
+                                  <th>Видиме</th>
+                                  <th>Продаж</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {row.stops.map((stop) => {
+                                  const url = mapsUrl(stop);
+                                  return (
+                                    <tr
+                                      key={stop.id}
+                                      className="border-t border-slate-100"
+                                    >
+                                      <td className="py-1 pr-2">
+                                        {stop.sortOrder}
+                                      </td>
+                                      <td>{stop.city}</td>
+                                      <td>
+                                        д.{stop.outboundDay} {stop.outboundTime}
+                                      </td>
+                                      <td>
+                                        д.{stop.returnDay} {stop.returnTime}
+                                      </td>
+                                      <td>
+                                        {stop.addressLabel ||
+                                          stop.boardingAddress ||
+                                          "—"}
+                                        {url ? (
+                                          <>
+                                            {" "}
+                                            <a
+                                              href={url}
+                                              target="_blank"
+                                              rel="noreferrer"
+                                              className="text-brand-700"
+                                            >
+                                              карта
+                                            </a>
+                                          </>
+                                        ) : null}
+                                      </td>
+                                      <td>{stop.isVisible ? "так" : "ні"}</td>
+                                      <td>{stop.saleEnabled ? "так" : "ні"}</td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                          ) : null}
+                        </div>
+                      );
+                    })}
                   </div>
-                ))}
-              </div>
-            </section>
-          );
-        })
+                );
+              })}
+            </div>
+          </section>
+        ))
       )}
+
+      {totalPages > 1 ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            className={btnGhost}
+            disabled={page <= 1}
+            onClick={() => goPage(page - 1)}
+          >
+            Назад
+          </button>
+          <span className="text-sm text-slate-600">
+            Сторінка {page} з {totalPages}
+          </span>
+          <button
+            type="button"
+            className={btnGhost}
+            disabled={page >= totalPages}
+            onClick={() => goPage(page + 1)}
+          >
+            Далі
+          </button>
+        </div>
+      ) : null}
     </div>
   );
 }

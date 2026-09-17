@@ -12,6 +12,7 @@ export const dynamic = "force-dynamic";
 
 const include = {
   country: true,
+  originCountry: true,
   stops: { orderBy: { sortOrder: "asc" as const } },
   _count: { select: { departures: true } },
 };
@@ -60,6 +61,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         where: { id: params.id },
         data: {
           countryId: parsed.countryId,
+          originCountryId: parsed.originCountryId,
           name: parsed.name,
           originCity: parsed.originCity,
           destinationCity: parsed.destinationCity,

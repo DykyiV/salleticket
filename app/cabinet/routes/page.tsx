@@ -10,6 +10,7 @@ export default async function CabinetRoutesPage() {
     prisma.routeTemplate.findMany({
       include: {
         country: true,
+        originCountry: true,
         stops: { orderBy: { sortOrder: "asc" } },
         _count: { select: { departures: true } },
       },

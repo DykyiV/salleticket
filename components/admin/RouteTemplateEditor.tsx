@@ -24,6 +24,7 @@ type StopForm = {
 
 type FormState = {
   countryId: string;
+  originCountryId: string;
   name: string;
   originCity: string;
   destinationCity: string;
@@ -57,6 +58,7 @@ function emptyStop(order: number): StopForm {
 function fromTemplate(t: TemplateDTO): FormState {
   return {
     countryId: t.countryId,
+    originCountryId: t.originCountryId ?? "",
     name: t.name,
     originCity: t.originCity,
     destinationCity: t.destinationCity,
@@ -89,6 +91,7 @@ function fromTemplate(t: TemplateDTO): FormState {
 
 const EMPTY: FormState = {
   countryId: "",
+  originCountryId: "",
   name: "",
   originCity: "",
   destinationCity: "",
@@ -110,9 +113,15 @@ type Props = {
 
 export default function RouteTemplateEditor({ countries, template }: Props) {
   const router = useRouter();
-  const [values, setValues] = useState<FormState>(() =>
-    template ? fromTemplate(template) : { ...EMPTY, countryId: countries[0]?.id ?? "" }
-  );
+  const [values, setValues] = useState<FormState>(() => {
+    if (template) return fromTemplate(template);
+    const ukraine = countries.find((c) => c.code === "UA");
+    return {
+      ...EMPTY,
+      countryId: countries.find((c) => c.code !== "UA")?.id ?? countries[0]?.id ?? "",
+      originCountryId: ukraine?.id ?? countries[0]?.id ?? "",
+    };
+  });
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -182,6 +191,7 @@ export default function RouteTemplateEditor({ countries, template }: Props) {
 
   const payload = () => ({
     countryId: values.countryId,
+    originCountryId: values.originCountryId || null,
     name: values.name.trim() || autoName,
     originCity: values.originCity,
     destinationCity: values.destinationCity,
@@ -285,7 +295,22 @@ export default function RouteTemplateEditor({ countries, template }: Props) {
       <section className="rounded-2xl bg-white p-5 ring-1 ring-slate-200">
         <h2 className="text-base font-semibold text-slate-900">Маршрут</h2>
         <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          <Field label="Країна">
+          <Field label="Країна відправлення">
+            <select
+              required
+              className={inputClass}
+              value={values.originCountryId}
+              onChange={(e) => setField("originCountryId", e.target.value)}
+            >
+              <option value="">Оберіть країну</option>
+              {countries.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Країна прибуття">
             <select
               required
               className={inputClass}

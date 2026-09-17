@@ -77,8 +77,16 @@ async function main() {
     create: { name: "Польща", code: "PL", sortOrder: 3 },
     update: { code: "PL", sortOrder: 3 },
   });
-  void ukraine;
-  void poland;
+  const germany = await prisma.country.upsert({
+    where: { name: "Німеччина" },
+    create: { name: "Німеччина", code: "DE", sortOrder: 4 },
+    update: { code: "DE", sortOrder: 4 },
+  });
+
+  await prisma.routeTemplate.updateMany({
+    where: { originCountryId: null, NOT: { countryId: ukraine.id } },
+    data: { originCountryId: ukraine.id },
+  });
 
   let template = await prisma.routeTemplate.findFirst({
     where: { name: "Київ — Марбелья", countryId: spain.id },
@@ -87,6 +95,7 @@ async function main() {
     template = await prisma.routeTemplate.create({
       data: {
         countryId: spain.id,
+        originCountryId: ukraine.id,
         name: "Київ — Марбелья",
         originCity: "Київ",
         destinationCity: "Марбелья",
@@ -163,6 +172,11 @@ async function main() {
       },
     });
     console.log("  created template Київ — Марбелья");
+  } else if (!template.originCountryId) {
+    template = await prisma.routeTemplate.update({
+      where: { id: template.id },
+      data: { originCountryId: ukraine.id },
+    });
   }
 
   const generated = await generateDepartures({
@@ -172,6 +186,97 @@ async function main() {
   });
   console.log(
     `  generated departures: created=${generated.created} skipped=${generated.skipped}`
+  );
+
+  await seedCorridor({
+    name: "Київ — Берлін",
+    originCountryId: ukraine.id,
+    destinationCountryId: germany.id,
+    originCity: "Київ",
+    destinationCity: "Берлін",
+    weekdays: [2],
+    stops: [
+      { city: "Київ", outboundTime: "07:00", returnTime: "23:00", day: 1 },
+      { city: "Львів", outboundTime: "15:00", returnTime: "14:00", day: 1 },
+      { city: "Берлін", outboundTime: "06:00", returnTime: "20:00", day: 2 },
+    ],
+  });
+
+  await seedCorridor({
+    name: "Берлін — Київ",
+    originCountryId: germany.id,
+    destinationCountryId: ukraine.id,
+    originCity: "Берлін",
+    destinationCity: "Київ",
+    weekdays: [2],
+    stops: [
+      { city: "Берлін", outboundTime: "08:00", returnTime: "22:00", day: 1 },
+      { city: "Львів", outboundTime: "20:00", returnTime: "10:00", day: 1 },
+      { city: "Київ", outboundTime: "08:00", returnTime: "18:00", day: 2 },
+    ],
+  });
+
+  void poland;
+}
+
+type CorridorStop = {
+  city: string;
+  outboundTime: string;
+  returnTime: string;
+  day: number;
+};
+
+async function seedCorridor(options: {
+  name: string;
+  originCountryId: string;
+  destinationCountryId: string;
+  originCity: string;
+  destinationCity: string;
+  weekdays: number[];
+  stops: CorridorStop[];
+}) {
+  let template = await prisma.routeTemplate.findFirst({
+    where: { name: options.name, countryId: options.destinationCountryId },
+  });
+  if (!template) {
+    template = await prisma.routeTemplate.create({
+      data: {
+        countryId: options.destinationCountryId,
+        originCountryId: options.originCountryId,
+        name: options.name,
+        originCity: options.originCity,
+        destinationCity: options.destinationCity,
+        departureWeekdays: stringifyWeekdays(options.weekdays),
+        ukraineDepartureWeekday: options.weekdays[0] ?? 2,
+        defaultBus: "Setra S 516 HD",
+        stops: {
+          create: options.stops.map((stop, index) => ({
+            sortOrder: index + 1,
+            city: stop.city,
+            outboundDay: stop.day,
+            outboundTime: stop.outboundTime,
+            returnDay: stop.day,
+            returnTime: stop.returnTime,
+            visibleByDefault: true,
+          })),
+        },
+      },
+    });
+    console.log(`  created template ${options.name}`);
+  } else if (!template.originCountryId) {
+    template = await prisma.routeTemplate.update({
+      where: { id: template.id },
+      data: { originCountryId: options.originCountryId },
+    });
+  }
+
+  const generated = await generateDepartures({
+    templateId: template.id,
+    from: todayUtc(),
+    to: addUtcDays(todayUtc(), 56),
+  });
+  console.log(
+    `  generated ${options.name}: created=${generated.created} skipped=${generated.skipped}`
   );
 }
 
