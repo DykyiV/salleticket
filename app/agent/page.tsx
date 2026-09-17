@@ -1,3 +1,4 @@
+import Link from "next/link";
 import Header from "@/components/Header";
 import { getCurrentUser } from "@/lib/auth/session";
 
@@ -14,21 +15,34 @@ export default async function AgentPage() {
             AGENT
           </span>
           <h1 className="mt-3 text-2xl font-bold tracking-tight text-slate-900">
-            Agent console
+            Кабінет агента
           </h1>
           <p className="mt-1 text-sm text-slate-500">
-            Gated by <code className="rounded bg-slate-100 px-1.5 py-0.5">middleware.ts</code> —
-            AGENT / ADMIN / SUPER_ADMIN only.
+            Графік виїздів і підказки посадки. Редагування — якщо адмін надав права.
           </p>
 
           {user ? (
             <div className="mt-6 rounded-2xl bg-white p-6 ring-1 ring-slate-200">
-              <p className="text-sm text-slate-500">Current user</p>
+              <p className="text-sm text-slate-500">Поточний користувач</p>
               <p className="mt-1 text-base font-semibold text-slate-900">
                 {user.email} · {user.role}
               </p>
             </div>
           ) : null}
+
+          <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <Link
+              href="/agent/departures"
+              className="group rounded-2xl border border-slate-200 bg-white p-6 transition hover:-translate-y-0.5 hover:border-brand-300 hover:shadow-md"
+            >
+              <p className="text-sm font-semibold text-slate-900 group-hover:text-brand-700">
+                Виїзди
+              </p>
+              <p className="mt-1 text-xs text-slate-500">
+                Список рейсів, посадка/висадка, масове редагування за правами.
+              </p>
+            </Link>
+          </div>
         </div>
       </main>
     </div>

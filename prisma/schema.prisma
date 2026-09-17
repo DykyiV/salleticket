@@ -42,6 +42,10 @@ model User {
   email     String   @unique
   password  String
   role      Role     @default(USER)
+  /// Agent-only operational grants. Admins always have these capabilities.
+  canEditDepartures Boolean @default(false)
+  canHideStops      Boolean @default(false)
+  canHideSeats      Boolean @default(false)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -109,8 +113,12 @@ model Trip {
 
   tickets Ticket[]
 
+  departureId String?
+  departure   Departure? @relation(fields: [departureId], references: [id], onDelete: SetNull)
+
   @@index([fromCity, toCity, departureTime])
   @@index([carrierId])
+  @@index([departureId])
   @@map("trips")
 }
 
@@ -190,4 +198,129 @@ model Booking {
 
   @@index([reference])
   @@map("bookings")
+}
+
+/// Destination country used to group route templates in the admin UI.
+model Country {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  code      String?  @unique
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  templates RouteTemplate[]
+
+  @@map("countries")
+}
+
+/// Reusable schedule template for regular departures ("шаблон маршруту").
+model RouteTemplate {
+  id          String  @id @default(cuid())
+  countryId   String
+  country     Country @relation(fields: [countryId], references: [id], onDelete: Restrict)
+  name        String
+  originCity  String
+  destinationCity String
+  /// JSON array of ISO weekdays 1=Mon … 7=Sun, e.g. "[2,4]" for Tue+Thu.
+  departureWeekdays String @default("[]")
+  busPhone          String?
+  dispatcherPhone   String?
+  /// Weekday the outbound leaves Ukraine (1–7).
+  ukraineDepartureWeekday Int?
+  /// Weekday the return arrives back in Ukraine (1–7).
+  ukraineReturnWeekday    Int?
+  defaultBus String?
+  comment    String?
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  stops      RouteTemplateStop[]
+  departures Departure[]
+
+  @@index([countryId])
+  @@index([isActive])
+  @@map("route_templates")
+}
+
+model RouteTemplateStop {
+  id               String        @id @default(cuid())
+  templateId       String
+  template         RouteTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  sortOrder        Int
+  city             String
+  /// 1-based day along the outbound journey (routes can last 2–5+ days).
+  outboundDay      Int
+  outboundTime     String
+  returnDay        Int
+  returnTime       String
+  addressLabel     String?
+  boardingAddress  String?
+  latitude         Float?
+  longitude        Float?
+  visibleByDefault Boolean       @default(true)
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  departureStops DepartureStop[]
+
+  @@unique([templateId, sortOrder])
+  @@index([templateId])
+  @@map("route_template_stops")
+}
+
+/// A concrete calendar run generated from a template ("виїзд").
+model Departure {
+  id                      String        @id @default(cuid())
+  templateId              String
+  template                RouteTemplate @relation(fields: [templateId], references: [id], onDelete: Restrict)
+  /// UTC midnight of the Ukraine outbound date.
+  date                    DateTime
+  weekday                 Int
+  busPhone                String?
+  dispatcherPhone         String?
+  defaultBus              String?
+  comment                 String?
+  ukraineDepartureWeekday Int?
+  ukraineReturnWeekday    Int?
+  createdAt               DateTime      @default(now())
+  updatedAt               DateTime      @updatedAt
+
+  stops DepartureStop[]
+  trips Trip[]
+
+  @@unique([templateId, date])
+  @@index([date])
+  @@index([templateId])
+  @@map("departures")
+}
+
+model DepartureStop {
+  id              String             @id @default(cuid())
+  departureId     String
+  departure       Departure          @relation(fields: [departureId], references: [id], onDelete: Cascade)
+  templateStopId  String?
+  templateStop    RouteTemplateStop? @relation(fields: [templateStopId], references: [id], onDelete: SetNull)
+  sortOrder       Int
+  city            String
+  outboundDay     Int
+  outboundTime    String
+  returnDay       Int
+  returnTime      String
+  addressLabel    String?
+  boardingAddress String?
+  latitude        Float?
+  longitude       Float?
+  /// Shown in itinerary / ticket. Hidden cities stay on the run for ops.
+  isVisible       Boolean            @default(true)
+  /// When false, this city is not offered for sale (seats hidden).
+  saleEnabled     Boolean            @default(true)
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  @@unique([departureId, sortOrder])
+  @@index([departureId])
+  @@index([templateStopId])
+  @@map("departure_stops")
 }

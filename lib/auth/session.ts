@@ -47,6 +47,9 @@ export async function getCurrentUser() {
         id: true,
         email: true,
         role: true,
+        canEditDepartures: true,
+        canHideStops: true,
+        canHideSeats: true,
         createdAt: true,
       },
     });
@@ -58,6 +61,9 @@ export async function getCurrentUser() {
     id: session.sub,
     email: session.email,
     role: session.role,
+    canEditDepartures: false,
+    canHideStops: false,
+    canHideSeats: false,
     createdAt: new Date(0),
   };
 }
