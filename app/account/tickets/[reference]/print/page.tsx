@@ -110,7 +110,16 @@ export default async function PrintTicketPage({
             {board?.boardingAddress ? <p>{board.boardingAddress}</p> : null}
             {board?.outboundTime ? <p>Час: {board.outboundTime}</p> : null}
             {boardUrl ? (
-              <p className="mt-1 break-all text-xs text-slate-500">{boardUrl}</p>
+              <p className="mt-1 print:hidden">
+                <a
+                  href={boardUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-xs text-slate-500 underline"
+                >
+                  Карта
+                </a>
+              </p>
             ) : null}
           </div>
           <div>
@@ -123,7 +132,16 @@ export default async function PrintTicketPage({
             {alight?.boardingAddress ? <p>{alight.boardingAddress}</p> : null}
             {alight?.outboundTime ? <p>Час: {alight.outboundTime}</p> : null}
             {alightUrl ? (
-              <p className="mt-1 break-all text-xs text-slate-500">{alightUrl}</p>
+              <p className="mt-1 print:hidden">
+                <a
+                  href={alightUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-xs text-slate-500 underline"
+                >
+                  Карта
+                </a>
+              </p>
             ) : null}
           </div>
         </section>
