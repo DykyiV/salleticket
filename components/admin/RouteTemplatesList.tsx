@@ -111,7 +111,7 @@ export default function RouteTemplatesList({
             Додати країну
           </button>
         </form>
-        <Link href="/admin/route-templates/new" className={btnPrimary}>
+        <Link href="/cabinet/routes/new" className={btnPrimary}>
           Новий шаблон маршруту
         </Link>
       </div>
@@ -176,13 +176,13 @@ export default function RouteTemplatesList({
                         </td>
                         <td className="px-4 py-3 text-right">
                           <Link
-                            href={`/admin/route-templates/${row.id}`}
+                            href={`/cabinet/routes/${row.id}`}
                             className="mr-2 rounded border border-slate-300 bg-white px-2 py-1 text-xs"
                           >
                             Редагувати
                           </Link>
                           <Link
-                            href={`/admin/departures?templateId=${row.id}`}
+                            href={`/cabinet/departures?templateId=${row.id}`}
                             className="mr-2 rounded border border-slate-300 bg-white px-2 py-1 text-xs"
                           >
                             Виїзди

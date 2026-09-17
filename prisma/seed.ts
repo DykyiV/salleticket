@@ -51,8 +51,11 @@ async function main() {
     console.log(`  upserted promo ${p.code}`);
   }
 
-  await upsertUser("admin@asolbus.local", "Admin12345", "ADMIN");
+  await upsertUser("admin@asolbus.local", "Admin12345", "ADMIN", {
+    displayName: "Адміністратор",
+  });
   await upsertUser("agent@asolbus.local", "Agent12345", "AGENT", {
+    displayName: "Агент",
     canEditDepartures: true,
     canHideStops: true,
     canHideSeats: true,

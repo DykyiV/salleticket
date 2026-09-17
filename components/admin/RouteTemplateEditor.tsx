@@ -246,7 +246,7 @@ export default function RouteTemplateEditor({ countries, template }: Props) {
         setMessage(`Збережено.${extra}`);
         router.refresh();
       } else {
-        router.push(`/admin/route-templates/${data.template.id}`);
+        router.push(`/cabinet/routes/${data.template.id}`);
         router.refresh();
       }
     } catch (err) {
@@ -692,7 +692,7 @@ export default function RouteTemplateEditor({ countries, template }: Props) {
         <button
           type="button"
           className={btnGhost}
-          onClick={() => router.push("/admin/route-templates")}
+          onClick={() => router.push("/cabinet/routes")}
         >
           Назад до списку
         </button>

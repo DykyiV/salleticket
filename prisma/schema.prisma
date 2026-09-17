@@ -41,6 +41,8 @@ model User {
   id        String   @id @default(cuid())
   email     String   @unique
   password  String
+  displayName String?
+  avatarUrl   String?
   role      Role     @default(USER)
   /// Agent-only operational grants. Admins always have these capabilities.
   canEditDepartures Boolean @default(false)
