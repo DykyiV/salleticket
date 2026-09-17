@@ -3,11 +3,13 @@
  *
  * Run with:  npm run db:seed
  */
-import { PrismaClient, Role } from "@prisma/client";
+import { AgeCategory, PrismaClient, Role, TicketStatus } from "@prisma/client";
 import { hashPassword } from "../lib/auth/password";
 import { stringifyWeekdays } from "../lib/routes/weekdays";
 import { generateDepartures } from "../lib/routes/generate";
-import { addUtcDays, todayUtc } from "../lib/routes/dates";
+import { addUtcDays, combineUtcDateTime, todayUtc } from "../lib/routes/dates";
+import { computePrice, type AgeCategoryId } from "../lib/pricing";
+import { recordTicketHistory } from "../lib/tickets/history";
 
 const prisma = new PrismaClient();
 
@@ -196,9 +198,34 @@ async function main() {
     destinationCity: "Берлін",
     weekdays: [2],
     stops: [
-      { city: "Київ", outboundTime: "07:00", returnTime: "23:00", day: 1 },
-      { city: "Львів", outboundTime: "15:00", returnTime: "14:00", day: 1 },
-      { city: "Берлін", outboundTime: "06:00", returnTime: "20:00", day: 2 },
+      {
+        city: "Київ",
+        outboundTime: "07:00",
+        returnTime: "23:00",
+        day: 1,
+        addressLabel: "Київ, Центральний автовокзал",
+        boardingAddress: "вул. Симона Петлюри, 32",
+        latitude: 50.4408,
+        longitude: 30.4892,
+      },
+      {
+        city: "Львів",
+        outboundTime: "15:00",
+        returnTime: "14:00",
+        day: 1,
+        addressLabel: "Львів, автовокзал",
+        boardingAddress: "вул. Стрийська, 109",
+      },
+      {
+        city: "Берлін",
+        outboundTime: "06:00",
+        returnTime: "20:00",
+        day: 2,
+        addressLabel: "ZOB Berlin",
+        boardingAddress: "Messedamm 8, 14055 Berlin",
+        latitude: 52.5074,
+        longitude: 13.2795,
+      },
     ],
   });
 
@@ -210,11 +237,38 @@ async function main() {
     destinationCity: "Київ",
     weekdays: [2],
     stops: [
-      { city: "Берлін", outboundTime: "08:00", returnTime: "22:00", day: 1 },
-      { city: "Львів", outboundTime: "20:00", returnTime: "10:00", day: 1 },
-      { city: "Київ", outboundTime: "08:00", returnTime: "18:00", day: 2 },
+      {
+        city: "Берлін",
+        outboundTime: "08:00",
+        returnTime: "22:00",
+        day: 1,
+        addressLabel: "ZOB Berlin",
+        boardingAddress: "Messedamm 8, 14055 Berlin",
+        latitude: 52.5074,
+        longitude: 13.2795,
+      },
+      {
+        city: "Львів",
+        outboundTime: "20:00",
+        returnTime: "10:00",
+        day: 1,
+        addressLabel: "Львів, автовокзал",
+        boardingAddress: "вул. Стрийська, 109",
+      },
+      {
+        city: "Київ",
+        outboundTime: "08:00",
+        returnTime: "18:00",
+        day: 2,
+        addressLabel: "Київ, Центральний автовокзал",
+        boardingAddress: "вул. Симона Петлюри, 32",
+        latitude: 50.4408,
+        longitude: 30.4892,
+      },
     ],
   });
+
+  await seedDemoTickets();
 
   void poland;
 }
@@ -224,6 +278,10 @@ type CorridorStop = {
   outboundTime: string;
   returnTime: string;
   day: number;
+  addressLabel?: string;
+  boardingAddress?: string;
+  latitude?: number;
+  longitude?: number;
 };
 
 async function seedCorridor(options: {
@@ -249,6 +307,8 @@ async function seedCorridor(options: {
         departureWeekdays: stringifyWeekdays(options.weekdays),
         ukraineDepartureWeekday: options.weekdays[0] ?? 2,
         defaultBus: "Setra S 516 HD",
+        busPhone: "+380671112233",
+        dispatcherPhone: "+380501112233",
         stops: {
           create: options.stops.map((stop, index) => ({
             sortOrder: index + 1,
@@ -257,17 +317,32 @@ async function seedCorridor(options: {
             outboundTime: stop.outboundTime,
             returnDay: stop.day,
             returnTime: stop.returnTime,
+            addressLabel: stop.addressLabel,
+            boardingAddress: stop.boardingAddress,
+            latitude: stop.latitude,
+            longitude: stop.longitude,
             visibleByDefault: true,
           })),
         },
       },
     });
     console.log(`  created template ${options.name}`);
-  } else if (!template.originCountryId) {
-    template = await prisma.routeTemplate.update({
-      where: { id: template.id },
-      data: { originCountryId: options.originCountryId },
-    });
+  } else {
+    const patch: {
+      originCountryId?: string;
+      busPhone?: string;
+      dispatcherPhone?: string;
+    } = {};
+    if (!template.originCountryId) patch.originCountryId = options.originCountryId;
+    if (!template.busPhone) patch.busPhone = "+380671112233";
+    if (!template.dispatcherPhone) patch.dispatcherPhone = "+380501112233";
+    if (Object.keys(patch).length) {
+      template = await prisma.routeTemplate.update({
+        where: { id: template.id },
+        data: patch,
+      });
+    }
+    await backfillStopAddresses(template.id, options.stops);
   }
 
   const generated = await generateDepartures({
@@ -278,6 +353,216 @@ async function seedCorridor(options: {
   console.log(
     `  generated ${options.name}: created=${generated.created} skipped=${generated.skipped}`
   );
+}
+
+async function backfillStopAddresses(templateId: string, stops: CorridorStop[]) {
+  for (const stop of stops) {
+    if (!stop.boardingAddress && !stop.addressLabel) continue;
+    await prisma.routeTemplateStop.updateMany({
+      where: {
+        templateId,
+        city: stop.city,
+        boardingAddress: null,
+      },
+      data: {
+        addressLabel: stop.addressLabel,
+        boardingAddress: stop.boardingAddress,
+        latitude: stop.latitude,
+        longitude: stop.longitude,
+      },
+    });
+    await prisma.departureStop.updateMany({
+      where: {
+        city: stop.city,
+        boardingAddress: null,
+        departure: { templateId },
+      },
+      data: {
+        addressLabel: stop.addressLabel,
+        boardingAddress: stop.boardingAddress,
+        latitude: stop.latitude,
+        longitude: stop.longitude,
+      },
+    });
+  }
+  await prisma.departure.updateMany({
+    where: { templateId, busPhone: null },
+    data: {
+      busPhone: "+380671112233",
+      dispatcherPhone: "+380501112233",
+    },
+  });
+}
+
+async function findOrCreateTripForRoute(routeName: string) {
+  const now = todayUtc();
+  const upcoming = await prisma.trip.findFirst({
+    where: {
+      departure: { template: { name: routeName } },
+      departureTime: { gte: now },
+    },
+    orderBy: { departureTime: "asc" },
+  });
+  if (upcoming) return upcoming;
+
+  const departure = await prisma.departure.findFirst({
+    where: { template: { name: routeName }, date: { gte: now } },
+    include: {
+      trips: true,
+      template: { include: { stops: { orderBy: { sortOrder: "asc" } } } },
+    },
+    orderBy: { date: "asc" },
+  });
+  if (!departure) {
+    throw new Error(`Немає виїзду для ${routeName}`);
+  }
+  if (departure.trips[0]) return departure.trips[0];
+
+  const first = departure.template.stops[0];
+  const last = departure.template.stops[departure.template.stops.length - 1];
+  if (!first || !last) {
+    throw new Error(`У шаблоні ${routeName} немає зупинок`);
+  }
+  const carrier = await prisma.carrier.upsert({
+    where: { name: "Asol BUS" },
+    create: { name: "Asol BUS", rating: 4.8 },
+    update: {},
+  });
+  return prisma.trip.create({
+    data: {
+      fromCity: departure.template.originCity,
+      toCity: departure.template.destinationCity,
+      departureTime: combineUtcDateTime(
+        departure.date,
+        first.outboundDay,
+        first.outboundTime
+      ),
+      arrivalTime: combineUtcDateTime(
+        departure.date,
+        last.outboundDay,
+        last.outboundTime
+      ),
+      price: 99,
+      carrierId: carrier.id,
+      departureId: departure.id,
+    },
+  });
+}
+
+async function seedDemoTickets() {
+  const admin = await prisma.user.findUnique({
+    where: { email: "admin@asolbus.local" },
+  });
+  if (!admin) {
+    throw new Error("admin@asolbus.local не знайдено");
+  }
+
+  const demos: Array<{
+    reference: string;
+    routeName: string;
+    firstName: string;
+    lastName: string;
+    phone: string;
+    email: string;
+    ageCategory: AgeCategory;
+    status: TicketStatus;
+    promoCode: string | null;
+  }> = [
+    {
+      reference: "AB-DEMO01",
+      routeName: "Київ — Марбелья",
+      firstName: "Олена",
+      lastName: "Коваленко",
+      phone: "+380671234567",
+      email: "olena.kovalenko@example.com",
+      ageCategory: AgeCategory.ADULT,
+      status: TicketStatus.RESERVED,
+      promoCode: null,
+    },
+    {
+      reference: "AB-DEMO02",
+      routeName: "Київ — Берлін",
+      firstName: "Іван",
+      lastName: "Петренко",
+      phone: "+380509876543",
+      email: "ivan.petrenko@example.com",
+      ageCategory: AgeCategory.CHILD_5_12,
+      status: TicketStatus.PAID_ONLINE,
+      promoCode: "DISCOUNT10",
+    },
+    {
+      reference: "AB-DEMO03",
+      routeName: "Берлін — Київ",
+      firstName: "Марія",
+      lastName: "Шевченко",
+      phone: "+380931112233",
+      email: "maria.shevchenko@example.com",
+      ageCategory: AgeCategory.SENIOR_60,
+      status: TicketStatus.PAID_CASH,
+      promoCode: null,
+    },
+  ];
+
+  for (const demo of demos) {
+    const existing = await prisma.booking.findUnique({
+      where: { reference: demo.reference },
+    });
+    if (existing) {
+      console.log(`  demo ticket ${demo.reference} already exists`);
+      continue;
+    }
+
+    const trip = await findOrCreateTripForRoute(demo.routeName);
+    const promo = demo.promoCode
+      ? await prisma.promo.findUnique({ where: { code: demo.promoCode } })
+      : null;
+    const pricing = computePrice(
+      trip.price,
+      demo.ageCategory as AgeCategoryId,
+      promo
+    );
+
+    const ticket = await prisma.ticket.create({
+      data: {
+        userId: admin.id,
+        tripId: trip.id,
+        status: demo.status,
+        basePrice: pricing.basePrice,
+        finalPrice: pricing.finalPrice,
+        booking: {
+          create: {
+            reference: demo.reference,
+            firstName: demo.firstName,
+            lastName: demo.lastName,
+            ageCategory: demo.ageCategory,
+            phone: demo.phone,
+            email: demo.email,
+            promoCode: demo.promoCode,
+            finalPrice: pricing.finalPrice,
+          },
+        },
+      },
+    });
+
+    await recordTicketHistory(prisma, {
+      ticketId: ticket.id,
+      action: "CREATED",
+      oldStatus: null,
+      newStatus: demo.status,
+      source: "SYSTEM",
+      changedBy: admin.id,
+      changes: {
+        reference: { from: null, to: demo.reference },
+        status: { from: null, to: demo.status },
+        passenger: {
+          from: null,
+          to: `${demo.firstName} ${demo.lastName}`,
+        },
+        trip: { from: null, to: demo.routeName },
+      },
+    });
+    console.log(`  created demo ticket ${demo.reference} on ${demo.routeName}`);
+  }
 }
 
 main()

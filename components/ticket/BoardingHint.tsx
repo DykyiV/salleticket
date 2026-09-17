@@ -13,6 +13,7 @@ export default function BoardingHint({ label, stop }: Props) {
     <div className="text-sm text-slate-700">
       <span className="font-medium">{label}: </span>
       {text}
+      {stop.outboundTime ? ` · ${stop.outboundTime}` : ""}
       {url ? (
         <>
           {" "}
