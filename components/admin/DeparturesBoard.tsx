@@ -20,6 +20,7 @@ type Props = {
   initialFrom: string;
   initialTo: string;
   initialTemplateId?: string;
+  initialDepartures?: DepartureDTO[];
   capabilities: Capabilities;
 };
 
@@ -35,6 +36,7 @@ export default function DeparturesBoard({
   initialFrom,
   initialTo,
   initialTemplateId,
+  initialDepartures = [],
   capabilities,
 }: Props) {
   const listUrl =
@@ -47,7 +49,7 @@ export default function DeparturesBoard({
   const [from, setFrom] = useState(initialFrom);
   const [to, setTo] = useState(initialTo);
   const [templateId, setTemplateId] = useState(initialTemplateId ?? "");
-  const [departures, setDepartures] = useState<DepartureDTO[]>([]);
+  const [departures, setDepartures] = useState<DepartureDTO[]>(initialDepartures);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);

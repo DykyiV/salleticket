@@ -1,10 +1,11 @@
+import Link from "next/link";
 import Header from "@/components/Header";
 import DeparturesBoard from "@/components/admin/DeparturesBoard";
 import { getCurrentUser } from "@/lib/auth/session";
 import { departureCapabilities } from "@/lib/routes/permissions";
-import { addUtcDays, toIsoDate, todayUtc } from "@/lib/routes/dates";
+import { addUtcDays, toIsoDate, todayUtc, utcDateOnly } from "@/lib/routes/dates";
+import { toDepartureDTO } from "@/lib/routes/serialize";
 import { prisma } from "@/lib/db";
-import Link from "next/link";
 
 export const dynamic = "force-dynamic";
 
@@ -31,6 +32,17 @@ export default async function AgentDeparturesPage() {
     }
   );
 
+  const from = toIsoDate(todayUtc());
+  const to = toIsoDate(addUtcDays(todayUtc(), 60));
+  const rows = await prisma.departure.findMany({
+    where: { date: { gte: utcDateOnly(from), lte: utcDateOnly(to) } },
+    include: {
+      template: { include: { country: true } },
+      stops: { orderBy: { sortOrder: "asc" } },
+    },
+    orderBy: [{ date: "asc" }, { template: { name: "asc" } }],
+  });
+
   return (
     <div className="flex min-h-screen flex-col">
       <Header />
@@ -56,8 +68,9 @@ export default async function AgentDeparturesPage() {
           <div className="mt-6">
             <DeparturesBoard
               mode="agent"
-              initialFrom={toIsoDate(todayUtc())}
-              initialTo={toIsoDate(addUtcDays(todayUtc(), 60))}
+              initialFrom={from}
+              initialTo={to}
+              initialDepartures={rows.map(toDepartureDTO)}
               capabilities={caps}
             />
           </div>
