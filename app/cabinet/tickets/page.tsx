@@ -1,7 +1,10 @@
 import Link from "next/link";
+import { Prisma, TicketStatus } from "@prisma/client";
 import PageHeader from "@/components/cabinet/PageHeader";
 import BoardingHint from "@/components/ticket/BoardingHint";
+import { inputClass, btnGhost } from "@/components/admin/Field";
 import { getCurrentUser } from "@/lib/auth/session";
+import { hasRoleAtLeast } from "@/lib/auth/constants";
 import { prisma } from "@/lib/db";
 import { findStopForCity } from "@/lib/routes/boarding";
 import { formatUkDate } from "@/lib/routes/dates";
@@ -15,14 +18,53 @@ import {
 
 export const dynamic = "force-dynamic";
 
-export default async function CabinetTicketsPage() {
+const STATUSES: TicketStatus[] = [
+  "RESERVED",
+  "PAID_ONLINE",
+  "PAID_CASH",
+  "CANCELLED",
+  "REFUNDED",
+];
+
+export default async function CabinetTicketsPage({
+  searchParams,
+}: {
+  searchParams: { status?: string; q?: string };
+}) {
   const user = await getCurrentUser();
+  const staff = user ? hasRoleAtLeast(user.role, "AGENT") : false;
+  const q = (searchParams.q ?? "").trim();
+  const statusFilter =
+    searchParams.status && STATUSES.includes(searchParams.status as TicketStatus)
+      ? (searchParams.status as TicketStatus)
+      : undefined;
+
+  const ticketWhere: Prisma.TicketWhereInput = {
+    ...(user && !staff ? { userId: user.id } : {}),
+    ...(statusFilter ? { status: statusFilter } : {}),
+  };
+  const where: Prisma.BookingWhereInput = {
+    ...(Object.keys(ticketWhere).length ? { ticket: ticketWhere } : {}),
+    ...(q
+      ? {
+          OR: [
+            { reference: { contains: q } },
+            { firstName: { contains: q } },
+            { lastName: { contains: q } },
+            { phone: { contains: q } },
+            { email: { contains: q } },
+          ],
+        }
+      : {}),
+  };
+
   const bookings = user
     ? await prisma.booking.findMany({
-        where: { ticket: { userId: user.id } },
+        where,
         include: {
           ticket: {
             include: {
+              user: { select: { email: true } },
               trip: {
                 include: {
                   carrier: true,
@@ -33,7 +75,7 @@ export default async function CabinetTicketsPage() {
           },
         },
         orderBy: { createdAt: "desc" },
-        take: 50,
+        take: 80,
       })
     : [];
 
@@ -41,11 +83,50 @@ export default async function CabinetTicketsPage() {
     <div className="mx-auto max-w-4xl">
       <PageHeader
         title="Квитки"
-        subtitle="Ваші бронювання. Відкрийте квиток, щоб змінити дані пасажира, або друковану версію."
+        subtitle={
+          staff
+            ? "Усі бронювання. Відкрийте квиток, щоб змінити пасажира чи статус, або друковану версію."
+            : "Ваші бронювання. Відкрийте квиток, щоб змінити дані пасажира, або друковану версію."
+        }
       />
+
+      <form
+        method="GET"
+        action="/cabinet/tickets"
+        className="mb-4 flex flex-wrap items-end gap-2"
+      >
+        <label className="block text-xs">
+          <span className="mb-1 block font-medium text-slate-600">Пошук</span>
+          <input
+            className={`${inputClass} w-64`}
+            name="q"
+            defaultValue={q}
+            placeholder="Код, прізвище, телефон…"
+          />
+        </label>
+        <label className="block text-xs">
+          <span className="mb-1 block font-medium text-slate-600">Статус</span>
+          <select
+            className={`${inputClass} w-52`}
+            name="status"
+            defaultValue={statusFilter ?? ""}
+          >
+            <option value="">Усі статуси</option>
+            {STATUSES.map((status) => (
+              <option key={status} value={status}>
+                {TICKET_STATUS_LABEL[status]}
+              </option>
+            ))}
+          </select>
+        </label>
+        <button type="submit" className={btnGhost}>
+          Показати
+        </button>
+      </form>
+
       {bookings.length === 0 ? (
         <p className="rounded-2xl bg-white p-6 text-sm text-slate-500 ring-1 ring-slate-200">
-          Квитків ще немає.{" "}
+          Квитків не знайдено.{" "}
           <Link href="/" className="text-brand-700 underline">
             Знайти рейс
           </Link>
@@ -86,6 +167,11 @@ export default async function CabinetTicketsPage() {
                             ((trip.departureTime.getUTCDay() || 7) as number)
                         )}
                         {trip.carrier?.name ? ` · ${trip.carrier.name}` : ""}
+                      </p>
+                    ) : null}
+                    {staff && booking.ticket.user.email ? (
+                      <p className="mt-1 text-xs text-slate-400">
+                        {booking.ticket.user.email}
                       </p>
                     ) : null}
                   </div>

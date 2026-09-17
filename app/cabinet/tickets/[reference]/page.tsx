@@ -2,7 +2,9 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import PageHeader from "@/components/cabinet/PageHeader";
 import BoardingHint from "@/components/ticket/BoardingHint";
+import CancelTicketButton from "@/components/ticket/CancelTicketButton";
 import PassengerEditor from "@/components/ticket/PassengerEditor";
+import TicketStatusControl from "@/components/ticket/TicketStatusControl";
 import { getCurrentUser } from "@/lib/auth/session";
 import { hasRoleAtLeast } from "@/lib/auth/constants";
 import { prisma } from "@/lib/db";
@@ -12,6 +14,7 @@ import { weekdayName } from "@/lib/routes/weekdays";
 import {
   AGE_LABEL,
   eur,
+  HISTORY_ACTION_LABEL,
   TICKET_STATUS_CLASS,
   TICKET_STATUS_LABEL,
 } from "@/lib/tickets/labels";
@@ -129,6 +132,31 @@ export default async function CabinetTicketEditPage({
         </div>
       </section>
 
+      {staff ? (
+        <section className="rounded-2xl bg-white p-5 ring-1 ring-slate-200">
+          <h2 className="text-sm font-semibold text-slate-900">Статус</h2>
+          <p className="mt-1 text-xs text-slate-500">
+            Зміна записується в історію квитка.
+          </p>
+          <div className="mt-4">
+            <TicketStatusControl
+              ticketId={booking.ticket.id}
+              currentStatus={status}
+            />
+          </div>
+        </section>
+      ) : status === "RESERVED" ? (
+        <section className="rounded-2xl bg-white p-5 ring-1 ring-slate-200">
+          <h2 className="text-sm font-semibold text-slate-900">Скасування</h2>
+          <p className="mt-1 text-xs text-slate-500">
+            Незаплачений квиток можна скасувати самостійно.
+          </p>
+          <div className="mt-4">
+            <CancelTicketButton ticketId={booking.ticket.id} />
+          </div>
+        </section>
+      ) : null}
+
       <section className="rounded-2xl bg-white p-5 ring-1 ring-slate-200">
         <h2 className="text-sm font-semibold text-slate-900">Оплата</h2>
         <dl className="mt-3 grid grid-cols-2 gap-2 text-sm">
@@ -154,7 +182,9 @@ export default async function CabinetTicketEditPage({
                 <span className="tabular-nums text-slate-400">
                   {row.timestamp.toISOString().slice(0, 16).replace("T", " ")}
                 </span>
-                <span className="ml-2 font-medium text-slate-800">{row.action}</span>
+                <span className="ml-2 font-medium text-slate-800">
+                  {HISTORY_ACTION_LABEL[row.action] ?? row.action}
+                </span>
                 {row.source ? (
                   <span className="ml-2 text-slate-400">{row.source}</span>
                 ) : null}

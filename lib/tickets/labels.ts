@@ -23,6 +23,45 @@ export const AGE_LABEL: Record<string, string> = {
   SENIOR_60: "60+",
 };
 
+export const HISTORY_ACTION_LABEL: Record<string, string> = {
+  CREATED: "Створено",
+  PASSENGER_UPDATED: "Змінено пасажира",
+  STATUS_CHANGE: "Змінено статус",
+  STATUS_CONFIRMED: "Підтверджено статус",
+  CANCELLED_BY_OWNER: "Скасовано пасажиром",
+};
+
+export const STATUS_TRANSITIONS: Record<TicketStatus, TicketStatus[]> = {
+  RESERVED: ["PAID_ONLINE", "PAID_CASH", "CANCELLED"],
+  PAID_ONLINE: ["REFUNDED", "CANCELLED"],
+  PAID_CASH: ["REFUNDED", "CANCELLED"],
+  CANCELLED: [],
+  REFUNDED: [],
+};
+
+export const STATUS_ACTION_LABEL: Record<TicketStatus, string> = {
+  RESERVED: "Повернути в резерв",
+  PAID_ONLINE: "Позначити оплаченим онлайн",
+  PAID_CASH: "Позначити оплаченим готівкою",
+  CANCELLED: "Скасувати квиток",
+  REFUNDED: "Повернути кошти",
+};
+
+export const STATUS_ACTION_CLASS: Record<TicketStatus, string> = {
+  RESERVED: "border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100",
+  PAID_ONLINE: "border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100",
+  PAID_CASH: "border-sky-200 bg-sky-50 text-sky-800 hover:bg-sky-100",
+  CANCELLED: "border-rose-200 bg-rose-50 text-rose-800 hover:bg-rose-100",
+  REFUNDED: "border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100",
+};
+
+export function isStatusTransitionAllowed(
+  from: TicketStatus,
+  to: TicketStatus
+): boolean {
+  return STATUS_TRANSITIONS[from].includes(to);
+}
+
 export function eur(n: number): string {
   return `€${n.toFixed(2)}`;
 }

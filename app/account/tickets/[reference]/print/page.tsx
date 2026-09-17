@@ -1,4 +1,6 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
+import PrintTicketButton from "@/components/ticket/PrintTicketButton";
 import { getCurrentUser } from "@/lib/auth/session";
 import { hasRoleAtLeast } from "@/lib/auth/constants";
 import { prisma } from "@/lib/db";
@@ -108,7 +110,11 @@ export default async function PrintTicketPage({
               {board ? boardingLabel(board) : trip?.fromCity ?? "—"}
             </p>
             {board?.boardingAddress ? <p>{board.boardingAddress}</p> : null}
-            {board?.outboundTime ? <p>Час: {board.outboundTime}</p> : null}
+            {board?.outboundTime ? (
+              <p className="mt-1 text-lg font-semibold tabular-nums">
+                {board.outboundTime}
+              </p>
+            ) : null}
             {boardUrl ? (
               <p className="mt-1 print:hidden">
                 <a
@@ -130,7 +136,11 @@ export default async function PrintTicketPage({
               {alight ? boardingLabel(alight) : trip?.toCity ?? "—"}
             </p>
             {alight?.boardingAddress ? <p>{alight.boardingAddress}</p> : null}
-            {alight?.outboundTime ? <p>Час: {alight.outboundTime}</p> : null}
+            {alight?.outboundTime ? (
+              <p className="mt-1 text-lg font-semibold tabular-nums">
+                {alight.outboundTime}
+              </p>
+            ) : null}
             {alightUrl ? (
               <p className="mt-1 print:hidden">
                 <a
@@ -156,9 +166,15 @@ export default async function PrintTicketPage({
         ) : null}
       </div>
 
-      <p className="mt-6 text-center text-xs text-slate-400 print:hidden">
-        Натисніть Ctrl+P / Cmd+P, щоб роздрукувати.
-      </p>
+      <div className="mt-6 flex flex-wrap items-center justify-center gap-3 print:hidden">
+        <PrintTicketButton />
+        <Link
+          href={`/cabinet/tickets/${booking.reference}`}
+          className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700"
+        >
+          Назад до квитка
+        </Link>
+      </div>
     </main>
   );
 }

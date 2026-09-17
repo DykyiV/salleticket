@@ -1,6 +1,7 @@
 import PageHeader from "@/components/cabinet/PageHeader";
 import { prisma } from "@/lib/db";
 import { formatUkDate, todayUtc } from "@/lib/routes/dates";
+import { TICKET_STATUS_LABEL } from "@/lib/tickets/labels";
 
 export const dynamic = "force-dynamic";
 
@@ -61,7 +62,9 @@ export default async function CabinetReportsPage() {
                         : "—"}
                     </td>
                     <td className="px-4 py-2">€{b.finalPrice.toFixed(2)}</td>
-                    <td className="px-4 py-2">{b.ticket.status}</td>
+                    <td className="px-4 py-2">
+                      {TICKET_STATUS_LABEL[b.ticket.status] ?? b.ticket.status}
+                    </td>
                   </tr>
                 ))
               )}
