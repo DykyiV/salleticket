@@ -3,9 +3,15 @@
 import { useMemo, useState } from "react";
 import Field, { btnGhost, btnPrimary, inputClass } from "@/components/admin/Field";
 import CountryFlags from "@/components/cabinet/CountryFlags";
+import DateRangeCalendar from "@/components/cabinet/DateRangeCalendar";
 import { mapsUrl } from "@/lib/routes/boarding";
 import { groupDeparturesByDayAndDirection } from "@/lib/routes/groupDepartures";
-import { DEPARTURE_PAGE_SIZE } from "@/lib/routes/listDepartures";
+import {
+  DEPARTURE_PAGE_SIZE,
+  routeMatchesCountry,
+  type DepartureCountryOption,
+  type DepartureRouteOption,
+} from "@/lib/routes/listDepartures";
 import type { DepartureDTO } from "@/lib/routes/serialize";
 import type { BulkAction } from "@/lib/routes/bulk";
 
@@ -22,10 +28,13 @@ type Props = {
   initialFrom: string;
   initialTo: string;
   initialTemplateId?: string;
+  initialCountryId?: string;
   initialPage?: number;
   initialTotal?: number;
   initialTotalPages?: number;
   initialDepartures?: DepartureDTO[];
+  countries: DepartureCountryOption[];
+  routes: DepartureRouteOption[];
   capabilities: Capabilities;
 };
 
@@ -55,10 +64,13 @@ export default function DeparturesBoard({
   initialFrom,
   initialTo,
   initialTemplateId,
+  initialCountryId,
   initialPage = 1,
   initialTotal = 0,
   initialTotalPages = 1,
   initialDepartures = [],
+  countries,
+  routes,
   capabilities,
 }: Props) {
   const listUrl =
@@ -73,7 +85,8 @@ export default function DeparturesBoard({
 
   const [from, setFrom] = useState(initialFrom);
   const [to, setTo] = useState(initialTo);
-  const [templateId] = useState(initialTemplateId ?? "");
+  const [countryId, setCountryId] = useState(initialCountryId ?? "");
+  const [templateId, setTemplateId] = useState(initialTemplateId ?? "");
   const [page, setPage] = useState(initialPage);
   const [total, setTotal] = useState(initialTotal);
   const [totalPages, setTotalPages] = useState(initialTotalPages);
@@ -93,15 +106,33 @@ export default function DeparturesBoard({
   const [saleEnabled, setSaleEnabled] = useState(false);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
-  const load = async (nextPage = 1) => {
+  const visibleRoutes = useMemo(
+    () => routes.filter((route) => routeMatchesCountry(route, countryId)),
+    [routes, countryId]
+  );
+
+  const load = async (
+    nextPage = 1,
+    query?: {
+      from?: string;
+      to?: string;
+      countryId?: string;
+      templateId?: string;
+    }
+  ) => {
+    const nextFrom = query?.from ?? from;
+    const nextTo = query?.to ?? to;
+    const nextCountry = query?.countryId ?? countryId;
+    const nextTemplate = query?.templateId ?? templateId;
     setError(null);
     const params = new URLSearchParams({
-      from,
-      to,
+      from: nextFrom,
+      to: nextTo,
       page: String(nextPage),
       pageSize: String(DEPARTURE_PAGE_SIZE),
     });
-    if (templateId) params.set("templateId", templateId);
+    if (nextCountry) params.set("countryId", nextCountry);
+    if (nextTemplate) params.set("templateId", nextTemplate);
     const res = await fetch(`${listUrl}?${params.toString()}`);
     const data = await res.json();
     if (!res.ok) throw new Error(data?.error ?? "Не вдалося завантажити виїзди");
@@ -110,6 +141,34 @@ export default function DeparturesBoard({
     setTotalPages(data.totalPages ?? 1);
     setPage(data.page ?? nextPage);
     setSelected(new Set());
+  };
+
+  const onCountry = (id: string) => {
+    const keepTemplate = routes.some(
+      (route) => route.id === templateId && routeMatchesCountry(route, id)
+    )
+      ? templateId
+      : "";
+    setCountryId(id);
+    setTemplateId(keepTemplate);
+    load(1, { countryId: id, templateId: keepTemplate }).catch((err) =>
+      setError(err instanceof Error ? err.message : "Помилка")
+    );
+  };
+
+  const onRoute = (id: string) => {
+    setTemplateId(id);
+    load(1, { templateId: id }).catch((err) =>
+      setError(err instanceof Error ? err.message : "Помилка")
+    );
+  };
+
+  const onDates = (nextFrom: string, nextTo: string) => {
+    setFrom(nextFrom);
+    setTo(nextTo);
+    load(1, { from: nextFrom, to: nextTo }).catch((err) =>
+      setError(err instanceof Error ? err.message : "Помилка")
+    );
   };
 
   const days = useMemo(
@@ -197,35 +256,37 @@ export default function DeparturesBoard({
 
   return (
     <div className="space-y-5">
-      <div className="grid grid-cols-1 gap-3 rounded-2xl bg-white p-4 ring-1 ring-slate-200 sm:grid-cols-4">
-        <Field label="Від">
-          <input
-            type="date"
-            className={inputClass}
-            value={from}
-            onChange={(e) => setFrom(e.target.value)}
-          />
-        </Field>
-        <Field label="До">
-          <input
-            type="date"
-            className={inputClass}
-            value={to}
-            onChange={(e) => setTo(e.target.value)}
-          />
-        </Field>
-        <div className="flex items-end">
-          <button
-            type="button"
-            className={btnGhost}
-            onClick={() =>
-              load(1).catch((err) =>
-                setError(err instanceof Error ? err.message : "Помилка")
-              )
-            }
-          >
-            Показати
-          </button>
+      <div className="rounded-2xl bg-white p-4 ring-1 ring-slate-200">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <DateRangeCalendar from={from} to={to} onChange={onDates} />
+          <Field label="Країна">
+            <select
+              className={inputClass}
+              value={countryId}
+              onChange={(e) => onCountry(e.target.value)}
+            >
+              <option value="">Усі країни</option>
+              {countries.map((country) => (
+                <option key={country.id} value={country.id}>
+                  {country.name}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Маршрут">
+            <select
+              className={inputClass}
+              value={templateId}
+              onChange={(e) => onRoute(e.target.value)}
+            >
+              <option value="">Усі маршрути</option>
+              {visibleRoutes.map((route) => (
+                <option key={route.id} value={route.id}>
+                  {route.name}
+                </option>
+              ))}
+            </select>
+          </Field>
         </div>
       </div>
 

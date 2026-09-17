@@ -10,6 +10,21 @@ export const departureListInclude = {
   stops: { orderBy: { sortOrder: "asc" as const } },
 };
 
+export type DepartureCountryOption = {
+  id: string;
+  name: string;
+  code: string | null;
+};
+
+export type DepartureRouteOption = {
+  id: string;
+  name: string;
+  originCity: string;
+  destinationCity: string;
+  countryId: string;
+  originCountryId: string | null;
+};
+
 export type DepartureListQuery = {
   from?: string | null;
   to?: string | null;
@@ -46,6 +61,14 @@ export function defaultDepartureRange(): { from: Date; to: Date } {
   return { from, to: addUtcDays(from, DEPARTURE_HORIZON_DAYS) };
 }
 
+export function routeMatchesCountry(
+  route: Pick<DepartureRouteOption, "countryId" | "originCountryId">,
+  countryId: string
+): boolean {
+  if (!countryId) return true;
+  return route.countryId === countryId || route.originCountryId === countryId;
+}
+
 export async function listDepartures(
   query: DepartureListQuery
 ): Promise<DepartureListResult> {
@@ -60,7 +83,13 @@ export async function listDepartures(
   const where = {
     date: { gte: from, lte: to },
     ...(templateId ? { templateId } : {}),
-    ...(countryId ? { template: { countryId } } : {}),
+    ...(countryId
+      ? {
+          template: {
+            OR: [{ countryId }, { originCountryId: countryId }],
+          },
+        }
+      : {}),
   };
 
   const total = await prisma.departure.count({ where });
@@ -88,5 +117,39 @@ export async function listDepartures(
     total,
     totalPages,
     departures: rows.map(toDepartureDTO),
+  };
+}
+
+export async function listDepartureFilterOptions(): Promise<{
+  countries: DepartureCountryOption[];
+  routes: DepartureRouteOption[];
+}> {
+  const [countries, routes] = await Promise.all([
+    prisma.country.findMany({
+      orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+      select: { id: true, name: true, code: true },
+    }),
+    prisma.routeTemplate.findMany({
+      orderBy: { name: "asc" },
+      select: {
+        id: true,
+        name: true,
+        originCity: true,
+        destinationCity: true,
+        countryId: true,
+        originCountryId: true,
+      },
+    }),
+  ]);
+
+  const used = new Set<string>();
+  for (const route of routes) {
+    used.add(route.countryId);
+    if (route.originCountryId) used.add(route.originCountryId);
+  }
+
+  return {
+    countries: countries.filter((c) => used.has(c.id)),
+    routes,
   };
 }

@@ -30,6 +30,7 @@ export async function GET(req: NextRequest) {
       from: params.get("from"),
       to: params.get("to"),
       templateId: params.get("templateId"),
+      countryId: params.get("countryId"),
       page: params.get("page"),
       pageSize: params.get("pageSize"),
     });
