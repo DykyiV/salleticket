@@ -110,6 +110,10 @@ export async function PATCH(req: NextRequest) {
         { status: 409 }
       );
     }
-    throw err;
+    console.error("PATCH /api/account/profile", err);
+    return NextResponse.json(
+      { error: "Не вдалося зберегти профіль" },
+      { status: 500 }
+    );
   }
 }

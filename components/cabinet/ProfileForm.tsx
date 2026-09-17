@@ -46,8 +46,16 @@ export default function ProfileForm({ email, displayName, avatarUrl }: Props) {
         method: "PATCH",
         body,
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.error ?? "Не вдалося зберегти");
+      const text = await res.text();
+      let data: { error?: string; user?: { avatarUrl?: string | null } } = {};
+      if (text) {
+        try {
+          data = JSON.parse(text) as typeof data;
+        } catch {
+          throw new Error("Не вдалося зберегти");
+        }
+      }
+      if (!res.ok) throw new Error(data.error ?? "Не вдалося зберегти");
       setCurrentPassword("");
       setNewPassword("");
       setFile(null);
