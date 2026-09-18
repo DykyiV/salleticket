@@ -4,6 +4,7 @@ import { requireAuth } from "@/lib/auth/guard";
 import { hasRoleAtLeast } from "@/lib/auth/constants";
 import { prisma } from "@/lib/db";
 import { recordTicketHistory, requestMeta } from "@/lib/tickets/history";
+import { updateTicketVersioned, VersionConflictError } from "@/lib/tickets/version";
 import {
   SeatRequiredError,
   SeatTakenError,
@@ -71,13 +72,10 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       body.seatNumber,
       ticket.id
     );
-    const updated = await prisma.ticket.update({
-      where: { id: ticket.id },
-      data: {
-        returnTripId: returnTrip.id,
-        returnSeatNumber: seat,
-        tripKind: TripKind.ROUND_TRIP,
-      },
+    const updated = await updateTicketVersioned(prisma, ticket.id, ticket.version, {
+      returnTripId: returnTrip.id,
+      returnSeatNumber: seat,
+      tripKind: TripKind.ROUND_TRIP,
     });
     await recordTicketHistory(prisma, {
       ticketId: ticket.id,
@@ -92,6 +90,9 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     });
     return NextResponse.json({ ticket: updated });
   } catch (err) {
+    if (err instanceof VersionConflictError) {
+      return NextResponse.json({ error: err.message }, { status: 409 });
+    }
     if (err instanceof SeatTakenError || err instanceof SeatRequiredError) {
       return NextResponse.json({ error: err.message }, { status: 409 });
     }

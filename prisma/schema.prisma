@@ -156,6 +156,11 @@ model Ticket {
   returnTrip   Trip?   @relation("ReturnTrip", fields: [returnTripId], references: [id], onDelete: SetNull)
   returnSeatNumber Int?
 
+  /// Optimistic concurrency control: increments on every mutation. Writers
+  /// must match the version they read, otherwise the update fails (P2025)
+  /// and the caller retries with fresh state.
+  version    Int          @default(0)
+
   booking Booking?
   history TicketHistory[]
   payments Payment[]

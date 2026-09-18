@@ -1,6 +1,7 @@
 import { PaymentStatus, TicketStatus, type PrismaClient } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { recordTicketHistory } from "@/lib/tickets/history";
+import { updateTicketVersioned } from "@/lib/tickets/version";
 
 /** Reconciliation runs against the top-level client (opens transactions). */
 type Db = PrismaClient;
@@ -35,9 +36,12 @@ export async function reconcileTicketPayment(
         where: { id: payment.id },
         data: { status: PaymentStatus.SETTLED },
       });
-      const ticket = await tx.ticket.update({
+      const current = await tx.ticket.findUnique({
         where: { id: payment.ticketId },
-        data: { status: TicketStatus.PAID_ONLINE },
+      });
+      if (!current) return;
+      const ticket = await updateTicketVersioned(tx, current.id, current.version, {
+        status: TicketStatus.PAID_ONLINE,
       });
       await recordTicketHistory(tx, {
         ticketId: ticket.id,
@@ -64,12 +68,9 @@ export async function reconcileTicketPayment(
         where: { id: payment.ticketId },
       });
       if (ticket && ticket.status === TicketStatus.AWAITING_PAYMENT) {
-        await tx.ticket.update({
-          where: { id: ticket.id },
-          data: {
-            status: TicketStatus.RESERVED,
-            finalPrice: payment.fullAmount,
-          },
+        await updateTicketVersioned(tx, ticket.id, ticket.version, {
+          status: TicketStatus.RESERVED,
+          finalPrice: payment.fullAmount,
         });
         await tx.booking.updateMany({
           where: { ticketId: ticket.id },

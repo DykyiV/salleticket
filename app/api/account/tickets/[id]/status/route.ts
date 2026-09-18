@@ -6,6 +6,7 @@ import { prisma } from "@/lib/db";
 import { requestMeta } from "@/lib/tickets/history";
 import { isStatusTransitionAllowed, TICKET_STATUS_LABEL } from "@/lib/tickets/labels";
 import { TicketNotFoundError, updateTicketStatus } from "@/lib/tickets/service";
+import { VersionConflictError } from "@/lib/tickets/version";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -79,6 +80,9 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   } catch (err) {
     if (err instanceof TicketNotFoundError) {
       return NextResponse.json({ error: "Квиток не знайдено" }, { status: 404 });
+    }
+    if (err instanceof VersionConflictError) {
+      return NextResponse.json({ error: err.message }, { status: 409 });
     }
     return NextResponse.json(
       { error: err instanceof Error ? err.message : "Не вдалося змінити статус" },

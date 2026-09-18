@@ -1,5 +1,6 @@
 import type { Prisma, PrismaClient, Ticket, TicketStatus, Booking } from "@prisma/client";
 import { prisma } from "@/lib/db";
+import { updateTicketVersioned } from "@/lib/tickets/version";
 import {
   recordTicketHistory,
   diffChanges,
@@ -64,9 +65,8 @@ export async function updateTicketStatus(
     const changed = oldStatus !== newStatus;
 
     const updated = changed
-      ? await db.ticket.update({
-          where: { id: ticketId },
-          data: { status: newStatus },
+      ? await updateTicketVersioned(db, ticketId, ticket.version, {
+          status: newStatus,
         })
       : ticket;
 
@@ -207,6 +207,7 @@ export async function updatePassengerDetails(
       where: { id: ticket.booking.id },
       data: next,
     });
+    await updateTicketVersioned(db, ticketId, ticket.version, {});
 
     await recordTicketHistory(db, {
       ticketId,

@@ -3,6 +3,7 @@ import { requireAuth } from "@/lib/auth/guard";
 import { hasRoleAtLeast } from "@/lib/auth/constants";
 import { prisma } from "@/lib/db";
 import { requestMeta, recordTicketHistory } from "@/lib/tickets/history";
+import { updateTicketVersioned, VersionConflictError } from "@/lib/tickets/version";
 import {
   SeatRequiredError,
   SeatTakenError,
@@ -31,7 +32,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 
   const ticket = await prisma.ticket.findUnique({
     where: { id: params.id },
-    select: { id: true, userId: true, tripId: true, returnTripId: true, seatNumber: true, returnSeatNumber: true },
+    select: { id: true, userId: true, tripId: true, returnTripId: true, seatNumber: true, returnSeatNumber: true, version: true },
   });
   if (!ticket) {
     return NextResponse.json({ error: "Квиток не знайдено" }, { status: 404 });
@@ -57,10 +58,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       leg === "return"
         ? { returnSeatNumber: seat }
         : { seatNumber: seat };
-    const updated = await prisma.ticket.update({
-      where: { id: ticket.id },
-      data,
-    });
+    const updated = await updateTicketVersioned(prisma, ticket.id, ticket.version, data);
     await recordTicketHistory(prisma, {
       ticketId: ticket.id,
       action: "SEAT_CHANGED",
@@ -76,6 +74,9 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     });
     return NextResponse.json({ ticket: updated });
   } catch (err) {
+    if (err instanceof VersionConflictError) {
+      return NextResponse.json({ error: err.message }, { status: 409 });
+    }
     if (err instanceof SeatTakenError || err instanceof SeatRequiredError) {
       return NextResponse.json({ error: err.message }, { status: 409 });
     }

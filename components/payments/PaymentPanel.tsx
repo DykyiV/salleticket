@@ -38,6 +38,12 @@ export default function PaymentPanel({
   const [state, setState] = useState<GroupState | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   const refresh = async () => {
     try {
@@ -62,6 +68,23 @@ export default function PaymentPanel({
     return () => window.clearInterval(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reference, state?.allSettled]);
+
+  const deadline = state?.items.find((i) => i.payment)?.payment?.deadlineAt;
+  const deadlineMs = deadline ? new Date(deadline).getTime() - now : null;
+  const deadlinePassed = deadlineMs != null && deadlineMs <= 0;
+
+  const settleAt = state?.items.find((i) => i.payment?.settleAfter)?.payment
+    ?.settleAfter;
+  const settleMs = settleAt ? new Date(settleAt).getTime() - now : null;
+
+  // When the discount deadline runs out, reconcile once so the ticket drops
+  // back to full price and the panel repaints.
+  useEffect(() => {
+    if (!deadlinePassed || !state?.anyPending) return;
+    const t = window.setTimeout(() => void refresh(), 800);
+    return () => window.clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [deadlinePassed, state?.anyPending]);
 
   const pay = async () => {
     setBusy(true);
@@ -110,7 +133,23 @@ export default function PaymentPanel({
     );
   }
 
-  const deadline = state.items.find((i) => i.payment)?.payment?.deadlineAt;
+  if (deadlinePassed && state.anyPending === false && !state.allSettled) {
+    return (
+      <div className="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-center">
+        <p className="text-lg font-semibold text-amber-800">Час вийшов</p>
+        <p className="mt-1 text-sm text-amber-700">
+          24 години на онлайн-оплату минули — знижка згоріла. Квиток у резерві
+          за повною ціною, оплата в автобусі.
+        </p>
+        <a
+          href={`/cabinet/tickets/${state.items[0]?.reference ?? reference}`}
+          className="mt-4 inline-block rounded-xl bg-amber-600 px-5 py-2.5 text-sm font-semibold text-white"
+        >
+          До квитка
+        </a>
+      </div>
+    );
+  }
 
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-6">
@@ -142,11 +181,14 @@ export default function PaymentPanel({
         <span>€{state.total.toFixed(2)}</span>
       </p>
 
-      {deadline ? (
+      {deadline && !deadlinePassed ? (
         <p className="mt-1 text-sm text-slate-500">
-          Оплатіть до{" "}
-          <span className="font-medium text-slate-700">
-            {new Date(deadline).toLocaleString("uk-UA")}
+          До кінця знижки:{" "}
+          <span className="font-semibold tabular-nums text-slate-900">
+            {formatCountdown(deadlineMs ?? 0)}
+          </span>{" "}
+          <span className="text-xs text-slate-400">
+            (до {new Date(deadline).toLocaleString("uk-UA")})
           </span>{" "}
           — інакше знижка за онлайн-оплату згорить.
         </p>
@@ -157,6 +199,11 @@ export default function PaymentPanel({
           <p className="flex items-center gap-2 text-sm font-medium text-violet-800">
             <Spinner className="h-4 w-4" />
             Очікуємо зарахування коштів…
+            {settleMs != null && settleMs > 0 ? (
+              <span className="ml-1 tabular-nums">
+                ~{formatCountdown(settleMs)}
+              </span>
+            ) : null}
           </p>
           <p className="mt-1 text-xs text-violet-700">
             Платіжна система зазвичай підтверджує переказ за {settleMinutes}{" "}
@@ -180,6 +227,16 @@ export default function PaymentPanel({
       {error ? <p className="mt-3 text-sm text-rose-700">{error}</p> : null}
     </div>
   );
+}
+
+function formatCountdown(ms: number): string {
+  const total = Math.max(0, Math.floor(ms / 1000));
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  const mm = String(m).padStart(2, "0");
+  const ss = String(s).padStart(2, "0");
+  return h > 0 ? `${h}:${mm}:${ss}` : `${mm}:${ss}`;
 }
 
 function Spinner({ className }: { className?: string }) {
