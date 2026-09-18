@@ -1,17 +1,14 @@
 import Link from "next/link";
 import { Prisma, TicketStatus } from "@prisma/client";
 import PageHeader from "@/components/cabinet/PageHeader";
-import BoardingHint from "@/components/ticket/BoardingHint";
 import { inputClass, btnGhost } from "@/components/admin/Field";
 import { getCurrentUser } from "@/lib/auth/session";
 import { hasRoleAtLeast } from "@/lib/auth/constants";
 import { prisma } from "@/lib/db";
-import { findStopForCity } from "@/lib/routes/boarding";
-import { formatUkDate } from "@/lib/routes/dates";
-import { weekdayShort } from "@/lib/routes/weekdays";
 import {
-  AGE_LABEL,
+  bookedByLabel,
   eur,
+  paidAmount,
   TICKET_STATUS_CLASS,
   TICKET_STATUS_LABEL,
 } from "@/lib/tickets/labels";
@@ -64,13 +61,8 @@ export default async function CabinetTicketsPage({
         include: {
           ticket: {
             include: {
-              user: { select: { email: true } },
-              trip: {
-                include: {
-                  carrier: true,
-                  departure: { include: { stops: true, template: true } },
-                },
-              },
+              user: { select: { email: true, displayName: true } },
+              trip: { include: { carrier: true } },
             },
           },
         },
@@ -80,13 +72,13 @@ export default async function CabinetTicketsPage({
     : [];
 
   return (
-    <div className="mx-auto max-w-4xl">
+    <div className="mx-auto max-w-7xl">
       <PageHeader
         title="Квитки"
         subtitle={
           staff
-            ? "Усі бронювання. Відкрийте квиток, щоб змінити пасажира чи статус, або друковану версію."
-            : "Ваші бронювання. Відкрийте квиток, щоб змінити дані пасажира, або друковану версію."
+            ? "Один квиток — один рядок. Натисніть ПІБ, щоб відкрити квиток."
+            : "Ваші бронювання. Натисніть ПІБ, щоб відкрити квиток."
         }
       />
 
@@ -101,7 +93,7 @@ export default async function CabinetTicketsPage({
             className={`${inputClass} w-64`}
             name="q"
             defaultValue={q}
-            placeholder="Код, прізвище, телефон…"
+            placeholder="ПІБ, код, телефон…"
           />
         </label>
         <label className="block text-xs">
@@ -132,81 +124,73 @@ export default async function CabinetTicketsPage({
           </Link>
         </p>
       ) : (
-        <div className="space-y-3">
-          {bookings.map((booking) => {
-            const trip = booking.ticket.trip;
-            const departure = trip?.departure;
-            const stops = departure?.stops ?? [];
-            const board = findStopForCity(stops, trip?.fromCity);
-            const alight = findStopForCity(stops, trip?.toCity);
-            const status = booking.ticket.status;
-            return (
-              <article
-                key={booking.id}
-                className="rounded-2xl bg-white p-5 ring-1 ring-slate-200"
-              >
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <p className="text-sm font-semibold text-slate-900">
-                      {booking.reference}
-                      <span className="ml-2 text-xs font-normal text-slate-500">
-                        {trip ? `${trip.fromCity} → ${trip.toCity}` : "Маршрут не привʼязано"}
+        <div className="overflow-x-auto rounded-2xl bg-white ring-1 ring-slate-200">
+          <table className="w-full min-w-[56rem] text-left text-sm">
+            <thead className="border-b border-slate-100 bg-slate-50 text-xs font-medium uppercase tracking-wide text-slate-500">
+              <tr>
+                <th className="whitespace-nowrap px-4 py-2.5">ПІБ</th>
+                <th className="whitespace-nowrap px-4 py-2.5">Звідки — куди</th>
+                <th className="whitespace-nowrap px-4 py-2.5">Телефон</th>
+                <th className="whitespace-nowrap px-4 py-2.5">Перевізник</th>
+                <th className="whitespace-nowrap px-4 py-2.5 text-right">Ціна</th>
+                <th className="whitespace-nowrap px-4 py-2.5 text-right">Оплачено</th>
+                <th className="whitespace-nowrap px-4 py-2.5">Хто бронював</th>
+              </tr>
+            </thead>
+            <tbody>
+              {bookings.map((booking) => {
+                const trip = booking.ticket.trip;
+                const status = booking.ticket.status;
+                const price = booking.finalPrice;
+                const paid = paidAmount(status, price);
+                const name = `${booking.lastName} ${booking.firstName}`.trim();
+                return (
+                  <tr
+                    key={booking.id}
+                    className="border-t border-slate-100 hover:bg-slate-50"
+                  >
+                    <td className="whitespace-nowrap px-4 py-2.5">
+                      <Link
+                        href={`/cabinet/tickets/${booking.reference}`}
+                        className="font-medium text-brand-700 hover:underline"
+                      >
+                        {name}
+                      </Link>
+                      <span
+                        className={`ml-2 inline-flex rounded-full px-1.5 py-0.5 text-[10px] font-medium ring-1 ring-inset ${TICKET_STATUS_CLASS[status]}`}
+                      >
+                        {TICKET_STATUS_LABEL[status]}
                       </span>
-                    </p>
-                    <p className="mt-1 text-xs text-slate-500">
-                      {booking.firstName} {booking.lastName} · {booking.phone}
-                      {booking.ageCategory
-                        ? ` · ${AGE_LABEL[booking.ageCategory] ?? booking.ageCategory}`
-                        : ""}
-                    </p>
-                    {trip ? (
-                      <p className="mt-1 text-xs text-slate-500">
-                        {formatUkDate(trip.departureTime)} ·{" "}
-                        {weekdayShort(
-                          departure?.weekday ??
-                            ((trip.departureTime.getUTCDay() || 7) as number)
-                        )}
-                        {trip.carrier?.name ? ` · ${trip.carrier.name}` : ""}
-                      </p>
-                    ) : null}
-                    {staff && booking.ticket.user.email ? (
-                      <p className="mt-1 text-xs text-slate-400">
-                        {booking.ticket.user.email}
-                      </p>
-                    ) : null}
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-sm font-bold tabular-nums">
-                      {eur(booking.finalPrice)}
-                    </span>
-                    <span
-                      className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ring-1 ring-inset ${TICKET_STATUS_CLASS[status]}`}
-                    >
-                      {TICKET_STATUS_LABEL[status]}
-                    </span>
-                  </div>
-                </div>
-                <div className="mt-3 space-y-1">
-                  <BoardingHint label="Посадка" stop={board} />
-                  <BoardingHint label="Висадка" stop={alight} />
-                </div>
-                <div className="mt-4 flex flex-wrap gap-2">
-                  <Link
-                    href={`/cabinet/tickets/${booking.reference}`}
-                    className="rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-medium text-white"
-                  >
-                    Відкрити / редагувати
-                  </Link>
-                  <Link
-                    href={`/account/tickets/${booking.reference}/print`}
-                    className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700"
-                  >
-                    Друкований квиток
-                  </Link>
-                </div>
-              </article>
-            );
-          })}
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-2.5 text-slate-700">
+                      {trip ? `${trip.fromCity} — ${trip.toCity}` : "—"}
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-2.5 tabular-nums text-slate-700">
+                      {booking.phone}
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-2.5 text-slate-700">
+                      {trip?.carrier?.name ?? "—"}
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-2.5 text-right tabular-nums text-slate-900">
+                      {eur(price)}
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-2.5 text-right tabular-nums">
+                      <span
+                        className={
+                          paid > 0 ? "font-medium text-emerald-700" : "text-slate-500"
+                        }
+                      >
+                        {eur(paid)}
+                      </span>
+                    </td>
+                    <td className="max-w-[12rem] truncate px-4 py-2.5 text-slate-600">
+                      {bookedByLabel(booking.ticket.user)}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       )}
     </div>

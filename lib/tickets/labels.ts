@@ -65,3 +65,17 @@ export function isStatusTransitionAllowed(
 export function eur(n: number): string {
   return `€${n.toFixed(2)}`;
 }
+
+/** Amount actually collected. Reserved / cancelled / refunded tickets are unpaid. */
+export function paidAmount(status: TicketStatus, finalPrice: number): number {
+  if (status === "PAID_ONLINE" || status === "PAID_CASH") return finalPrice;
+  return 0;
+}
+
+export function bookedByLabel(user: {
+  displayName?: string | null;
+  email: string;
+}): string {
+  const name = user.displayName?.trim();
+  return name || user.email;
+}
