@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import SeatPickerModal from "@/components/ticket/SeatPickerModal";
 import TripChangeModal from "@/components/ticket/TripChangeModal";
-import { formatUkDate, toIsoDate } from "@/lib/routes/dates";
+import { addUtcDays, formatUkDate, toIsoDate, utcDateOnly } from "@/lib/routes/dates";
 import { TRIP_KIND_LABEL } from "@/lib/tickets/labels";
 
 type Leg = {
@@ -141,7 +141,12 @@ export default function TicketItineraryEditor({
         <TripChangeModal
           fromCity={outbound.toCity}
           toCity={outbound.fromCity}
-          initialDate={returnLeg?.date ?? toIsoDate(new Date())}
+          initialDate={
+            returnLeg?.date ??
+            (outbound.date
+              ? toIsoDate(addUtcDays(utcDateOnly(outbound.date), 2))
+              : toIsoDate(new Date()))
+          }
           exceptTicketId={ticketId}
           title="Обрати зворотній рейс"
           confirmLabel="Зберегти повернення"

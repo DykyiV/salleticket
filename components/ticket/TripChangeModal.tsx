@@ -16,6 +16,12 @@ type TripOption = {
   hasAssignedSeats: boolean;
 };
 
+function isoDate(value: string | undefined): string {
+  return value && /^\d{4}-\d{2}-\d{2}$/.test(value)
+    ? value
+    : new Date().toISOString().slice(0, 10);
+}
+
 export default function TripChangeModal({
   fromCity,
   toCity,
@@ -35,8 +41,9 @@ export default function TripChangeModal({
   onClose: () => void;
   onSave: (tripId: string, seatNumber: number | null) => Promise<void>;
 }) {
-  const [date, setDate] = useState(initialDate);
+  const [date, setDate] = useState(isoDate(initialDate));
   const [trips, setTrips] = useState<TripOption[]>([]);
+  const [nearby, setNearby] = useState(false);
   const [tripId, setTripId] = useState<string | null>(null);
   const [layout, setLayout] = useState<BusLayout | null>(null);
   const [seat, setSeat] = useState<number | null>(null);
@@ -44,16 +51,24 @@ export default function TripChangeModal({
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    if (!date) return;
+    const day = isoDate(date);
     fetch(
-      `/api/trips?from=${encodeURIComponent(fromCity)}&to=${encodeURIComponent(toCity)}&date=${encodeURIComponent(date)}`
+      `/api/trips?from=${encodeURIComponent(fromCity)}&to=${encodeURIComponent(toCity)}&date=${encodeURIComponent(day)}`
     )
       .then((r) => r.json())
       .then((data) => {
-        setTrips(data.trips ?? []);
+        const list = (data.trips ?? []) as TripOption[];
+        setTrips(list);
+        setNearby(Boolean(data.nearby));
         setTripId(null);
         setLayout(null);
         setSeat(null);
+        if (data.nearby && list[0]?.departureTime) {
+          const next = String(list[0].departureTime).slice(0, 10);
+          if (/^\d{4}-\d{2}-\d{2}$/.test(next) && next !== day) {
+            setDate(next);
+          }
+        }
       })
       .catch(() => setError("Не вдалося завантажити рейси"));
   }, [date, fromCity, toCity]);
@@ -112,6 +127,11 @@ export default function TripChangeModal({
             onChange={(e) => setDate(e.target.value)}
           />
         </label>
+        {nearby && trips.length > 0 ? (
+          <p className="mt-2 text-xs text-slate-500">
+            На обрану дату рейсів немає — показано найближчі.
+          </p>
+        ) : null}
         <ul className="mt-3 max-h-48 space-y-2 overflow-y-auto">
           {trips.length === 0 ? (
             <li className="text-sm text-slate-500">Немає рейсів на цю дату.</li>
