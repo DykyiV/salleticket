@@ -469,6 +469,7 @@ async function seedDemoTickets() {
 
   const demos: Array<{
     reference: string;
+    legacyReferences?: string[];
     routeName: string;
     firstName: string;
     lastName: string;
@@ -481,7 +482,8 @@ async function seedDemoTickets() {
     tripKind: TripKind;
   }> = [
     {
-      reference: "AB-DEMO01",
+      reference: "AB-10001",
+      legacyReferences: ["AB-DEMO01"],
       routeName: "Київ — Марбелья",
       firstName: "Олена",
       lastName: "Коваленко",
@@ -494,7 +496,8 @@ async function seedDemoTickets() {
       tripKind: TripKind.ONE_WAY,
     },
     {
-      reference: "AB-DEMO02",
+      reference: "AB-10002",
+      legacyReferences: ["AB-DEMO02"],
       routeName: "Київ — Берлін",
       firstName: "Іван",
       lastName: "Петренко",
@@ -507,7 +510,8 @@ async function seedDemoTickets() {
       tripKind: TripKind.ONE_WAY,
     },
     {
-      reference: "AB-DEMO03",
+      reference: "AB-10003",
+      legacyReferences: ["AB-DEMO03"],
       routeName: "Берлін — Київ",
       firstName: "Марія",
       lastName: "Шевченко",
@@ -520,7 +524,8 @@ async function seedDemoTickets() {
       tripKind: TripKind.ONE_WAY,
     },
     {
-      reference: "AB-DEMO04",
+      reference: "AB-10004",
+      legacyReferences: ["AB-DEMO04"],
       routeName: "Київ — Марбелья",
       firstName: "Тарас",
       lastName: "Бондар",
@@ -533,7 +538,8 @@ async function seedDemoTickets() {
       tripKind: TripKind.OPEN_RETURN,
     },
     {
-      reference: "AB-DEMO05",
+      reference: "AB-10005",
+      legacyReferences: ["AB-DEMO05"],
       routeName: "Київ — Берлін",
       firstName: "Наталія",
       lastName: "Мельник",
@@ -548,6 +554,20 @@ async function seedDemoTickets() {
   ];
 
   for (const demo of demos) {
+    // Renumber legacy AB-DEMOnn references to the AB-12345 format.
+    for (const legacy of demo.legacyReferences ?? []) {
+      const legacyRow = await prisma.booking.findUnique({
+        where: { reference: legacy },
+      });
+      if (legacyRow) {
+        await prisma.booking.update({
+          where: { id: legacyRow.id },
+          data: { reference: demo.reference },
+        });
+        console.log(`  renumbered ${legacy} → ${demo.reference}`);
+      }
+    }
+
     const existing = await prisma.booking.findUnique({
       where: { reference: demo.reference },
     });

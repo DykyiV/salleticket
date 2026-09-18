@@ -101,7 +101,7 @@ export default async function CabinetTicketsPage({
             className={`${inputClass} w-64`}
             name="q"
             defaultValue={q}
-            placeholder="ПІБ, код, телефон…"
+            placeholder="ПІБ, № квитка (12345), телефон…"
           />
         </label>
         <label className="block text-xs">

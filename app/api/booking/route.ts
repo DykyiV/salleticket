@@ -7,6 +7,7 @@ import { computePrice, type AgeCategoryId } from "@/lib/pricing";
 import { PromoError, validatePromo } from "@/lib/promo";
 import { recordTicketHistory, requestMeta } from "@/lib/tickets/history";
 import { parseTripKind } from "@/lib/tickets/kinds";
+import { uniqueReference } from "@/lib/tickets/reference";
 import {
   SeatHeldError,
   SeatRequiredError,
@@ -104,10 +105,6 @@ function resolvePassenger(p?: PassengerInput): ResolvedPassenger {
     seatNumber: p.seatNumber ?? null,
     returnSeatNumber: p.returnSeatNumber ?? null,
   };
-}
-
-function generateReference(): string {
-  return `AB-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
 }
 
 function hhmm(date: Date): string {
@@ -401,7 +398,7 @@ export async function POST(req: NextRequest) {
             },
           });
 
-      const groupRef = groupSize > 1 ? generateReference() : null;
+      const groupRef = groupSize > 1 ? await uniqueReference(tx) : null;
       const items: Array<{
         ticket: Awaited<ReturnType<typeof tx.ticket.create>>;
         booking: Awaited<ReturnType<typeof tx.booking.create>>;
@@ -450,7 +447,7 @@ export async function POST(req: NextRequest) {
         });
 
         const reference =
-          groupRef && i === 0 ? groupRef : generateReference();
+          groupRef && i === 0 ? groupRef : await uniqueReference(tx);
         const booking = await tx.booking.create({
           data: {
             reference,
