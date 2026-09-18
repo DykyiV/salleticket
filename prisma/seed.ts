@@ -3,7 +3,7 @@
  *
  * Run with:  npm run db:seed
  */
-import { AgeCategory, PrismaClient, Role, TicketStatus } from "@prisma/client";
+import { AgeCategory, PrismaClient, Role, TicketStatus, TripKind } from "@prisma/client";
 import { hashPassword } from "../lib/auth/password";
 import { stringifyWeekdays } from "../lib/routes/weekdays";
 import { generateDepartures } from "../lib/routes/generate";
@@ -467,6 +467,8 @@ async function seedDemoTickets() {
     ageCategory: AgeCategory;
     status: TicketStatus;
     promoCode: string | null;
+    seatNumber: number;
+    tripKind: TripKind;
   }> = [
     {
       reference: "AB-DEMO01",
@@ -478,6 +480,8 @@ async function seedDemoTickets() {
       ageCategory: AgeCategory.ADULT,
       status: TicketStatus.RESERVED,
       promoCode: null,
+      seatNumber: 7,
+      tripKind: TripKind.ONE_WAY,
     },
     {
       reference: "AB-DEMO02",
@@ -489,6 +493,8 @@ async function seedDemoTickets() {
       ageCategory: AgeCategory.CHILD_5_12,
       status: TicketStatus.PAID_ONLINE,
       promoCode: "DISCOUNT10",
+      seatNumber: 12,
+      tripKind: TripKind.ONE_WAY,
     },
     {
       reference: "AB-DEMO03",
@@ -500,6 +506,21 @@ async function seedDemoTickets() {
       ageCategory: AgeCategory.SENIOR_60,
       status: TicketStatus.PAID_CASH,
       promoCode: null,
+      seatNumber: 18,
+      tripKind: TripKind.ONE_WAY,
+    },
+    {
+      reference: "AB-DEMO04",
+      routeName: "Київ — Марбелья",
+      firstName: "Тарас",
+      lastName: "Бондар",
+      phone: "+380671000111",
+      email: "taras.bondar@example.com",
+      ageCategory: AgeCategory.ADULT,
+      status: TicketStatus.RESERVED,
+      promoCode: null,
+      seatNumber: 21,
+      tripKind: TripKind.OPEN_RETURN,
     },
   ];
 
@@ -508,7 +529,14 @@ async function seedDemoTickets() {
       where: { reference: demo.reference },
     });
     if (existing) {
-      console.log(`  demo ticket ${demo.reference} already exists`);
+      await prisma.ticket.update({
+        where: { id: existing.ticketId },
+        data: {
+          seatNumber: demo.seatNumber,
+          tripKind: demo.tripKind,
+        },
+      });
+      console.log(`  demo ticket ${demo.reference} already exists — seat ${demo.seatNumber}`);
       continue;
     }
 
@@ -529,6 +557,8 @@ async function seedDemoTickets() {
         status: demo.status,
         basePrice: pricing.basePrice,
         finalPrice: pricing.finalPrice,
+        seatNumber: demo.seatNumber,
+        tripKind: demo.tripKind,
         booking: {
           create: {
             reference: demo.reference,

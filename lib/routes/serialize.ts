@@ -43,6 +43,7 @@ export type TemplateDTO = {
   ukraineReturnWeekday: number | null;
   defaultBus: string | null;
   comment: string | null;
+  hasAssignedSeats: boolean;
   isActive: boolean;
   stops: TemplateStopDTO[];
   departureCount: number;
@@ -87,6 +88,7 @@ export type DepartureDTO = {
   ukraineReturnWeekday: number | null;
   originCity: string;
   destinationCity: string;
+  hasAssignedSeats: boolean;
   stops: DepartureStopDTO[];
 };
 
@@ -136,6 +138,7 @@ export function toTemplateDTO(row: TemplateRecord): TemplateDTO {
     ukraineReturnWeekday: row.ukraineReturnWeekday,
     defaultBus: row.defaultBus,
     comment: row.comment,
+    hasAssignedSeats: row.hasAssignedSeats,
     isActive: row.isActive,
     stops: [...row.stops]
       .sort((a, b) => a.sortOrder - b.sortOrder)
@@ -198,6 +201,7 @@ export function toDepartureDTO(row: DepartureRecord): DepartureDTO {
     ukraineReturnWeekday: row.ukraineReturnWeekday,
     originCity: row.template.originCity,
     destinationCity: row.template.destinationCity,
+    hasAssignedSeats: row.hasAssignedSeats,
     stops: [...row.stops]
       .sort((a, b) => a.sortOrder - b.sortOrder)
       .map(toDepartureStopDTO),

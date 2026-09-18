@@ -2,22 +2,37 @@
 
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
+import {
+  parseTripKind,
+  TRIP_KIND_OPTIONS,
+  type TripKindId,
+} from "@/lib/tickets/kinds";
 
 type SearchValues = {
   from: string;
   to: string;
   date: string;
+  returnDate: string;
+  tripKind: TripKindId;
 };
 
 const POPULAR_CITIES = [
+  "Київ",
+  "Львів",
+  "Одеса",
+  "Харків",
+  "Марбелья",
+  "Берлін",
   "Kyiv",
   "Lviv",
-  "Odesa",
-  "Kharkiv",
-  "Dnipro",
-  "Warsaw",
-  "Prague",
   "Berlin",
+];
+
+const POPULAR_ROUTES = [
+  "Київ → Марбелья",
+  "Київ → Берлін",
+  "Берлін → Київ",
+  "Kyiv → Lviv",
 ];
 
 export default function SearchForm() {
@@ -26,13 +41,15 @@ export default function SearchForm() {
     from: "",
     to: "",
     date: "",
+    returnDate: "",
+    tripKind: "ONE_WAY",
   });
 
-  const handleChange = (field: keyof SearchValues) => (
-    e: React.ChangeEvent<HTMLInputElement>
-  ) => {
-    setValues((prev) => ({ ...prev, [field]: e.target.value }));
-  };
+  const handleChange =
+    (field: keyof SearchValues) =>
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      setValues((prev) => ({ ...prev, [field]: e.target.value }));
+    };
 
   const handleSwap = () => {
     setValues((prev) => ({ ...prev, from: prev.to, to: prev.from }));
@@ -44,6 +61,10 @@ export default function SearchForm() {
     if (values.from) params.set("from", values.from);
     if (values.to) params.set("to", values.to);
     if (values.date) params.set("date", values.date);
+    params.set("tripKind", values.tripKind);
+    if (values.tripKind === "ROUND_TRIP" && values.returnDate) {
+      params.set("returnDate", values.returnDate);
+    }
     const qs = params.toString();
     router.push(qs ? `/results?${qs}` : "/results");
   };
@@ -53,7 +74,7 @@ export default function SearchForm() {
       onSubmit={handleSubmit}
       className="w-full rounded-2xl bg-white p-4 shadow-xl ring-1 ring-slate-200/80 sm:p-6"
     >
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-[1fr_auto_1fr_1fr_auto] md:items-end">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-[1fr_auto_1fr] md:items-end">
         <Field
           id="from"
           label="From"
@@ -82,7 +103,48 @@ export default function SearchForm() {
           list="cities"
           icon={<PinIcon className="h-5 w-5 text-slate-400" />}
         />
+      </div>
 
+      <fieldset className="mt-4">
+        <legend className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+          Тип квитка
+        </legend>
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+          {TRIP_KIND_OPTIONS.map((option) => {
+            const active = values.tripKind === option.id;
+            return (
+              <label
+                key={option.id}
+                className={`cursor-pointer rounded-xl border px-3 py-2.5 text-sm transition ${
+                  active
+                    ? "border-brand-400 bg-brand-50 text-brand-900"
+                    : "border-slate-200 bg-slate-50 text-slate-700 hover:border-brand-200"
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="tripKind"
+                  value={option.id}
+                  checked={active}
+                  onChange={() =>
+                    setValues((prev) => ({
+                      ...prev,
+                      tripKind: parseTripKind(option.id),
+                    }))
+                  }
+                  className="sr-only"
+                />
+                <span className="block font-medium">{option.label}</span>
+                <span className="mt-0.5 block text-[11px] text-slate-500">
+                  {option.hint}
+                </span>
+              </label>
+            );
+          })}
+        </div>
+      </fieldset>
+
+      <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-[1fr_1fr_auto] md:items-end">
         <Field
           id="date"
           label="Date"
@@ -91,7 +153,22 @@ export default function SearchForm() {
           onChange={handleChange("date")}
           icon={<CalendarIcon className="h-5 w-5 text-slate-400" />}
         />
-
+        {values.tripKind === "ROUND_TRIP" ? (
+          <Field
+            id="returnDate"
+            label="Дата повернення"
+            type="date"
+            value={values.returnDate}
+            onChange={handleChange("returnDate")}
+            icon={<CalendarIcon className="h-5 w-5 text-slate-400" />}
+          />
+        ) : (
+          <p className="hidden text-sm text-slate-500 md:block">
+            {values.tripKind === "OPEN_RETURN"
+              ? "Дату повернення оберете пізніше в квитку."
+              : " "}
+          </p>
+        )}
         <button
           type="submit"
           className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-brand-600 px-6 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2"
@@ -109,17 +186,19 @@ export default function SearchForm() {
 
       <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-slate-500">
         <span className="font-medium text-slate-600">Popular:</span>
-        {["Kyiv → Lviv", "Odesa → Kyiv", "Warsaw → Lviv", "Kharkiv → Dnipro"].map(
-          (item) => (
-            <button
-              key={item}
-              type="button"
-              className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 transition hover:border-brand-300 hover:bg-brand-50 hover:text-brand-700"
-            >
-              {item}
-            </button>
-          )
-        )}
+        {POPULAR_ROUTES.map((item) => (
+          <button
+            key={item}
+            type="button"
+            onClick={() => {
+              const [from, to] = item.split(" → ");
+              setValues((prev) => ({ ...prev, from: from ?? "", to: to ?? "" }));
+            }}
+            className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 transition hover:border-brand-300 hover:bg-brand-50 hover:text-brand-700"
+          >
+            {item}
+          </button>
+        ))}
       </div>
     </form>
   );

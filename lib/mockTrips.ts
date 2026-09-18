@@ -14,6 +14,7 @@ export type Trip = {
   seatsLeft: number;
   amenities: string[];
   rating: number;
+  hasAssignedSeats?: boolean;
 };
 
 const CARRIERS = [

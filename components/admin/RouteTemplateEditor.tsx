@@ -35,6 +35,7 @@ type FormState = {
   ukraineReturnWeekday: string;
   defaultBus: string;
   comment: string;
+  hasAssignedSeats: boolean;
   isActive: boolean;
   stops: StopForm[];
 };
@@ -71,6 +72,7 @@ function fromTemplate(t: TemplateDTO): FormState {
       t.ukraineReturnWeekday != null ? String(t.ukraineReturnWeekday) : "",
     defaultBus: t.defaultBus ?? "",
     comment: t.comment ?? "",
+    hasAssignedSeats: t.hasAssignedSeats !== false,
     isActive: t.isActive,
     stops: t.stops.map((s) => ({
       id: s.id,
@@ -102,6 +104,7 @@ const EMPTY: FormState = {
   ukraineReturnWeekday: "",
   defaultBus: "",
   comment: "",
+  hasAssignedSeats: true,
   isActive: true,
   stops: [emptyStop(1), emptyStop(2)],
 };
@@ -206,6 +209,7 @@ export default function RouteTemplateEditor({ countries, template }: Props) {
       : null,
     defaultBus: values.defaultBus,
     comment: values.comment,
+    hasAssignedSeats: values.hasAssignedSeats,
     isActive: values.isActive,
     stops: values.stops.map((s, i) => ({
       id: s.id,
@@ -429,6 +433,22 @@ export default function RouteTemplateEditor({ countries, template }: Props) {
             ))}
           </div>
         </div>
+
+        <label className="mt-4 flex items-start gap-2 text-sm text-slate-700">
+          <input
+            type="checkbox"
+            className="mt-0.5"
+            checked={values.hasAssignedSeats}
+            onChange={(e) => setField("hasAssignedSeats", e.target.checked)}
+          />
+          <span>
+            Призначати місця в салоні
+            <span className="mt-0.5 block text-xs text-slate-500">
+              За замовчуванням пасажир обирає місце. Зніміть галочку — квитки
+              без номерів місць.
+            </span>
+          </span>
+        </label>
 
         <Field label="Коментар до маршруту">
           <textarea

@@ -55,6 +55,7 @@ export async function POST(req: NextRequest) {
         ukraineReturnWeekday: parsed.ukraineReturnWeekday,
         defaultBus: parsed.defaultBus,
         comment: parsed.comment,
+        hasAssignedSeats: parsed.hasAssignedSeats,
         isActive: parsed.isActive,
         stops: {
           create: parsed.stops.map((stop) => ({

@@ -16,6 +16,12 @@ export const TICKET_STATUS_CLASS: Record<TicketStatus, string> = {
   REFUNDED: "bg-slate-100 text-slate-600 ring-slate-200",
 };
 
+export const TRIP_KIND_LABEL: Record<string, string> = {
+  ONE_WAY: "В одну сторону",
+  ROUND_TRIP: "В дві сторони з визначеною датою",
+  OPEN_RETURN: "В дві сторони з відкритою датою повернення",
+};
+
 export const AGE_LABEL: Record<string, string> = {
   CHILD_0_4: "Дитина 0–4",
   CHILD_5_12: "Дитина 5–12",
@@ -29,6 +35,9 @@ export const HISTORY_ACTION_LABEL: Record<string, string> = {
   STATUS_CHANGE: "Змінено статус",
   STATUS_CONFIRMED: "Підтверджено статус",
   CANCELLED_BY_OWNER: "Скасовано пасажиром",
+  SEAT_CHANGED: "Змінено місце",
+  TRIP_CHANGED: "Змінено рейс",
+  RETURN_ASSIGNED: "Призначено повернення",
 };
 
 export const STATUS_TRANSITIONS: Record<TicketStatus, TicketStatus[]> = {

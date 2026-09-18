@@ -35,6 +35,7 @@ export async function propagateTemplateToDepartures(options: {
           comment: template.comment,
           ukraineDepartureWeekday: template.ukraineDepartureWeekday,
           ukraineReturnWeekday: template.ukraineReturnWeekday,
+          hasAssignedSeats: template.hasAssignedSeats,
         },
       });
 

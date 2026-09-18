@@ -33,6 +33,12 @@ export async function generateDepartures(options: {
   let skipped = 0;
   const createdDates: string[] = [];
 
+  const carrier = await prisma.carrier.upsert({
+    where: { name: "Asol BUS" },
+    create: { name: "Asol BUS", rating: 4.8 },
+    update: {},
+  });
+
   for (const date of dates) {
     const existing = await prisma.departure.findUnique({
       where: {
@@ -40,6 +46,15 @@ export async function generateDepartures(options: {
       },
     });
     if (existing) {
+      await ensureDepartureTrips({
+        departureId: existing.id,
+        date,
+        originCity: template.originCity,
+        destinationCity: template.destinationCity,
+        first: template.stops[0],
+        last: template.stops[template.stops.length - 1],
+        carrierId: carrier.id,
+      });
       skipped += 1;
       continue;
     }
@@ -55,6 +70,7 @@ export async function generateDepartures(options: {
         comment: template.comment,
         ukraineDepartureWeekday: template.ukraineDepartureWeekday,
         ukraineReturnWeekday: template.ukraineReturnWeekday,
+        hasAssignedSeats: template.hasAssignedSeats,
         stops: {
           create: template.stops.map((stop) => ({
             templateStopId: stop.id,
@@ -66,35 +82,99 @@ export async function generateDepartures(options: {
       },
     });
 
-    const first = template.stops[0];
-    const last = template.stops[template.stops.length - 1];
-    const carrier = await prisma.carrier.upsert({
-      where: { name: "Asol BUS" },
-      create: { name: "Asol BUS", rating: 4.8 },
-      update: {},
-    });
-    await prisma.trip.create({
-      data: {
-        fromCity: template.originCity,
-        toCity: template.destinationCity,
-        departureTime: combineUtcDateTime(
-          date,
-          first.outboundDay,
-          first.outboundTime
-        ),
-        arrivalTime: combineUtcDateTime(
-          date,
-          last.outboundDay,
-          last.outboundTime
-        ),
-        price: 99,
-        carrierId: carrier.id,
-        departureId: createdDeparture.id,
-      },
+    await ensureDepartureTrips({
+      departureId: createdDeparture.id,
+      date,
+      originCity: template.originCity,
+      destinationCity: template.destinationCity,
+      first: template.stops[0],
+      last: template.stops[template.stops.length - 1],
+      carrierId: carrier.id,
     });
     created += 1;
     createdDates.push(date.toISOString().slice(0, 10));
   }
 
   return { created, skipped, dates: createdDates };
+}
+
+type StopTimes = {
+  outboundDay: number;
+  outboundTime: string;
+  returnDay: number;
+  returnTime: string;
+};
+
+export async function ensureDepartureTrips(options: {
+  departureId: string;
+  date: Date;
+  originCity: string;
+  destinationCity: string;
+  first: StopTimes;
+  last: StopTimes;
+  carrierId: string;
+}): Promise<void> {
+  const existing = await prisma.trip.findMany({
+    where: { departureId: options.departureId },
+    select: { fromCity: true, toCity: true },
+  });
+  const hasOutbound = existing.some(
+    (trip) =>
+      trip.fromCity === options.originCity &&
+      trip.toCity === options.destinationCity
+  );
+  const hasReturn = existing.some(
+    (trip) =>
+      trip.fromCity === options.destinationCity &&
+      trip.toCity === options.originCity
+  );
+
+  if (!hasOutbound) {
+    await prisma.trip.create({
+      data: {
+        fromCity: options.originCity,
+        toCity: options.destinationCity,
+        departureTime: combineUtcDateTime(
+          options.date,
+          options.first.outboundDay,
+          options.first.outboundTime
+        ),
+        arrivalTime: combineUtcDateTime(
+          options.date,
+          options.last.outboundDay,
+          options.last.outboundTime
+        ),
+        price: 99,
+        carrierId: options.carrierId,
+        departureId: options.departureId,
+      },
+    });
+  }
+
+  if (!hasReturn) {
+    const departureTime = combineUtcDateTime(
+      options.date,
+      options.last.returnDay,
+      options.last.returnTime
+    );
+    let arrivalTime = combineUtcDateTime(
+      options.date,
+      options.first.returnDay,
+      options.first.returnTime
+    );
+    if (arrivalTime <= departureTime) {
+      arrivalTime = new Date(departureTime.getTime() + 12 * 60 * 60 * 1000);
+    }
+    await prisma.trip.create({
+      data: {
+        fromCity: options.destinationCity,
+        toCity: options.originCity,
+        departureTime,
+        arrivalTime,
+        price: 99,
+        carrierId: options.carrierId,
+        departureId: options.departureId,
+      },
+    });
+  }
 }

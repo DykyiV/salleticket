@@ -1,11 +1,18 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { AgeCategory, Prisma, TicketStatus } from "@prisma/client";
+import { AgeCategory, Prisma, TicketStatus, TripKind } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { findCarrier } from "@/lib/carriers/registry";
 import { requireAuth } from "@/lib/auth/guard";
 import { computePrice, type AgeCategoryId } from "@/lib/pricing";
 import { PromoError, validatePromo } from "@/lib/promo";
 import { recordTicketHistory, requestMeta } from "@/lib/tickets/history";
+import { parseTripKind } from "@/lib/tickets/kinds";
+import {
+  SeatRequiredError,
+  SeatTakenError,
+  assertSeatAvailable,
+} from "@/lib/tickets/inventory";
+import { cityNames } from "@/lib/trips/cities";
 import type { BookingPassenger, Trip } from "@/lib/carriers/types";
 
 export const runtime = "nodejs";
@@ -23,6 +30,10 @@ type CreateBookingBody = {
   passenger?: PassengerPayload;
   promoCode?: string;
   tripSnapshot?: Partial<Trip> & { date?: string };
+  tripKind?: string;
+  seatNumber?: number | null;
+  returnTripId?: string;
+  returnSeatNumber?: number | null;
 };
 
 const SERVICE_FEE_EUR = 1.5;
@@ -109,6 +120,16 @@ function generateReference(): string {
   return `AB-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
 }
 
+function hhmm(date: Date): string {
+  return date.toISOString().slice(11, 16);
+}
+
+function sameCity(a: string, b: string): boolean {
+  const left = cityNames(a).map((name) => name.toLowerCase());
+  const right = cityNames(b).map((name) => name.toLowerCase());
+  return left.some((name) => right.includes(name));
+}
+
 /**
  * Combine a YYYY-MM-DD date (or today) with a HH:MM time into a Date.
  * If arrival < departure, roll the arrival into the next day.
@@ -156,8 +177,21 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const carrierAdapterId = body.carrierId ?? "mock";
-  const adapter = findCarrier(carrierAdapterId);
+  if (!body.tripId) {
+    return NextResponse.json(
+      { error: "`tripId` is required" },
+      { status: 400 }
+    );
+  }
+
+  const storedTrip = await prisma.trip.findUnique({
+    where: { id: body.tripId },
+    include: { carrier: true, departure: true },
+  });
+
+  const carrierAdapterId =
+    body.carrierId ?? (storedTrip ? "asol" : "mock");
+  const adapter = findCarrier(carrierAdapterId) ?? findCarrier("asol");
   if (!adapter) {
     return NextResponse.json(
       { error: `Unknown carrier: ${carrierAdapterId}` },
@@ -165,12 +199,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  if (!body.tripId) {
-    return NextResponse.json(
-      { error: "`tripId` is required" },
-      { status: 400 }
-    );
-  }
+  const tripKind = parseTripKind(body.tripKind);
 
   let passenger: ResolvedPassenger;
   try {
@@ -201,33 +230,85 @@ export async function POST(req: NextRequest) {
   }
 
   // SECURITY: price, departure/arrival, carrier and currency must NEVER be
-  // trusted from the client — the original code took `tripSnapshot.price`
-  // (and the rest of the snapshot) straight from the request body, so any
-  // caller could book a real trip at an arbitrary price (e.g. `price: 0.01`)
-  // by editing the JSON they sent. We re-derive the canonical trip from the
-  // same carrier adapter `/api/search` uses, keyed by `tripId`, and use only
-  // that server-side data for pricing, the carrier/trip rows, and the
-  // adapter booking call. The client-supplied snapshot is used only to know
-  // which route to re-search and to carry the user-picked calendar date
-  // (which the mock trip type doesn't include).
-  const canonicalTrips = await adapter.search({
-    from: String(clientSnapshot.from),
-    to: String(clientSnapshot.to),
-  });
-  const canonicalTrip = canonicalTrips.find((t) => t.id === body.tripId);
-  if (!canonicalTrip) {
-    return NextResponse.json(
-      {
-        error:
-          "Trip not found for this route. Please search again — prices and availability may have changed.",
-      },
-      { status: 409 }
-    );
+  // trusted from the client. Prisma trips are reused by id so seats bind to
+  // the real departure. Mock ids still go through the carrier adapter search.
+  let snapshot: Trip & { date?: string };
+  if (storedTrip) {
+    snapshot = {
+      id: storedTrip.id,
+      carrierId: carrierAdapterId,
+      carrier: storedTrip.carrier.name,
+      carrierShort: storedTrip.carrier.name.slice(0, 2).toUpperCase(),
+      busType: storedTrip.departure?.defaultBus ?? "Coach",
+      from: storedTrip.fromCity,
+      to: storedTrip.toCity,
+      departure: hhmm(storedTrip.departureTime),
+      arrival: hhmm(storedTrip.arrivalTime),
+      durationMinutes: Math.max(
+        1,
+        Math.round(
+          (storedTrip.arrivalTime.getTime() -
+            storedTrip.departureTime.getTime()) /
+            60000
+        )
+      ),
+      price: storedTrip.price,
+      currency: "EUR",
+      seatsLeft: 46,
+      amenities: [],
+      rating: storedTrip.carrier.rating,
+      hasAssignedSeats: storedTrip.departure?.hasAssignedSeats !== false,
+      date: storedTrip.departureTime.toISOString().slice(0, 10),
+    };
+  } else {
+    const canonicalTrips = await adapter.search({
+      from: String(clientSnapshot.from),
+      to: String(clientSnapshot.to),
+    });
+    const canonicalTrip = canonicalTrips.find((t) => t.id === body.tripId);
+    if (!canonicalTrip) {
+      return NextResponse.json(
+        {
+          error:
+            "Trip not found for this route. Please search again — prices and availability may have changed.",
+        },
+        { status: 409 }
+      );
+    }
+    snapshot = {
+      ...canonicalTrip,
+      date: clientSnapshot.date,
+    };
   }
-  const snapshot: Trip & { date?: string } = {
-    ...canonicalTrip,
-    date: clientSnapshot.date,
-  };
+
+  let returnStoredTrip: typeof storedTrip = null;
+  if (tripKind === "ROUND_TRIP") {
+    if (!body.returnTripId) {
+      return NextResponse.json(
+        { error: "Оберіть зворотній рейс" },
+        { status: 400 }
+      );
+    }
+    returnStoredTrip = await prisma.trip.findUnique({
+      where: { id: body.returnTripId },
+      include: { carrier: true, departure: true },
+    });
+    if (!returnStoredTrip) {
+      return NextResponse.json(
+        { error: "Зворотній рейс не знайдено" },
+        { status: 404 }
+      );
+    }
+    if (
+      !sameCity(returnStoredTrip.fromCity, snapshot.to) ||
+      !sameCity(returnStoredTrip.toCity, snapshot.from)
+    ) {
+      return NextResponse.json(
+        { error: "Повернення має бути в зворотному напрямку" },
+        { status: 400 }
+      );
+    }
+  }
 
   // Hand off to the carrier adapter first (real PNR / reservation).
   let adapterResult;
@@ -274,8 +355,9 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  const legsPrice = snapshot.price + (returnStoredTrip?.price ?? 0);
   const pricing = computePrice(
-    snapshot.price,
+    legsPrice,
     passenger.ageCategory as AgeCategoryId,
     validatedPromo
   );
@@ -294,25 +376,52 @@ export async function POST(req: NextRequest) {
   try {
     const reference = generateReference();
     const created = await prisma.$transaction(async (tx) => {
-      const carrier = await tx.carrier.upsert({
-        where: { name: snapshot.carrier ?? adapter.name },
-        update: {},
-        create: {
-          name: snapshot.carrier ?? adapter.name,
-          rating: snapshot.rating ?? 0,
-        },
-      });
+      const carrier = storedTrip
+        ? await tx.carrier.upsert({
+            where: { name: storedTrip.carrier.name },
+            update: {},
+            create: {
+              name: storedTrip.carrier.name,
+              rating: storedTrip.carrier.rating,
+            },
+          })
+        : await tx.carrier.upsert({
+            where: { name: snapshot.carrier ?? adapter.name },
+            update: {},
+            create: {
+              name: snapshot.carrier ?? adapter.name,
+              rating: snapshot.rating ?? 0,
+            },
+          });
 
-      const trip = await tx.trip.create({
-        data: {
-          fromCity: snapshot.from!,
-          toCity: snapshot.to!,
-          departureTime: departureAt,
-          arrivalTime: arrivalAt,
-          price: basePrice,
-          carrierId: carrier.id,
-        },
-      });
+      const trip = storedTrip
+        ? storedTrip
+        : await tx.trip.create({
+            data: {
+              fromCity: snapshot.from!,
+              toCity: snapshot.to!,
+              departureTime: departureAt,
+              arrivalTime: arrivalAt,
+              price: snapshot.price,
+              carrierId: carrier.id,
+            },
+          });
+
+      const outboundSeat = await assertSeatAvailable(
+        tx,
+        trip.id,
+        body.seatNumber,
+        undefined
+      );
+      let returnSeat: number | null = null;
+      if (tripKind === "ROUND_TRIP" && returnStoredTrip) {
+        returnSeat = await assertSeatAvailable(
+          tx,
+          returnStoredTrip.id,
+          body.returnSeatNumber,
+          undefined
+        );
+      }
 
       const ticket = await tx.ticket.create({
         data: {
@@ -321,6 +430,15 @@ export async function POST(req: NextRequest) {
           status: TicketStatus.RESERVED,
           basePrice,
           finalPrice,
+          seatNumber: outboundSeat,
+          tripKind:
+            tripKind === "OPEN_RETURN"
+              ? TripKind.OPEN_RETURN
+              : tripKind === "ROUND_TRIP"
+                ? TripKind.ROUND_TRIP
+                : TripKind.ONE_WAY,
+          returnTripId: returnStoredTrip?.id ?? null,
+          returnSeatNumber: returnSeat,
         },
       });
 
@@ -395,6 +513,10 @@ export async function POST(req: NextRequest) {
               carrier:   carrier.name,
             },
           },
+          tripKind: { from: null, to: tripKind },
+          seatNumber: { from: null, to: outboundSeat },
+          returnTripId: { from: null, to: returnStoredTrip?.id ?? null },
+          returnSeatNumber: { from: null, to: returnSeat },
         },
       });
 
@@ -433,6 +555,10 @@ export async function POST(req: NextRequest) {
             id: created.carrier.id,
             name: created.carrier.name,
           },
+          tripKind: created.ticket.tripKind,
+          seatNumber: created.ticket.seatNumber,
+          returnTripId: created.ticket.returnTripId,
+          returnSeatNumber: created.ticket.returnSeatNumber,
           basePrice: created.ticket.basePrice,
           finalPrice: created.booking.finalPrice,
           priceBreakdown: {
@@ -452,6 +578,9 @@ export async function POST(req: NextRequest) {
       { status: 201 }
     );
   } catch (err) {
+    if (err instanceof SeatTakenError || err instanceof SeatRequiredError) {
+      return NextResponse.json({ error: err.message }, { status: 409 });
+    }
     // P2025 = the conditional promo update matched 0 rows (concurrency race
     // against usedCount / isActive). Surface a clean 400 rather than 500.
     if (

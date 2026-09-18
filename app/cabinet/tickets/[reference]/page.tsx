@@ -4,6 +4,7 @@ import PageHeader from "@/components/cabinet/PageHeader";
 import BoardingHint from "@/components/ticket/BoardingHint";
 import CancelTicketButton from "@/components/ticket/CancelTicketButton";
 import PassengerEditor from "@/components/ticket/PassengerEditor";
+import TicketItineraryEditor from "@/components/ticket/TicketItineraryEditor";
 import TicketStatusControl from "@/components/ticket/TicketStatusControl";
 import { getCurrentUser } from "@/lib/auth/session";
 import { hasRoleAtLeast } from "@/lib/auth/constants";
@@ -41,6 +42,12 @@ export default async function CabinetTicketEditPage({
               departure: { include: { stops: true, template: true } },
             },
           },
+          returnTrip: {
+            include: {
+              carrier: true,
+              departure: { include: { stops: true, template: true } },
+            },
+          },
         },
       },
     },
@@ -51,6 +58,7 @@ export default async function CabinetTicketEditPage({
   if (booking.ticket.userId !== user.id && !staff) notFound();
 
   const trip = booking.ticket.trip;
+  const returnTrip = booking.ticket.returnTrip;
   const departure = trip?.departure;
   const stops = departure?.stops ?? [];
   const board = findStopForCity(stops, trip?.fromCity);
@@ -129,6 +137,35 @@ export default async function CabinetTicketEditPage({
         <div className="mt-4 space-y-1">
           <BoardingHint label="Посадка" stop={board} />
           <BoardingHint label="Висадка" stop={alight} />
+        </div>
+        <div className="mt-4 border-t border-slate-100 pt-4">
+          <TicketItineraryEditor
+            ticketId={booking.ticket.id}
+            tripKind={booking.ticket.tripKind}
+            outbound={{
+              tripId: trip?.id ?? null,
+              fromCity: trip?.fromCity ?? "",
+              toCity: trip?.toCity ?? "",
+              date: trip ? trip.departureTime.toISOString().slice(0, 10) : null,
+              seatNumber: booking.ticket.seatNumber,
+              hasAssignedSeats: departure?.hasAssignedSeats !== false,
+            }}
+            returnLeg={
+              booking.ticket.tripKind === "ONE_WAY"
+                ? null
+                : {
+                    tripId: returnTrip?.id ?? null,
+                    fromCity: returnTrip?.fromCity ?? trip?.toCity ?? "",
+                    toCity: returnTrip?.toCity ?? trip?.fromCity ?? "",
+                    date: returnTrip
+                      ? returnTrip.departureTime.toISOString().slice(0, 10)
+                      : null,
+                    seatNumber: booking.ticket.returnSeatNumber,
+                    hasAssignedSeats:
+                      returnTrip?.departure?.hasAssignedSeats !== false,
+                  }
+            }
+          />
         </div>
       </section>
 

@@ -3,6 +3,8 @@ import Header from "@/components/Header";
 import BookingForm from "@/components/BookingForm";
 import { formatDuration } from "@/lib/mockTrips";
 import { getCurrentUser } from "@/lib/auth/session";
+import { parseTripKind } from "@/lib/tickets/kinds";
+import { TRIP_KIND_LABEL } from "@/lib/tickets/labels";
 
 export const dynamic = "force-dynamic";
 
@@ -17,6 +19,9 @@ type SearchParams = {
   arrival?: string;
   duration?: string;
   price?: string;
+  tripKind?: string;
+  returnDate?: string;
+  seats?: string;
 };
 
 function formatDate(dateStr?: string): string {
@@ -50,6 +55,8 @@ export default async function BookingPage({
   const price = searchParams.price
     ? Number.parseFloat(searchParams.price)
     : 22.0;
+  const tripKind = parseTripKind(searchParams.tripKind);
+  const returnDate = searchParams.returnDate;
 
   const serviceFee = 1.5;
   const total = price + serviceFee;
@@ -84,7 +91,7 @@ export default async function BookingPage({
               Complete your booking
             </h1>
             <p className="mt-0.5 text-sm text-slate-500">
-              Step 2 of 3 · Passenger details
+              Step 2 of 3 · {TRIP_KIND_LABEL[tripKind]}
             </p>
           </div>
         </div>
@@ -110,6 +117,8 @@ export default async function BookingPage({
                 ? { id: user.id, email: user.email, role: user.role }
                 : null
             }
+            tripKind={tripKind}
+            returnDate={returnDate}
           />
 
           <aside className="lg:sticky lg:top-20 lg:self-start">

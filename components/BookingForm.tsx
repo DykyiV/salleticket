@@ -2,11 +2,16 @@
 
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
+import BookingSeatPicker, {
+  type BookingSeatValue,
+} from "@/components/booking/BookingSeatPicker";
 import {
   AGE_CATEGORIES,
   computePrice,
   type AgeCategoryId,
 } from "@/lib/pricing";
+import { parseTripKind, type TripKindId } from "@/lib/tickets/kinds";
+import { TRIP_KIND_LABEL } from "@/lib/tickets/labels";
 
 type PromoPreview = {
   code: string;
@@ -44,6 +49,8 @@ type CurrentUser = {
 type Props = {
   tripSummary: TripSummary;
   currentUser?: CurrentUser | null;
+  tripKind?: TripKindId;
+  returnDate?: string;
 };
 
 type BookingConfirmation = {
@@ -66,9 +73,24 @@ type Values = {
 
 type Errors = Partial<Record<keyof Values, string>>;
 
-export default function BookingForm({ tripSummary, currentUser }: Props) {
+export default function BookingForm({
+  tripSummary,
+  currentUser,
+  tripKind: tripKindProp,
+  returnDate,
+}: Props) {
   const router = useRouter();
   const isAuthed = Boolean(currentUser);
+  const tripKind = parseTripKind(tripKindProp);
+
+  const [seatValue, setSeatValue] = useState<BookingSeatValue>({
+    seatNumber: null,
+    returnTripId: null,
+    returnSeatNumber: null,
+    returnPrice: 0,
+    outboundAssignsSeats: true,
+    returnAssignsSeats: true,
+  });
 
   const [loginHref, setLoginHref] = useState("/login");
   useEffect(() => {
@@ -133,7 +155,7 @@ export default function BookingForm({ tripSummary, currentUser }: Props) {
   const price = useMemo(
     () =>
       computePrice(
-        tripSummary.price,
+        tripSummary.price + (tripKind === "ROUND_TRIP" ? seatValue.returnPrice : 0),
         values.ageCategory,
         activePromo
           ? {
@@ -158,7 +180,7 @@ export default function BookingForm({ tripSummary, currentUser }: Props) {
             }
           : null
       ),
-    [tripSummary.price, values.ageCategory, activePromo]
+    [tripSummary.price, values.ageCategory, activePromo, tripKind, seatValue.returnPrice]
   );
 
   const setField = <K extends keyof Values>(field: K, value: Values[K]) => {
@@ -203,6 +225,22 @@ export default function BookingForm({ tripSummary, currentUser }: Props) {
     setErrors(found);
     setSubmitError(null);
     if (Object.keys(found).length > 0) return;
+    if (seatValue.outboundAssignsSeats && seatValue.seatNumber == null) {
+      setSubmitError("Оберіть місце в салоні");
+      return;
+    }
+    if (tripKind === "ROUND_TRIP" && !seatValue.returnTripId) {
+      setSubmitError("Оберіть зворотній рейс і місце");
+      return;
+    }
+    if (
+      tripKind === "ROUND_TRIP" &&
+      seatValue.returnAssignsSeats &&
+      seatValue.returnSeatNumber == null
+    ) {
+      setSubmitError("Оберіть місце на зворотній рейс");
+      return;
+    }
 
     setSubmitting(true);
     try {
@@ -230,6 +268,10 @@ export default function BookingForm({ tripSummary, currentUser }: Props) {
             currency: "EUR",
             date: tripSummary.date,
           },
+          tripKind,
+          seatNumber: seatValue.seatNumber,
+          returnTripId: seatValue.returnTripId ?? undefined,
+          returnSeatNumber: seatValue.returnSeatNumber,
         }),
       });
 
@@ -304,6 +346,12 @@ export default function BookingForm({ tripSummary, currentUser }: Props) {
             label="Route"
             value={`${tripSummary.from} → ${tripSummary.to}`}
           />
+          <SummaryRow label="Тип квитка" value={TRIP_KIND_LABEL[tripKind]} />
+          {seatValue.outboundAssignsSeats && seatValue.seatNumber != null ? (
+            <SummaryRow label="Місце" value={String(seatValue.seatNumber)} />
+          ) : !seatValue.outboundAssignsSeats ? (
+            <SummaryRow label="Місце" value="без місць" />
+          ) : null}
           <SummaryRow
             label="When"
             value={`${tripSummary.departure} → ${tripSummary.arrival}`}
@@ -326,8 +374,14 @@ export default function BookingForm({ tripSummary, currentUser }: Props) {
 
         <div className="mt-6 flex flex-wrap gap-2">
           <a
-            href="/"
+            href={`/cabinet/tickets/${confirmation.reference}`}
             className="inline-flex items-center justify-center rounded-xl bg-brand-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-700"
+          >
+            Відкрити квиток
+          </a>
+          <a
+            href="/"
+            className="inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-brand-300 hover:text-brand-700"
           >
             Book another trip
           </a>
@@ -480,6 +534,15 @@ export default function BookingForm({ tripSummary, currentUser }: Props) {
           <p className="mt-2 text-xs text-rose-600">{errors.ageCategory}</p>
         ) : null}
       </div>
+
+      <BookingSeatPicker
+        tripId={tripSummary.tripId}
+        from={tripSummary.from}
+        to={tripSummary.to}
+        tripKind={tripKind}
+        returnDate={returnDate}
+        onChange={setSeatValue}
+      />
 
       <div className="mt-6">
         <label htmlFor="promoCode" className="block">

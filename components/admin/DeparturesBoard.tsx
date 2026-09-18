@@ -106,6 +106,37 @@ export default function DeparturesBoard({
   const [saleEnabled, setSaleEnabled] = useState(false);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
+  const patchDepartureUrl = (id: string) =>
+    mode === "admin"
+      ? `/api/admin/departures/${id}`
+      : `/api/agent/departures/${id}`;
+
+  const toggleAssignedSeats = async (row: DepartureDTO) => {
+    if (!capabilities.canEdit) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch(patchDepartureUrl(row.id), {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ hasAssignedSeats: !row.hasAssignedSeats }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? "Не вдалося змінити місця");
+      setDepartures((prev) =>
+        prev.map((item) =>
+          item.id === row.id
+            ? { ...item, hasAssignedSeats: Boolean(data.hasAssignedSeats) }
+            : item
+        )
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Помилка");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const visibleRoutes = useMemo(
     () => routes.filter((route) => routeMatchesCountry(route, countryId)),
     [routes, countryId]
@@ -472,6 +503,24 @@ export default function DeparturesBoard({
                             <span className="text-xs text-slate-400">
                               {row.defaultBus ?? "автобус не вказано"}
                             </span>
+                            {capabilities.canEdit ? (
+                              <button
+                                type="button"
+                                disabled={busy}
+                                onClick={() => toggleAssignedSeats(row)}
+                                className={`rounded-full px-2 py-0.5 text-[11px] font-medium ring-1 ring-inset ${
+                                  row.hasAssignedSeats
+                                    ? "bg-emerald-50 text-emerald-800 ring-emerald-200"
+                                    : "bg-slate-100 text-slate-600 ring-slate-200"
+                                }`}
+                              >
+                                {row.hasAssignedSeats ? "місця" : "без місць"}
+                              </button>
+                            ) : (
+                              <span className="text-[11px] text-slate-500">
+                                {row.hasAssignedSeats ? "місця" : "без місць"}
+                              </span>
+                            )}
                             <button
                               type="button"
                               className="ml-auto text-xs text-brand-700"

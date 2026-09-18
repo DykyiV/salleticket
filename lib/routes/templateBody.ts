@@ -42,6 +42,7 @@ export type ParsedTemplateBody = {
   ukraineReturnWeekday: number | null;
   defaultBus: string | null;
   comment: string | null;
+  hasAssignedSeats: boolean;
   isActive: boolean;
   stops: StopInput[];
 };
@@ -77,6 +78,7 @@ export function parseTemplateBody(body: Record<string, unknown>): ParsedTemplate
     ),
     defaultBus: parseOptionalText(body.defaultBus),
     comment: parseOptionalText(body.comment),
+    hasAssignedSeats: body.hasAssignedSeats !== false,
     isActive: body.isActive !== false,
     stops,
   };

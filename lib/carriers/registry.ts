@@ -1,3 +1,4 @@
+import { asolCarrierAdapter } from "@/lib/carriers/asol";
 import { mockCarrierAdapter } from "@/lib/carriers/mock";
 import type {
   CarrierAdapter,
@@ -14,7 +15,7 @@ import type {
  *   - CARRIER_FLIXBUS_ENABLED=true
  *   - CARRIER_GUNSEL_API_KEY=...
  */
-const registry: CarrierAdapter[] = [mockCarrierAdapter];
+const registry: CarrierAdapter[] = [asolCarrierAdapter, mockCarrierAdapter];
 
 export function listCarriers(): CarrierAdapter[] {
   return [...registry];

@@ -72,6 +72,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
           ukraineReturnWeekday: parsed.ukraineReturnWeekday,
           defaultBus: parsed.defaultBus,
           comment: parsed.comment,
+          hasAssignedSeats: parsed.hasAssignedSeats,
           isActive: parsed.isActive,
         },
       });

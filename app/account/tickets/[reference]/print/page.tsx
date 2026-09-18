@@ -11,6 +11,7 @@ import {
   AGE_LABEL,
   eur,
   TICKET_STATUS_LABEL,
+  TRIP_KIND_LABEL,
 } from "@/lib/tickets/labels";
 
 export const dynamic = "force-dynamic";
@@ -34,6 +35,12 @@ export default async function PrintTicketPage({
               departure: { include: { stops: true, template: true } },
             },
           },
+          returnTrip: {
+            include: {
+              carrier: true,
+              departure: { include: { stops: true, template: true } },
+            },
+          },
         },
       },
     },
@@ -48,7 +55,9 @@ export default async function PrintTicketPage({
   }
 
   const trip = booking.ticket.trip;
+  const returnTrip = booking.ticket.returnTrip;
   const departure = trip?.departure;
+  const assignsSeats = departure?.hasAssignedSeats !== false;
   const board = findStopForCity(departure?.stops ?? [], trip?.fromCity);
   const alight = findStopForCity(departure?.stops ?? [], trip?.toCity);
   const boardUrl = board ? mapsUrl(board) : null;
@@ -84,6 +93,33 @@ export default async function PrintTicketPage({
           ) : null}
           {trip?.carrier?.name ? (
             <p className="text-sm text-slate-600">Перевізник: {trip.carrier.name}</p>
+          ) : null}
+          <p className="mt-2 text-sm font-medium">
+            {TRIP_KIND_LABEL[booking.ticket.tripKind] ?? booking.ticket.tripKind}
+          </p>
+          <p className="text-sm">
+            Місце:{" "}
+            {assignsSeats
+              ? booking.ticket.seatNumber != null
+                ? booking.ticket.seatNumber
+                : "—"
+              : "без місць"}
+          </p>
+          {booking.ticket.tripKind === "OPEN_RETURN" && !returnTrip ? (
+            <p className="mt-2 text-sm text-slate-600">
+              Зворотня поїздка: відкрита дата
+            </p>
+          ) : null}
+          {returnTrip ? (
+            <p className="mt-2 text-sm">
+              Назад: {returnTrip.fromCity} → {returnTrip.toCity} ·{" "}
+              {formatUkDate(returnTrip.departureTime)}
+              {booking.ticket.returnSeatNumber != null
+                ? ` · місце ${booking.ticket.returnSeatNumber}`
+                : returnTrip.departure?.hasAssignedSeats === false
+                  ? " · без місць"
+                  : ""}
+            </p>
           ) : null}
           {departure?.defaultBus ? (
             <p className="text-sm text-slate-600">Автобус: {departure.defaultBus}</p>

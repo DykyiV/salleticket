@@ -3,11 +3,15 @@ import Link from "next/link";
 import Header from "@/components/Header";
 import TripCard from "@/components/TripCard";
 import type { Trip } from "@/lib/carriers/types";
+import { parseTripKind } from "@/lib/tickets/kinds";
+import { TRIP_KIND_LABEL } from "@/lib/tickets/labels";
 
 type SearchParams = {
   from?: string;
   to?: string;
   date?: string;
+  tripKind?: string;
+  returnDate?: string;
 };
 
 type SearchApiResponse = {
@@ -53,6 +57,8 @@ export default async function ResultsPage({
   const from = searchParams.from || "Kyiv";
   const to = searchParams.to || "Lviv";
   const date = searchParams.date;
+  const tripKind = parseTripKind(searchParams.tripKind);
+  const returnDate = searchParams.returnDate;
 
   const params = new URLSearchParams({ from, to });
   if (date) params.set("date", date);
@@ -135,7 +141,11 @@ export default async function ResultsPage({
                 <span>{to}</span>
               </h1>
               <p className="mt-0.5 text-sm text-slate-500">
-                {formatDate(date)} · {trips.length} trips found
+                {formatDate(date)} · {TRIP_KIND_LABEL[tripKind]}
+                {tripKind === "ROUND_TRIP" && returnDate
+                  ? ` · назад ${formatDate(returnDate)}`
+                  : ""}{" "}
+                · {trips.length} trips found
                 {trips.length > 0 ? (
                   <>
                     {" "}
@@ -243,7 +253,13 @@ export default async function ResultsPage({
               </div>
             ) : (
               trips.map((trip) => (
-                <TripCard key={trip.id} trip={trip} date={date} />
+                <TripCard
+                  key={trip.id}
+                  trip={trip}
+                  date={date}
+                  tripKind={tripKind}
+                  returnDate={returnDate}
+                />
               ))
             )}
           </div>

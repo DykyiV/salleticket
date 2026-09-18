@@ -37,6 +37,12 @@ enum PromoType {
   FIXED
 }
 
+enum TripKind {
+  ONE_WAY
+  ROUND_TRIP
+  OPEN_RETURN
+}
+
 model User {
   id        String   @id @default(cuid())
   email     String   @unique
@@ -113,7 +119,8 @@ model Trip {
   carrierId String
   carrier   Carrier @relation(fields: [carrierId], references: [id], onDelete: Restrict)
 
-  tickets Ticket[]
+  tickets       Ticket[]
+  returnTickets Ticket[] @relation("ReturnTrip")
 
   departureId String?
   departure   Departure? @relation(fields: [departureId], references: [id], onDelete: SetNull)
@@ -140,12 +147,20 @@ model Ticket {
   tripId String?
   trip   Trip?   @relation(fields: [tripId], references: [id], onDelete: SetNull)
 
+  /// Coach seat number (1…) when the departure assigns seats.
+  seatNumber Int?
+  tripKind   TripKind @default(ONE_WAY)
+  returnTripId String?
+  returnTrip   Trip?   @relation("ReturnTrip", fields: [returnTripId], references: [id], onDelete: SetNull)
+  returnSeatNumber Int?
+
   booking Booking?
   history TicketHistory[]
 
   @@index([userId])
   @@index([status])
   @@index([tripId])
+  @@index([returnTripId])
   @@map("tickets")
 }
 
@@ -237,6 +252,8 @@ model RouteTemplate {
   ukraineReturnWeekday    Int?
   defaultBus String?
   comment    String?
+  /// When false, generated departures sell tickets without a seat number.
+  hasAssignedSeats Boolean @default(true)
   isActive   Boolean  @default(true)
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
@@ -290,6 +307,8 @@ model Departure {
   comment                 String?
   ukraineDepartureWeekday Int?
   ukraineReturnWeekday    Int?
+  /// When false, tickets on this run have no seat assignment.
+  hasAssignedSeats        Boolean       @default(true)
   createdAt               DateTime      @default(now())
   updatedAt               DateTime      @updatedAt
 

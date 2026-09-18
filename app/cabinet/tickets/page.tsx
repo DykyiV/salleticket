@@ -62,7 +62,12 @@ export default async function CabinetTicketsPage({
           ticket: {
             include: {
               user: { select: { email: true, displayName: true } },
-              trip: { include: { carrier: true } },
+              trip: {
+                include: {
+                  carrier: true,
+                  departure: { select: { hasAssignedSeats: true } },
+                },
+              },
             },
           },
         },
@@ -130,6 +135,7 @@ export default async function CabinetTicketsPage({
               <tr>
                 <th className="whitespace-nowrap px-4 py-2.5">ПІБ</th>
                 <th className="whitespace-nowrap px-4 py-2.5">Звідки — куди</th>
+                <th className="whitespace-nowrap px-4 py-2.5">Місце</th>
                 <th className="whitespace-nowrap px-4 py-2.5">Телефон</th>
                 <th className="whitespace-nowrap px-4 py-2.5">Перевізник</th>
                 <th className="whitespace-nowrap px-4 py-2.5 text-right">Ціна</th>
@@ -164,6 +170,13 @@ export default async function CabinetTicketsPage({
                     </td>
                     <td className="whitespace-nowrap px-4 py-2.5 text-slate-700">
                       {trip ? `${trip.fromCity} — ${trip.toCity}` : "—"}
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-2.5 tabular-nums text-slate-700">
+                      {trip?.departure && trip.departure.hasAssignedSeats === false
+                        ? "без місць"
+                        : booking.ticket.seatNumber != null
+                          ? booking.ticket.seatNumber
+                          : "—"}
                     </td>
                     <td className="whitespace-nowrap px-4 py-2.5 tabular-nums text-slate-700">
                       {booking.phone}
