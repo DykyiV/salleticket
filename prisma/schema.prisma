@@ -11,8 +11,14 @@ datasource db {
 }
 
 enum Role {
-  USER
+  CUSTOMER
+  PARTNER
+  DRIVER
+  DISPATCHER
+  CALL_CENTER
+  ACCOUNTANT
   AGENT
+  MANAGER
   ADMIN
   SUPER_ADMIN
 }
@@ -50,11 +56,13 @@ model User {
   password  String
   displayName String?
   avatarUrl   String?
-  role      Role     @default(USER)
+  role      Role     @default(CUSTOMER)
   /// Agent-only operational grants. Admins always have these capabilities.
   canEditDepartures Boolean @default(false)
   canHideStops      Boolean @default(false)
   canHideSeats      Boolean @default(false)
+  /// JSON array of preferred notification channels: email, sms, viber, telegram, push.
+  notifyChannels String @default("[\"email\",\"push\"]")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -268,6 +276,37 @@ model SiteSetting {
   updatedAt DateTime @updatedAt
 
   @@map("site_settings")
+}
+
+/// Editable per-role permission grant (booking.read, payment.refund, …).
+model RolePermission {
+  id         String @id @default(cuid())
+  role       Role
+  permission String
+  allowed    Boolean @default(true)
+
+  @@unique([role, permission])
+  @@map("role_permissions")
+}
+
+/// Notification Center entry. `userId` targets one user; `role` broadcasts
+/// to every user of that role (read state is per row for role broadcasts —
+/// first reader marks it; for the demo this is acceptable).
+model Notification {
+  id        String    @id @default(cuid())
+  userId    String?
+  role      Role?
+  kind      String
+  title     String
+  body      String?
+  link      String?
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId, readAt])
+  @@index([role, readAt])
+  @@index([createdAt])
+  @@map("notifications")
 }
 
 /// Flexible tariff grid per country: one grid covers all routes and

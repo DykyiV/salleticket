@@ -32,17 +32,20 @@ export const AGE_LABEL: Record<string, string> = {
 };
 
 export const HISTORY_ACTION_LABEL: Record<string, string> = {
-  CREATED: "Створено",
+  CREATED: "Створено бронювання",
   PASSENGER_UPDATED: "Змінено пасажира",
   STATUS_CHANGE: "Змінено статус",
   STATUS_CONFIRMED: "Підтверджено статус",
   CANCELLED_BY_OWNER: "Скасовано пасажиром",
+  SEAT_HELD: "Місце заблоковано",
   SEAT_CHANGED: "Змінено місце",
   TRIP_CHANGED: "Змінено рейс",
   RETURN_ASSIGNED: "Призначено повернення",
+  PROMO_APPLIED: "Застосовано промокод",
   PAYMENT_STARTED: "Розпочато онлайн-оплату",
-  PAYMENT_SETTLED: "Кошти зараховано",
+  PAYMENT_SETTLED: "Платіж отримано",
   PAYMENT_EXPIRED: "Знижка за онлайн-оплату згоріла",
+  EMAIL_SENT: "Email відправлено",
 };
 
 export const STATUS_TRANSITIONS: Record<TicketStatus, TicketStatus[]> = {

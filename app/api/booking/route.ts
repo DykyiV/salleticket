@@ -8,6 +8,7 @@ import { PromoError, validatePromo } from "@/lib/promo";
 import { recordTicketHistory, requestMeta } from "@/lib/tickets/history";
 import { parseTripKind } from "@/lib/tickets/kinds";
 import { uniqueReference } from "@/lib/tickets/reference";
+import { can } from "@/lib/auth/permissions";
 import {
   SeatHeldError,
   SeatRequiredError,
@@ -16,7 +17,8 @@ import {
   releaseSessionHolds,
 } from "@/lib/tickets/inventory";
 import { applyOnlineDiscount, getSiteSettings } from "@/lib/settings";
-import { priceForTrip } from "@/lib/pricing/grid";
+import { priceForTrip, soldSeatCount } from "@/lib/pricing/grid";
+import { notifyNewBooking, notifyTripAlmostFull } from "@/lib/notify";
 import { cityNames } from "@/lib/trips/cities";
 import type { BookingPassenger, Trip } from "@/lib/carriers/types";
 
@@ -175,6 +177,13 @@ export async function POST(req: NextRequest) {
     body.paymentMethod === "ONLINE" ? "ONLINE" : "CASH_ON_BUS";
   const holdSessionId = body.holdSessionId?.trim() || undefined;
   const siteSettings = await getSiteSettings();
+
+  if (!(await can({ role: session.role }, "booking.create"))) {
+    return NextResponse.json(
+      { error: "Немає дозволу booking.create" },
+      { status: 403 }
+    );
+  }
 
   const rawPassengers: PassengerInput[] = body.passengers?.length
     ? body.passengers
@@ -542,6 +551,29 @@ export async function POST(req: NextRequest) {
           },
         });
 
+        if (outboundSeat != null) {
+          await recordTicketHistory(tx, {
+            ticketId: ticket.id,
+            action: "SEAT_HELD",
+            source: "BOOKING_FORM",
+            changedBy: session.sub,
+            request: meta,
+            timestamp: new Date(Date.now() + 1000),
+            changes: { seatNumber: { from: null, to: outboundSeat } },
+          });
+        }
+        if (promo) {
+          await recordTicketHistory(tx, {
+            ticketId: ticket.id,
+            action: "PROMO_APPLIED",
+            source: "BOOKING_FORM",
+            changedBy: session.sub,
+            request: meta,
+            timestamp: new Date(Date.now() + 2000),
+            changes: { promoCode: { from: null, to: promo.code } },
+          });
+        }
+
         items.push({ ticket, booking, fullPrice });
       }
 
@@ -553,6 +585,30 @@ export async function POST(req: NextRequest) {
         created.trip.id,
         ...(returnStoredTrip ? [returnStoredTrip.id] : []),
       ]);
+    }
+
+    // Notification Center + mock email — the timeline shows the full story.
+    const firstRef = created.items[0].booking.reference;
+    await notifyNewBooking(
+      firstRef,
+      `${created.trip.fromCity} → ${created.trip.toCity} · ${created.items.length} пас.`,
+    );
+    for (const item of created.items) {
+      await recordTicketHistory(prisma, {
+        ticketId: item.ticket.id,
+        action: "EMAIL_SENT",
+        source: "SYSTEM",
+        timestamp: new Date(Date.now() + 3000),
+        changes: { email: { from: null, to: item.booking.email ?? accountEmail } },
+      });
+    }
+    const soldNow = await soldSeatCount(prisma, created.trip.id);
+    const gridCapacity = outboundPricing.breakdown ? 46 : 46;
+    if (soldNow / gridCapacity >= 0.85) {
+      await notifyTripAlmostFull(
+        `${created.trip.fromCity} → ${created.trip.toCity} · ${created.trip.departureTime.toISOString().slice(0, 10)}`,
+        soldNow / gridCapacity
+      );
     }
 
     if (paymentMethod === "ONLINE") {

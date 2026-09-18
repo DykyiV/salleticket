@@ -7,9 +7,16 @@ import DiscountsAdmin, {
 } from "@/components/admin/DiscountsAdmin";
 import SaleSettings from "@/components/admin/SaleSettings";
 import TariffGrids, { type TariffCountry } from "@/components/admin/TariffGrids";
+import RolePermissionsMatrix from "@/components/admin/RolePermissionsMatrix";
 import { prisma } from "@/lib/db";
 import { getSiteSettings } from "@/lib/settings";
 import { parseMonthMultipliers, parseTiers } from "@/lib/pricing/grid";
+import {
+  PERMISSIONS,
+  seedRolePermissions,
+  type Permission,
+} from "@/lib/auth/permissions";
+import { Role } from "@prisma/client";
 import { getCurrentUser } from "@/lib/auth/session";
 import { isAdminRole } from "@/lib/routes/permissions";
 
@@ -21,7 +28,8 @@ export default async function CabinetSettingsPage() {
     getSiteSettings(),
   ]);
   const isAdmin = user ? isAdminRole(user.role) : false;
-  const [users, promos, countries, grids] = await Promise.all([
+  await seedRolePermissions();
+  const [users, promos, countries, grids, grants] = await Promise.all([
     prisma.user.findMany({
       select: {
         id: true,
@@ -40,6 +48,7 @@ export default async function CabinetSettingsPage() {
     }),
     prisma.country.findMany({ orderBy: { sortOrder: "asc" } }),
     prisma.tariffGrid.findMany(),
+    prisma.rolePermission.findMany(),
   ]);
 
   const gridByCountry = new Map(grids.map((g) => [g.countryId, g]));
@@ -119,6 +128,25 @@ export default async function CabinetSettingsPage() {
         <h2 className="mb-3 text-base font-semibold text-slate-900">Користувачі</h2>
         <UsersPermissions initialUsers={userRows} />
       </section>
+      {isAdmin ? (
+        <section>
+          <h2 className="mb-3 text-base font-semibold text-slate-900">
+            Дозволи ролей
+          </h2>
+          <p className="mb-3 text-xs text-slate-500">
+            Матриця роль × дозвіл. Зміни зберігаються одразу і діють на API.
+          </p>
+          <RolePermissionsMatrix
+            roles={Object.keys(Role) as Role[]}
+            permissions={[...PERMISSIONS] as Permission[]}
+            grants={grants.map((g) => ({
+              role: g.role,
+              permission: g.permission,
+              allowed: g.allowed,
+            }))}
+          />
+        </section>
+      ) : null}
       <section>
         <h2 className="mb-3 text-base font-semibold text-slate-900">Знижки</h2>
         <DiscountsAdmin initialDiscounts={discounts} />

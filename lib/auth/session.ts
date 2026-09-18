@@ -52,6 +52,7 @@ export async function getCurrentUser() {
         canEditDepartures: true,
         canHideStops: true,
         canHideSeats: true,
+        notifyChannels: true,
         createdAt: true,
       },
     });

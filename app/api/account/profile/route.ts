@@ -61,6 +61,22 @@ export async function PATCH(req: NextRequest) {
   }
 
   let avatarUrl = user.avatarUrl;
+  const channelsRaw = String(form.get("notifyChannels") ?? "").trim();
+  let notifyChannels = user.notifyChannels;
+  if (channelsRaw) {
+    try {
+      const parsed = JSON.parse(channelsRaw) as unknown;
+      if (Array.isArray(parsed)) {
+        notifyChannels = JSON.stringify(
+          parsed.filter((c) =>
+            ["email", "sms", "viber", "telegram", "push"].includes(String(c))
+          )
+        );
+      }
+    } catch {
+      // keep existing channels
+    }
+  }
   if (avatar instanceof File && avatar.size > 0) {
     if (avatar.size > 2 * 1024 * 1024) {
       return NextResponse.json({ error: "Аватар до 2 МБ" }, { status: 400 });
@@ -86,6 +102,7 @@ export async function PATCH(req: NextRequest) {
         displayName,
         email: emailRaw,
         avatarUrl,
+        notifyChannels,
         ...(passwordChanged ? { password: await hashPassword(newPassword) } : {}),
       },
       select: {
@@ -94,6 +111,7 @@ export async function PATCH(req: NextRequest) {
         role: true,
         displayName: true,
         avatarUrl: true,
+        notifyChannels: true,
       },
     });
 

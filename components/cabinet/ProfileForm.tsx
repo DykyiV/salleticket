@@ -8,9 +8,23 @@ type Props = {
   email: string;
   displayName: string;
   avatarUrl: string | null;
+  notifyChannels?: string[];
 };
 
-export default function ProfileForm({ email, displayName, avatarUrl }: Props) {
+const CHANNELS = [
+  { id: "email", label: "Email", icon: "📧" },
+  { id: "sms", label: "SMS", icon: "📱" },
+  { id: "viber", label: "Viber", icon: "💬" },
+  { id: "telegram", label: "Telegram", icon: "✈️" },
+  { id: "push", label: "Push", icon: "🔔" },
+] as const;
+
+export default function ProfileForm({
+  email,
+  displayName,
+  avatarUrl,
+  notifyChannels = ["email", "push"],
+}: Props) {
   const router = useRouter();
   const [name, setName] = useState(displayName);
   const [login, setLogin] = useState(email);
@@ -18,6 +32,7 @@ export default function ProfileForm({ email, displayName, avatarUrl }: Props) {
   const [newPassword, setNewPassword] = useState("");
   const [preview, setPreview] = useState(avatarUrl);
   const [file, setFile] = useState<File | null>(null);
+  const [channels, setChannels] = useState<string[]>(notifyChannels);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -38,6 +53,7 @@ export default function ProfileForm({ email, displayName, avatarUrl }: Props) {
       const body = new FormData();
       body.set("displayName", name);
       body.set("email", login);
+      body.set("notifyChannels", JSON.stringify(channels));
       if (currentPassword) body.set("currentPassword", currentPassword);
       if (newPassword) body.set("newPassword", newPassword);
       if (file) body.set("avatar", file);
@@ -131,6 +147,45 @@ export default function ProfileForm({ email, displayName, avatarUrl }: Props) {
             autoComplete="new-password"
           />
         </Field>
+      </div>
+
+      <div>
+        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+          Канали сповіщень
+        </p>
+        <div className="flex flex-wrap gap-2">
+          {CHANNELS.map((channel) => {
+            const active = channels.includes(channel.id);
+            return (
+              <label
+                key={channel.id}
+                className={`flex cursor-pointer items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition ${
+                  active
+                    ? "border-brand-300 bg-brand-50 text-brand-800"
+                    : "border-slate-200 bg-white text-slate-500"
+                }`}
+              >
+                <input
+                  type="checkbox"
+                  className="sr-only"
+                  checked={active}
+                  onChange={() =>
+                    setChannels((prev) =>
+                      active
+                        ? prev.filter((c) => c !== channel.id)
+                        : [...prev, channel.id]
+                    )
+                  }
+                />
+                <span aria-hidden>{channel.icon}</span>
+                {channel.label}
+              </label>
+            );
+          })}
+        </div>
+        <p className="mt-1 text-[11px] text-slate-400">
+          Куди надсилати підтвердження бронювань і статуси оплат.
+        </p>
       </div>
 
       {error ? <p className="text-sm text-rose-700">{error}</p> : null}

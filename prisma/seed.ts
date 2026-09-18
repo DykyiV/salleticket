@@ -10,6 +10,7 @@ import { generateDepartures } from "../lib/routes/generate";
 import { addUtcDays, combineUtcDateTime, todayUtc } from "../lib/routes/dates";
 import { computePrice, type AgeCategoryId } from "../lib/pricing";
 import { DEFAULT_SITE_SETTINGS } from "../lib/settings";
+import { seedRolePermissions } from "../lib/auth/permissions";
 import { recordTicketHistory } from "../lib/tickets/history";
 
 const prisma = new PrismaClient();
@@ -63,7 +64,16 @@ async function main() {
     canHideStops: true,
     canHideSeats: true,
   });
-  console.log("  upserted admin@asolbus.local / agent@asolbus.local");
+  await upsertUser("manager@asolbus.local", "Manager12345", "MANAGER", {
+    displayName: "Менеджер Іван",
+  });
+  console.log("  upserted admin@asolbus.local / agent@asolbus.local / manager@asolbus.local");
+
+  // Migrate legacy USER accounts to CUSTOMER and seed role permissions.
+  await prisma.$executeRawUnsafe(
+    `UPDATE users SET role='CUSTOMER' WHERE role='USER'`
+  );
+  await seedRolePermissions(prisma);
 
   for (const [key, value] of Object.entries(DEFAULT_SITE_SETTINGS)) {
     await prisma.siteSetting.upsert({

@@ -22,6 +22,9 @@ export default async function MyCabinetPage() {
             email={user.email}
             displayName={user.displayName ?? ""}
             avatarUrl={user.avatarUrl}
+            notifyChannels={JSON.parse(
+              ("notifyChannels" in user && user.notifyChannels) || "[]"
+            )}
           />
         </div>
       </section>

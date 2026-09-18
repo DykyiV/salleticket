@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import type { Role } from "@prisma/client";
 import LogoutButton from "@/components/LogoutButton";
 import NavIcon from "@/components/cabinet/NavIcon";
+import NotificationBell from "@/components/cabinet/NotificationBell";
 import { isNavActive, navForRole } from "@/lib/nav";
 
 export type CabinetUser = {
@@ -68,10 +69,11 @@ export default function Sidebar({ user, mobileOpen, onClose }: Props) {
               {initial}
             </span>
           )}
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-semibold text-slate-900">{name}</p>
             <p className="truncate text-xs text-slate-500">{user.email}</p>
           </div>
+          <NotificationBell />
         </div>
 
         <nav className="flex-1 space-y-1 overflow-y-auto px-3 pb-4">

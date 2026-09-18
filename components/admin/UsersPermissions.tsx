@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { Role } from "@prisma/client";
+import { ROLE_LABEL } from "@/lib/auth/constants";
 
 export type UserRow = {
   id: string;
@@ -68,7 +69,38 @@ export default function UsersPermissions({ initialUsers }: Props) {
           {users.map((row) => (
             <tr key={row.id} className="border-t border-slate-100">
               <td className="px-4 py-3">{row.email}</td>
-              <td className="px-4 py-3">{row.role}</td>
+              <td className="px-4 py-3">
+                <select
+                  className="rounded border border-slate-300 bg-white px-1.5 py-1 text-xs"
+                  value={row.role}
+                  disabled={row.role === "SUPER_ADMIN"}
+                  onChange={async (e) => {
+                    const role = e.target.value as Role;
+                    const prev = row.role;
+                    setUsers((list) =>
+                      list.map((u) => (u.id === row.id ? { ...u, role } : u))
+                    );
+                    try {
+                      await patch(row.id, { role });
+                    } catch (err) {
+                      setUsers((list) =>
+                        list.map((u) =>
+                          u.id === row.id ? { ...u, role: prev } : u
+                        )
+                      );
+                      setError(
+                        err instanceof Error ? err.message : "Помилка"
+                      );
+                    }
+                  }}
+                >
+                  {(Object.keys(ROLE_LABEL) as Role[]).map((role) => (
+                    <option key={role} value={role}>
+                      {ROLE_LABEL[role]}
+                    </option>
+                  ))}
+                </select>
+              </td>
               <td className="px-4 py-3">
                 <input
                   type="checkbox"

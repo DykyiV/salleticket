@@ -10,6 +10,7 @@ import {
   updatePassengerDetails,
   type PassengerDetailsInput,
 } from "@/lib/tickets/service";
+import { can } from "@/lib/auth/permissions";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -40,6 +41,12 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   if (!isOwner && !isStaff) {
     return NextResponse.json(
       { error: "Можна редагувати лише свої квитки" },
+      { status: 403 }
+    );
+  }
+  if (isStaff && !(await can({ role: guard.session.role }, "passenger.edit"))) {
+    return NextResponse.json(
+      { error: "Немає дозволу passenger.edit" },
       { status: 403 }
     );
   }

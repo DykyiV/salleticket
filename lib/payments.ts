@@ -2,6 +2,7 @@ import { PaymentStatus, TicketStatus, type PrismaClient } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { recordTicketHistory } from "@/lib/tickets/history";
 import { updateTicketVersioned } from "@/lib/tickets/version";
+import { notifyPaymentReceived } from "@/lib/notify";
 
 /** Reconciliation runs against the top-level client (opens transactions). */
 type Db = PrismaClient;
@@ -54,7 +55,20 @@ export async function reconcileTicketPayment(
           payment: { from: payment.status, to: PaymentStatus.SETTLED },
         },
       });
+      await recordTicketHistory(tx, {
+        ticketId: ticket.id,
+        action: "EMAIL_SENT",
+        source: "SYSTEM",
+        changes: { email: { from: null, to: "квиток надіслано" } },
+      });
     });
+    const booking = await db.booking.findFirst({
+      where: { ticketId: payment.ticketId },
+      select: { reference: true },
+    });
+    if (booking) {
+      await notifyPaymentReceived(booking.reference, payment.amount);
+    }
     return;
   }
 

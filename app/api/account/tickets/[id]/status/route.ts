@@ -5,8 +5,9 @@ import { hasRoleAtLeast } from "@/lib/auth/constants";
 import { prisma } from "@/lib/db";
 import { requestMeta } from "@/lib/tickets/history";
 import { isStatusTransitionAllowed, TICKET_STATUS_LABEL } from "@/lib/tickets/labels";
-import { TicketNotFoundError, updateTicketStatus } from "@/lib/tickets/service";
-import { VersionConflictError } from "@/lib/tickets/version";
+import { TicketNotFoundError, updateTicketStatus } from "@/lib/tickets/service";import { VersionConflictError } from "@/lib/tickets/version";
+import { can } from "@/lib/auth/permissions";
+import { notifyRefundRequested, notifySeatFreed } from "@/lib/notify";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -45,6 +46,21 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     return NextResponse.json({ error: "Немає доступу" }, { status: 403 });
   }
 
+  if (isStaff) {
+    const needed =
+      nextStatus === "CANCELLED"
+        ? "booking.cancel"
+        : nextStatus === "REFUNDED"
+          ? "payment.refund"
+          : "booking.edit";
+    if (!(await can({ role: guard.session.role }, needed))) {
+      return NextResponse.json(
+        { error: `Немає дозволу ${needed}` },
+        { status: 403 }
+      );
+    }
+  }
+
   if (!isStaff) {
     if (ticket.status !== "RESERVED" || nextStatus !== "CANCELLED") {
       return NextResponse.json(
@@ -72,13 +88,28 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         request: requestMeta(req),
       }
     );
+    if (result.changed) {
+      const booking = await prisma.booking.findFirst({
+        where: { ticketId: params.id },
+        select: { reference: true },
+      });
+      if (nextStatus === "REFUNDED" && booking) {
+        await notifyRefundRequested(booking.reference);
+      }
+      if (nextStatus === "CANCELLED" && booking) {
+        const seat = await prisma.ticket.findUnique({
+          where: { id: params.id },
+          select: { seatNumber: true },
+        });
+        await notifySeatFreed(booking.reference, seat?.seatNumber ?? null);
+      }
+    }
     return NextResponse.json({
       ticket: result.ticket,
       oldStatus: result.oldStatus,
       newStatus: result.newStatus,
     });
-  } catch (err) {
-    if (err instanceof TicketNotFoundError) {
+  } catch (err) {    if (err instanceof TicketNotFoundError) {
       return NextResponse.json({ error: "Квиток не знайдено" }, { status: 404 });
     }
     if (err instanceof VersionConflictError) {

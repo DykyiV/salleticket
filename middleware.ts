@@ -15,7 +15,7 @@ type Rule = {
 const RULES: Rule[] = [
   { match: (p) => p.startsWith("/api/admin"), role: "ADMIN", mode: "json" },
   { match: (p) => p.startsWith("/api/agent"), role: "AGENT", mode: "json" },
-  { match: (p) => p.startsWith("/api/account"), role: "USER", mode: "json" },
+  { match: (p) => p.startsWith("/api/account"), role: "CUSTOMER", mode: "json" },
   { match: (p) => p.startsWith("/admin"), role: "ADMIN", mode: "page" },
   { match: (p) => p.startsWith("/agent"), role: "AGENT", mode: "page" },
   {
@@ -28,8 +28,8 @@ const RULES: Rule[] = [
     mode: "page",
   },
   { match: (p) => p.startsWith("/cabinet/departures"), role: "AGENT", mode: "page" },
-  { match: (p) => p.startsWith("/cabinet"), role: "USER", mode: "page" },
-  { match: (p) => p.startsWith("/account"), role: "USER", mode: "page" },
+  { match: (p) => p.startsWith("/cabinet"), role: "CUSTOMER", mode: "page" },
+  { match: (p) => p.startsWith("/account"), role: "CUSTOMER", mode: "page" },
 ];
 
 function matchRule(pathname: string): Rule | null {

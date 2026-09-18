@@ -66,6 +66,14 @@ export default function NavIcon({
           <path d="M16 16v-3" />
         </svg>
       );
+    case "api":
+      return (
+        <svg className={cls} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <path d="m8 8-4 4 4 4" />
+          <path d="m16 8 4 4-4 4" />
+          <path d="m13 5-2 14" />
+        </svg>
+      );
     default:
       return null;
   }

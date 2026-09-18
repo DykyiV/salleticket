@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { requireRole } from "@/lib/auth/guard";
+import { requireAuth, requireRole } from "@/lib/auth/guard";
+import { can } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/db";
 import { parseMonthMultipliers, parseTiers } from "@/lib/pricing/grid";
 
@@ -7,8 +8,11 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  const guard = await requireRole("ADMIN");
+  const guard = await requireAuth();
   if (!guard.ok) return guard.response;
+  if (!(await can({ role: guard.session.role }, "price.read"))) {
+    return NextResponse.json({ error: "Немає дозволу price.read" }, { status: 403 });
+  }
 
   const [countries, grids] = await Promise.all([
     prisma.country.findMany({ orderBy: { sortOrder: "asc" } }),
@@ -58,8 +62,11 @@ type PutBody = {
 };
 
 export async function PUT(req: NextRequest) {
-  const guard = await requireRole("ADMIN");
+  const guard = await requireAuth();
   if (!guard.ok) return guard.response;
+  if (!(await can({ role: guard.session.role }, "price.edit"))) {
+    return NextResponse.json({ error: "Немає дозволу price.edit" }, { status: 403 });
+  }
 
   let body: PutBody;
   try {
