@@ -3,12 +3,13 @@
  *
  * Run with:  npm run db:seed
  */
-import { AgeCategory, PrismaClient, Role, TicketStatus, TripKind } from "@prisma/client";
+import { AgeCategory, PaymentStatus, PrismaClient, Role, TicketStatus, TripKind } from "@prisma/client";
 import { hashPassword } from "../lib/auth/password";
 import { stringifyWeekdays } from "../lib/routes/weekdays";
 import { generateDepartures } from "../lib/routes/generate";
 import { addUtcDays, combineUtcDateTime, todayUtc } from "../lib/routes/dates";
 import { computePrice, type AgeCategoryId } from "../lib/pricing";
+import { DEFAULT_SITE_SETTINGS } from "../lib/settings";
 import { recordTicketHistory } from "../lib/tickets/history";
 
 const prisma = new PrismaClient();
@@ -63,6 +64,15 @@ async function main() {
     canHideSeats: true,
   });
   console.log("  upserted admin@asolbus.local / agent@asolbus.local");
+
+  for (const [key, value] of Object.entries(DEFAULT_SITE_SETTINGS)) {
+    await prisma.siteSetting.upsert({
+      where: { key },
+      create: { key, value: String(value) },
+      update: {},
+    });
+  }
+  console.log("  upserted site settings (online discount, payment windows, seat hold)");
 
   const ukraine = await prisma.country.upsert({
     where: { name: "Україна" },
@@ -522,6 +532,19 @@ async function seedDemoTickets() {
       seatNumber: 21,
       tripKind: TripKind.OPEN_RETURN,
     },
+    {
+      reference: "AB-DEMO05",
+      routeName: "Київ — Берлін",
+      firstName: "Наталія",
+      lastName: "Мельник",
+      phone: "+380671555444",
+      email: "natalia.melnyk@example.com",
+      ageCategory: AgeCategory.ADULT,
+      status: TicketStatus.AWAITING_PAYMENT,
+      promoCode: null,
+      seatNumber: 3,
+      tripKind: TripKind.ONE_WAY,
+    },
   ];
 
   for (const demo of demos) {
@@ -591,6 +614,30 @@ async function seedDemoTickets() {
         trip: { from: null, to: demo.routeName },
       },
     });
+
+    if (demo.status === TicketStatus.AWAITING_PAYMENT) {
+      const discountPct = DEFAULT_SITE_SETTINGS.onlineDiscountPercent;
+      const amount = Math.round(pricing.finalPrice * (1 - discountPct / 100) * 100) / 100;
+      await prisma.payment.create({
+        data: {
+          ticketId: ticket.id,
+          status: PaymentStatus.PENDING,
+          amount,
+          fullAmount: pricing.finalPrice,
+          deadlineAt: new Date(Date.now() + DEFAULT_SITE_SETTINGS.paymentDeadlineHours * 3_600_000),
+        },
+      });
+      await prisma.ticket.update({
+        where: { id: ticket.id },
+        data: { finalPrice: amount },
+      });
+      await prisma.booking.updateMany({
+        where: { ticketId: ticket.id },
+        data: { finalPrice: amount },
+      });
+      console.log(`  created demo ticket ${demo.reference} on ${demo.routeName} (очікує оплату ${amount}€)`);
+      continue;
+    }
     console.log(`  created demo ticket ${demo.reference} on ${demo.routeName}`);
   }
 }

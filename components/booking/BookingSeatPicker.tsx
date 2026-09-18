@@ -32,6 +32,7 @@ export default function BookingSeatPicker({
   to,
   tripKind,
   returnDate,
+  sessionId,
   onChange,
 }: {
   tripId?: string;
@@ -39,10 +40,12 @@ export default function BookingSeatPicker({
   to: string;
   tripKind: TripKindId;
   returnDate?: string;
+  sessionId: string;
   onChange: (value: BookingSeatValue) => void;
 }) {
   const [outboundLayout, setOutboundLayout] = useState<BusLayout | null>(null);
   const [seat, setSeat] = useState<number | null>(null);
+  const [holdError, setHoldError] = useState<string | null>(null);
   const [retDate, setRetDate] = useState(returnDate ?? "");
   const [trips, setTrips] = useState<TripOption[]>([]);
   const [returnTripId, setReturnTripId] = useState<string | null>(null);
@@ -50,16 +53,51 @@ export default function BookingSeatPicker({
   const [returnSeat, setReturnSeat] = useState<number | null>(null);
   const [returnPrice, setReturnPrice] = useState(0);
 
-  useEffect(() => {
+  const loadOutboundLayout = () => {
     if (!tripId) {
       setOutboundLayout(emptySeatLayout());
       return;
     }
-    fetch(`/api/trips/${tripId}/seats`)
+    fetch(`/api/trips/${tripId}/seats?sessionId=${encodeURIComponent(sessionId)}`)
       .then((r) => r.json())
       .then((data) => setOutboundLayout(data.layout ?? emptySeatLayout()))
       .catch(() => setOutboundLayout(emptySeatLayout()));
-  }, [tripId]);
+  };
+
+  useEffect(() => {
+    loadOutboundLayout();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tripId, sessionId]);
+
+  const holdSeat = async (next: number | null, prev: number | null) => {
+    setHoldError(null);
+    if (!tripId) return;
+    if (prev != null && prev !== next) {
+      await fetch(`/api/trips/${tripId}/holds`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId, seatNumber: prev }),
+      }).catch(() => {});
+    }
+    if (next == null) return;
+    const res = await fetch(`/api/trips/${tripId}/holds`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sessionId, seatNumber: next }),
+    }).catch(() => null);
+    if (!res || !res.ok) {
+      const data = res ? await res.json().catch(() => ({})) : {};
+      setHoldError(data.error ?? "Місце щойно забронювали");
+      setSeat(null);
+      loadOutboundLayout();
+    }
+  };
+
+  const selectOutbound = (next: number | null) => {
+    const prev = seat;
+    setSeat(next);
+    void holdSeat(next, prev);
+  };
 
   useEffect(() => {
     if (tripKind !== "ROUND_TRIP" || !retDate) return;
@@ -79,14 +117,43 @@ export default function BookingSeatPicker({
 
   useEffect(() => {
     if (!returnTripId) return;
-    fetch(`/api/trips/${returnTripId}/seats`)
+    fetch(
+      `/api/trips/${returnTripId}/seats?sessionId=${encodeURIComponent(sessionId)}`
+    )
       .then((r) => r.json())
       .then((data) => {
         setReturnLayout(data.layout ?? emptySeatLayout());
         setReturnSeat(null);
       })
       .catch(() => setReturnLayout(emptySeatLayout()));
-  }, [returnTripId]);
+  }, [returnTripId, sessionId]);
+
+  const selectReturn = (next: number | null) => {
+    const prev = returnSeat;
+    setReturnSeat(next);
+    if (!returnTripId) return;
+    setHoldError(null);
+    if (prev != null && prev !== next) {
+      void fetch(`/api/trips/${returnTripId}/holds`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId, seatNumber: prev }),
+      }).catch(() => {});
+    }
+    if (next == null) return;
+    void (async () => {
+      const res = await fetch(`/api/trips/${returnTripId}/holds`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId, seatNumber: next }),
+      }).catch(() => null);
+      if (!res || !res.ok) {
+        const data = res ? await res.json().catch(() => ({})) : {};
+        setHoldError(data.error ?? "Місце щойно забронювали");
+        setReturnSeat(null);
+      }
+    })();
+  };
 
   useEffect(() => {
     onChange({
@@ -119,11 +186,19 @@ export default function BookingSeatPicker({
             <SeatMap
               layout={outboundLayout}
               selectedSeatNumber={seat}
-              onSelect={setSeat}
+              onSelect={selectOutbound}
             />
           ) : (
             <p className="text-sm text-slate-500">Завантаження схеми місць…</p>
           )}
+          {holdError ? (
+            <p className="mt-2 text-sm text-rose-700">{holdError}</p>
+          ) : null}
+          {seat != null && !holdError ? (
+            <p className="mt-2 text-xs text-emerald-700">
+              Місце {seat} тимчасово закріплене за вами на час бронювання.
+            </p>
+          ) : null}
         </div>
       </div>
 
@@ -191,7 +266,7 @@ export default function BookingSeatPicker({
               <SeatMap
                 layout={returnLayout}
                 selectedSeatNumber={returnSeat}
-                onSelect={setReturnSeat}
+                onSelect={selectReturn}
               />
             </div>
           ) : null}

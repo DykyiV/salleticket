@@ -59,6 +59,8 @@ type BookingConfirmation = {
   totalPaid: number;
   status: string;
   finalPrice: number;
+  paymentMethod: "CASH_ON_BUS" | "ONLINE";
+  payUrl?: string;
 };
 
 type Values = {
@@ -91,6 +93,27 @@ export default function BookingForm({
     outboundAssignsSeats: true,
     returnAssignsSeats: true,
   });
+  const [sessionId] = useState(() =>
+    typeof crypto !== "undefined" && "randomUUID" in crypto
+      ? crypto.randomUUID()
+      : `sess-${Math.random().toString(36).slice(2)}${Date.now()}`
+  );
+  const [salesSettings, setSalesSettings] = useState<{
+    onlineDiscountPercent: number;
+    paymentDeadlineHours: number;
+  }>({ onlineDiscountPercent: 0, paymentDeadlineHours: 24 });
+
+  useEffect(() => {
+    fetch("/api/settings/public")
+      .then((r) => r.json())
+      .then((data) =>
+        setSalesSettings({
+          onlineDiscountPercent: Number(data.onlineDiscountPercent) || 0,
+          paymentDeadlineHours: Number(data.paymentDeadlineHours) || 24,
+        })
+      )
+      .catch(() => {});
+  }, []);
 
   const [loginHref, setLoginHref] = useState("/login");
   useEffect(() => {
@@ -183,6 +206,13 @@ export default function BookingForm({
     [tripSummary.price, values.ageCategory, activePromo, tripKind, seatValue.returnPrice]
   );
 
+  const onlineTotal = useMemo(() => {
+    const pct = Math.min(100, Math.max(0, salesSettings.onlineDiscountPercent));
+    const discounted =
+      Math.round(price.finalPrice * (1 - pct / 100) * 100) / 100;
+    return Math.round((discounted + price.serviceFee) * 100) / 100;
+  }, [price.finalPrice, price.serviceFee, salesSettings.onlineDiscountPercent]);
+
   const setField = <K extends keyof Values>(field: K, value: Values[K]) => {
     setValues((prev) => ({ ...prev, [field]: value }));
     setErrors((prev) => ({ ...prev, [field]: undefined }));
@@ -219,8 +249,11 @@ export default function BookingForm({
     return next;
   };
 
-  const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
+  const handleSubmit = async (
+    e: FormEvent<HTMLFormElement> | null,
+    paymentMethod: "CASH_ON_BUS" | "ONLINE"
+  ) => {
+    e?.preventDefault();
     const found = validate();
     setErrors(found);
     setSubmitError(null);
@@ -272,6 +305,8 @@ export default function BookingForm({
           seatNumber: seatValue.seatNumber,
           returnTripId: seatValue.returnTripId ?? undefined,
           returnSeatNumber: seatValue.returnSeatNumber,
+          paymentMethod,
+          holdSessionId: sessionId,
         }),
       });
 
@@ -289,12 +324,19 @@ export default function BookingForm({
         throw new Error(data?.error ?? "Booking failed");
       }
 
+      if (paymentMethod === "ONLINE" && data.booking.payment?.payUrl) {
+        router.push(data.booking.payment.payUrl as string);
+        return;
+      }
+
       setConfirmation({
         reference: data.booking.reference,
         carrierReference: data.carrierReference,
         totalPaid: data.booking.totalPaid,
         status: data.booking.status,
         finalPrice: data.booking.finalPrice ?? data.booking.basePrice ?? 0,
+        paymentMethod,
+        payUrl: data.booking.payment?.payUrl,
       });
     } catch (err) {
       setSubmitError(
@@ -359,6 +401,14 @@ export default function BookingForm({
           <SummaryRow label="Carrier" value={tripSummary.carrier} />
           <SummaryRow label="Status" value={confirmation.status} />
           <SummaryRow
+            label="Оплата"
+            value={
+              confirmation.paymentMethod === "ONLINE"
+                ? "Онлайн"
+                : "В автобусі"
+            }
+          />
+          <SummaryRow
             label="Ticket price"
             value={`€${confirmation.finalPrice.toFixed(2)}`}
           />
@@ -398,7 +448,7 @@ export default function BookingForm({
 
   return (
     <form
-      onSubmit={handleSubmit}
+      onSubmit={(e) => e.preventDefault()}
       noValidate
       className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200 sm:p-8"
     >
@@ -541,6 +591,7 @@ export default function BookingForm({
         to={tripSummary.to}
         tripKind={tripKind}
         returnDate={returnDate}
+        sessionId={sessionId}
         onChange={setSeatValue}
       />
 
@@ -618,6 +669,8 @@ export default function BookingForm({
         serviceFee={price.serviceFee}
         finalPrice={price.finalPrice}
         total={price.total}
+        onlineTotal={onlineTotal}
+        onlineDiscountPercent={salesSettings.onlineDiscountPercent}
       />
 
       <label className="mt-6 flex items-start gap-2.5 text-sm text-slate-600">
@@ -652,27 +705,61 @@ export default function BookingForm({
         </div>
       ) : null}
 
-      <div className="mt-8 flex flex-col gap-3 border-t border-dashed border-slate-200 pt-6 sm:flex-row sm:items-center sm:justify-between">
+      <div className="mt-8 space-y-3 border-t border-dashed border-slate-200 pt-6">
         <p className="text-xs text-slate-500">
-          No real payment is processed. This is a demo booking flow.
+          Оберіть спосіб завершення бронювання. Місце вже закріплене за вами.
         </p>
-        <button
-          type="submit"
-          disabled={submitting}
-          className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-brand-600 px-6 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-70"
-        >
-          {submitting ? (
-            <>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <button
+            type="button"
+            onClick={() => handleSubmit(null, "CASH_ON_BUS")}
+            disabled={submitting}
+            className="inline-flex min-h-12 flex-col items-center justify-center gap-0.5 rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 shadow-sm transition hover:border-brand-300 hover:text-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-70"
+          >
+            {submitting ? (
               <Spinner className="h-4 w-4" />
-              Confirming…
-            </>
-          ) : (
-            <>
-              Pay €{price.total.toFixed(2)}
-              <ArrowRightIcon className="h-4 w-4" />
-            </>
-          )}
-        </button>
+            ) : (
+              <>
+                <span>Забронювати · оплата в автобусі</span>
+                <span className="text-base font-bold tabular-nums">
+                  €{price.total.toFixed(2)}
+                </span>
+              </>
+            )}
+          </button>
+          <button
+            type="button"
+            onClick={() => handleSubmit(null, "ONLINE")}
+            disabled={submitting}
+            className="inline-flex min-h-12 flex-col items-center justify-center gap-0.5 rounded-xl bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-70"
+          >
+            {submitting ? (
+              <Spinner className="h-4 w-4" />
+            ) : (
+              <>
+                <span>
+                  Оплатити зараз
+                  {salesSettings.onlineDiscountPercent > 0 ? (
+                    <span className="ml-1.5 rounded-full bg-white/20 px-1.5 py-0.5 text-[11px]">
+                      −{salesSettings.onlineDiscountPercent}%
+                    </span>
+                  ) : null}
+                </span>
+                <span className="text-base font-bold tabular-nums">
+                  €{onlineTotal.toFixed(2)}
+                  {onlineTotal < price.total ? (
+                    <span className="ml-1.5 align-middle text-xs font-medium text-brand-100 line-through">
+                      €{price.total.toFixed(2)}
+                    </span>
+                  ) : null}
+                </span>
+                <span className="text-[11px] font-normal text-brand-100">
+                  на оплату {salesSettings.paymentDeadlineHours} год
+                </span>
+              </>
+            )}
+          </button>
+        </div>
       </div>
     </form>
   );
@@ -687,6 +774,8 @@ function PriceBreakdownPanel({
   serviceFee,
   finalPrice,
   total,
+  onlineTotal,
+  onlineDiscountPercent,
 }: {
   basePrice: number;
   ageDiscount: number;
@@ -696,6 +785,8 @@ function PriceBreakdownPanel({
   serviceFee: number;
   finalPrice: number;
   total: number;
+  onlineTotal: number;
+  onlineDiscountPercent: number;
 }) {
   return (
     <div className="mt-6 rounded-xl border border-slate-200 bg-slate-50/60 p-4">
@@ -737,6 +828,14 @@ function PriceBreakdownPanel({
             €{total.toFixed(2)}
           </dd>
         </div>
+        {onlineDiscountPercent > 0 ? (
+          <div className="flex items-center justify-between text-emerald-700">
+            <dt>Онлайн-оплата (−{onlineDiscountPercent}%)</dt>
+            <dd className="tabular-nums font-semibold">
+              €{onlineTotal.toFixed(2)}
+            </dd>
+          </div>
+        ) : null}
       </dl>
     </div>
   );

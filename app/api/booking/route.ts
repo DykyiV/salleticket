@@ -8,10 +8,13 @@ import { PromoError, validatePromo } from "@/lib/promo";
 import { recordTicketHistory, requestMeta } from "@/lib/tickets/history";
 import { parseTripKind } from "@/lib/tickets/kinds";
 import {
+  SeatHeldError,
   SeatRequiredError,
   SeatTakenError,
   assertSeatAvailable,
+  releaseSessionHolds,
 } from "@/lib/tickets/inventory";
+import { applyOnlineDiscount, getSiteSettings } from "@/lib/settings";
 import { cityNames } from "@/lib/trips/cities";
 import type { BookingPassenger, Trip } from "@/lib/carriers/types";
 
@@ -34,6 +37,8 @@ type CreateBookingBody = {
   seatNumber?: number | null;
   returnTripId?: string;
   returnSeatNumber?: number | null;
+  paymentMethod?: string;
+  holdSessionId?: string;
 };
 
 const SERVICE_FEE_EUR = 1.5;
@@ -200,6 +205,10 @@ export async function POST(req: NextRequest) {
   }
 
   const tripKind = parseTripKind(body.tripKind);
+  const paymentMethod =
+    body.paymentMethod === "ONLINE" ? "ONLINE" : "CASH_ON_BUS";
+  const holdSessionId = body.holdSessionId?.trim() || undefined;
+  const siteSettings = await getSiteSettings();
 
   let passenger: ResolvedPassenger;
   try {
@@ -362,7 +371,12 @@ export async function POST(req: NextRequest) {
     validatedPromo
   );
   const basePrice = pricing.basePrice;
-  const finalPrice = pricing.finalPrice;
+  const fullPrice = pricing.finalPrice;
+  // Online payment gets the configurable discount; paying on the bus doesn't.
+  const finalPrice =
+    paymentMethod === "ONLINE"
+      ? applyOnlineDiscount(fullPrice, siteSettings)
+      : fullPrice;
   const appliedPromoCode = validatedPromo?.code ?? null;
   const appliedPromoId = validatedPromo?.id ?? null;
 
@@ -411,7 +425,8 @@ export async function POST(req: NextRequest) {
         tx,
         trip.id,
         body.seatNumber,
-        undefined
+        undefined,
+        holdSessionId
       );
       let returnSeat: number | null = null;
       if (tripKind === "ROUND_TRIP" && returnStoredTrip) {
@@ -419,7 +434,8 @@ export async function POST(req: NextRequest) {
           tx,
           returnStoredTrip.id,
           body.returnSeatNumber,
-          undefined
+          undefined,
+          holdSessionId
         );
       }
 
@@ -427,7 +443,10 @@ export async function POST(req: NextRequest) {
         data: {
           userId: session.sub,
           tripId: trip.id,
-          status: TicketStatus.RESERVED,
+          status:
+            paymentMethod === "ONLINE"
+              ? TicketStatus.AWAITING_PAYMENT
+              : TicketStatus.RESERVED,
           basePrice,
           finalPrice,
           seatNumber: outboundSeat,
@@ -503,6 +522,7 @@ export async function POST(req: NextRequest) {
             },
           },
           promoCode: { from: null, to: booking.promoCode },
+          paymentMethod: { from: null, to: paymentMethod },
           trip: {
             from: null,
             to: {
@@ -522,6 +542,43 @@ export async function POST(req: NextRequest) {
 
       return { carrier, trip, ticket, booking };
     });
+
+    // The seat is now owned by the ticket — drop the session holds.
+    if (holdSessionId) {
+      await releaseSessionHolds(prisma, holdSessionId, [
+        created.trip.id,
+        ...(returnStoredTrip ? [returnStoredTrip.id] : []),
+      ]);
+    }
+
+    let payment = null as {
+      id: string;
+      amount: number;
+      deadlineAt: Date;
+    } | null;
+    if (paymentMethod === "ONLINE") {
+      payment = await prisma.payment.create({
+        data: {
+          ticketId: created.ticket.id,
+          amount: finalPrice,
+          fullAmount: fullPrice,
+          deadlineAt: new Date(
+            Date.now() + siteSettings.paymentDeadlineHours * 3_600_000
+          ),
+        },
+      });
+      await recordTicketHistory(prisma, {
+        ticketId: created.ticket.id,
+        action: "PAYMENT_STARTED",
+        source: "BOOKING_FORM",
+        changedBy: session.sub,
+        request: meta,
+        changes: {
+          amount: { from: null, to: payment.amount },
+          deadlineAt: { from: null, to: payment.deadlineAt },
+        },
+      });
+    }
 
     const totalPaid = finalPrice + SERVICE_FEE_EUR;
 
@@ -559,6 +616,14 @@ export async function POST(req: NextRequest) {
           seatNumber: created.ticket.seatNumber,
           returnTripId: created.ticket.returnTripId,
           returnSeatNumber: created.ticket.returnSeatNumber,
+          paymentMethod,
+          payment: payment
+            ? {
+                amount: payment.amount,
+                deadlineAt: payment.deadlineAt,
+                payUrl: `/pay/${created.booking.reference}`,
+              }
+            : undefined,
           basePrice: created.ticket.basePrice,
           finalPrice: created.booking.finalPrice,
           priceBreakdown: {
@@ -578,7 +643,11 @@ export async function POST(req: NextRequest) {
       { status: 201 }
     );
   } catch (err) {
-    if (err instanceof SeatTakenError || err instanceof SeatRequiredError) {
+    if (
+      err instanceof SeatTakenError ||
+      err instanceof SeatHeldError ||
+      err instanceof SeatRequiredError
+    ) {
       return NextResponse.json({ error: err.message }, { status: 409 });
     }
     // P2025 = the conditional promo update matched 0 rows (concurrency race

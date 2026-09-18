@@ -9,6 +9,7 @@ import TicketStatusControl from "@/components/ticket/TicketStatusControl";
 import { getCurrentUser } from "@/lib/auth/session";
 import { hasRoleAtLeast } from "@/lib/auth/constants";
 import { prisma } from "@/lib/db";
+import { reconcileTicketPayment } from "@/lib/payments";
 import { findStopForCity } from "@/lib/routes/boarding";
 import { formatUkDate } from "@/lib/routes/dates";
 import { weekdayName } from "@/lib/routes/weekdays";
@@ -56,6 +57,17 @@ export default async function CabinetTicketEditPage({
 
   const staff = hasRoleAtLeast(user.role, "AGENT");
   if (booking.ticket.userId !== user.id && !staff) notFound();
+
+  await reconcileTicketPayment(booking.ticket.id);
+  const freshTicket = await prisma.ticket.findUnique({
+    where: { id: booking.ticket.id },
+    include: { payments: { orderBy: { createdAt: "desc" }, take: 1 } },
+  });
+  const payment = freshTicket?.payments[0] ?? null;
+  if (freshTicket) {
+    booking.ticket.status = freshTicket.status;
+    booking.ticket.finalPrice = freshTicket.finalPrice;
+  }
 
   const trip = booking.ticket.trip;
   const returnTrip = booking.ticket.returnTrip;
@@ -208,6 +220,34 @@ export default async function CabinetTicketEditPage({
             {eur(booking.finalPrice)}
           </dd>
         </dl>
+        {payment ? (
+          <div className="mt-4 rounded-xl border border-violet-200 bg-violet-50 px-4 py-3 text-sm">
+            <p className="font-medium text-violet-900">
+              Онлайн-оплата: {eur(payment.amount)}
+              {payment.fullAmount > payment.amount
+                ? ` замість ${eur(payment.fullAmount)}`
+                : ""}
+            </p>
+            <p className="mt-0.5 text-xs text-violet-700">
+              {payment.status === "SETTLED"
+                ? "Кошти зараховано."
+                : payment.status === "SENT"
+                  ? "Оплату надіслано — очікуємо зарахування коштів (20–30 хв)."
+                  : payment.status === "EXPIRED"
+                    ? "Дедлайн минув — знижка згоріла, квиток за повною ціною."
+                    : `Оплатіть до ${payment.deadlineAt.toLocaleString("uk-UA")} — інакше знижка згорить.`}
+            </p>
+            {booking.ticket.status === "AWAITING_PAYMENT" &&
+            payment.status !== "EXPIRED" ? (
+              <Link
+                href={`/pay/${booking.reference}`}
+                className="mt-2 inline-block rounded-lg bg-violet-600 px-3 py-1.5 text-xs font-semibold text-white"
+              >
+                {payment.status === "SENT" ? "Статус оплати" : "Сплатити зараз"}
+              </Link>
+            ) : null}
+          </div>
+        ) : null}
       </section>
 
       {booking.ticket.history.length > 0 ? (

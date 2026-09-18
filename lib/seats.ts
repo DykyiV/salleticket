@@ -2,7 +2,7 @@
  * Coach seat layout (2+2, last row left pair + WC) and occupancy helpers.
  */
 
-export type SeatStatus = "AVAILABLE" | "OCCUPIED";
+export type SeatStatus = "AVAILABLE" | "OCCUPIED" | "HELD";
 export type SeatSide = "left" | "right";
 export type SeatPosition = "window" | "aisle";
 
@@ -23,8 +23,12 @@ export type BusLayout = {
 
 export const SEAT_ROWS = 12;
 
-export function emptySeatLayout(occupied: Iterable<number> = []): BusLayout {
+export function emptySeatLayout(
+  occupied: Iterable<number> = [],
+  held: Iterable<number> = []
+): BusLayout {
   const taken = new Set(occupied);
+  const heldSet = new Set(held);
   const seats: Seat[] = [];
   let number = 1;
 
@@ -39,7 +43,11 @@ export function emptySeatLayout(occupied: Iterable<number> = []): BusLayout {
         row,
         side,
         position,
-        status: taken.has(number) ? "OCCUPIED" : "AVAILABLE",
+        status: taken.has(number)
+          ? "OCCUPIED"
+          : heldSet.has(number)
+            ? "HELD"
+            : "AVAILABLE",
       });
       number += 1;
     }

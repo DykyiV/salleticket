@@ -3,7 +3,13 @@
 import { useMemo } from "react";
 import { findSeat, seatLabels, type BusLayout, type Seat } from "@/lib/seats";
 
-type DisplayStatus = "AVAILABLE" | "SELECTED" | "OCCUPIED";
+type DisplayStatus = "AVAILABLE" | "SELECTED" | "OCCUPIED" | "HELD";
+
+function displayStatus(seat: Seat, selectedSeatNumber: number | null): DisplayStatus {
+  if (seat.status === "OCCUPIED") return "OCCUPIED";
+  if (seat.status === "HELD") return "HELD";
+  return seat.number === selectedSeatNumber ? "SELECTED" : "AVAILABLE";
+}
 
 export default function SeatMap({
   layout,
@@ -35,7 +41,7 @@ export default function SeatMap({
   }
 
   const toggle = (seat: Seat) => {
-    if (seat.status === "OCCUPIED") return;
+    if (seat.status !== "AVAILABLE") return;
     onSelect(seat.number === selectedSeatNumber ? null : seat.number);
   };
 
@@ -65,13 +71,7 @@ export default function SeatMap({
                       <SeatButton
                         key={seat.number}
                         seat={seat}
-                        status={
-                          seat.status === "OCCUPIED"
-                            ? "OCCUPIED"
-                            : seat.number === selectedSeatNumber
-                              ? "SELECTED"
-                              : "AVAILABLE"
-                        }
+                        status={displayStatus(seat, selectedSeatNumber)}
                         onToggle={toggle}
                       />
                     ))}
@@ -87,13 +87,7 @@ export default function SeatMap({
                         <SeatButton
                           key={seat.number}
                           seat={seat}
-                          status={
-                            seat.status === "OCCUPIED"
-                              ? "OCCUPIED"
-                              : seat.number === selectedSeatNumber
-                                ? "SELECTED"
-                                : "AVAILABLE"
-                          }
+                          status={displayStatus(seat, selectedSeatNumber)}
                           onToggle={toggle}
                         />
                       ))
@@ -114,6 +108,9 @@ export default function SeatMap({
             </p>
             <p className="flex items-center gap-2">
               <span className="h-3 w-3 rounded bg-slate-300" /> Зайняте
+            </p>
+            <p className="flex items-center gap-2">
+              <span className="h-3 w-3 rounded bg-amber-300" /> Бронь (інший пасажир)
             </p>
           </div>
           <div className="rounded-xl border border-brand-200 bg-brand-50 p-3">
@@ -149,17 +146,20 @@ function SeatButton({
   status: DisplayStatus;
   onToggle: (seat: Seat) => void;
 }) {
+  const disabled = status === "OCCUPIED" || status === "HELD";
   return (
     <button
       type="button"
-      disabled={status === "OCCUPIED"}
+      disabled={disabled}
       onClick={() => onToggle(seat)}
       className={`flex h-8 w-8 items-center justify-center rounded text-[11px] font-semibold ${
         status === "OCCUPIED"
           ? "cursor-not-allowed bg-slate-300 text-slate-500"
-          : status === "SELECTED"
-            ? "bg-brand-600 text-white"
-            : "bg-white text-slate-700 ring-1 ring-inset ring-slate-300 hover:bg-brand-50"
+          : status === "HELD"
+            ? "cursor-not-allowed bg-amber-300 text-amber-900"
+            : status === "SELECTED"
+              ? "bg-brand-600 text-white"
+              : "bg-white text-slate-700 ring-1 ring-inset ring-slate-300 hover:bg-brand-50"
       }`}
       aria-label={`Місце ${seat.number}`}
     >

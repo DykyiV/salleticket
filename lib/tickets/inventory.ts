@@ -8,6 +8,13 @@ export class SeatTakenError extends Error {
   }
 }
 
+export class SeatHeldError extends Error {
+  constructor(seat: number) {
+    super(`Місце ${seat} тимчасово заброньоване іншим пасажиром`);
+    this.name = "SeatHeldError";
+  }
+}
+
 export class SeatRequiredError extends Error {
   constructor() {
     super("Оберіть місце в салоні");
@@ -17,6 +24,7 @@ export class SeatRequiredError extends Error {
 
 const ACTIVE: TicketStatus[] = [
   TicketStatus.RESERVED,
+  TicketStatus.AWAITING_PAYMENT,
   TicketStatus.PAID_ONLINE,
   TicketStatus.PAID_CASH,
 ];
@@ -59,7 +67,9 @@ async function tripIdsOnSameCoach(db: Db, tripId: string): Promise<string[]> {
   });
   const isReturn = trip.fromCity === destination;
   return siblings
-    .filter((t) => (isReturn ? t.fromCity === destination : t.fromCity !== destination))
+    .filter((t) =>
+      isReturn ? t.fromCity === destination : t.fromCity !== destination
+    )
     .map((t) => t.id);
 }
 
@@ -92,31 +102,70 @@ export async function occupiedSeatNumbers(
   return taken;
 }
 
+/** Seats locked by in-progress booking sessions (not yet paid tickets). */
+export async function heldSeatNumbers(
+  db: Db,
+  tripId: string,
+  exceptSessionId?: string
+): Promise<Set<number>> {
+  const ids = await tripIdsOnSameCoach(db, tripId);
+  const holds = await db.seatHold.findMany({
+    where: {
+      tripId: { in: ids },
+      expiresAt: { gt: new Date() },
+      ...(exceptSessionId ? { sessionId: { not: exceptSessionId } } : {}),
+    },
+    select: { seatNumber: true },
+  });
+  return new Set(holds.map((h) => h.seatNumber));
+}
+
 export async function getTripSeatLayout(
   db: Db,
   tripId: string,
-  exceptTicketId?: string
+  exceptTicketId?: string,
+  sessionId?: string
 ): Promise<BusLayout> {
   const assigns = await tripAssignsSeats(db, tripId);
   if (!assigns) {
     return { rows: 0, hasToilet: false, hasAssignedSeats: false, seats: [] };
   }
-  const taken = await occupiedSeatNumbers(db, tripId, exceptTicketId);
-  return emptySeatLayout(taken);
+  const [taken, held] = await Promise.all([
+    occupiedSeatNumbers(db, tripId, exceptTicketId),
+    heldSeatNumbers(db, tripId, sessionId),
+  ]);
+  return emptySeatLayout(taken, held);
 }
 
 export async function assertSeatAvailable(
   db: Db,
   tripId: string,
   seatNumber: number | null | undefined,
-  exceptTicketId?: string
+  exceptTicketId?: string,
+  sessionId?: string
 ): Promise<number | null> {
   const assigns = await tripAssignsSeats(db, tripId);
   if (!assigns) return null;
   if (seatNumber == null || !isValidSeatNumber(seatNumber)) {
     throw new SeatRequiredError();
   }
-  const taken = await occupiedSeatNumbers(db, tripId, exceptTicketId);
+  const [taken, held] = await Promise.all([
+    occupiedSeatNumbers(db, tripId, exceptTicketId),
+    heldSeatNumbers(db, tripId, sessionId),
+  ]);
   if (taken.has(seatNumber)) throw new SeatTakenError(seatNumber);
+  if (held.has(seatNumber)) throw new SeatHeldError(seatNumber);
   return seatNumber;
+}
+
+/** Remove a session's holds once the booking is persisted. */
+export async function releaseSessionHolds(
+  db: Db,
+  sessionId: string,
+  tripIds: string[]
+): Promise<void> {
+  if (!tripIds.length) return;
+  await db.seatHold.deleteMany({
+    where: { sessionId, tripId: { in: tripIds } },
+  });
 }

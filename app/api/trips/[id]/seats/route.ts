@@ -21,6 +21,7 @@ export async function GET(req: NextRequest, { params }: Params) {
   }
 
   const except = req.nextUrl.searchParams.get("exceptTicketId") ?? undefined;
-  const layout = await getTripSeatLayout(prisma, params.id, except);
+  const sessionId = req.nextUrl.searchParams.get("sessionId") ?? undefined;
+  const layout = await getTripSeatLayout(prisma, params.id, except, sessionId);
   return NextResponse.json({ layout });
 }

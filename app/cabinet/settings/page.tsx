@@ -5,11 +5,20 @@ import UsersPermissions, {
 import DiscountsAdmin, {
   type DiscountRow,
 } from "@/components/admin/DiscountsAdmin";
+import SaleSettings from "@/components/admin/SaleSettings";
 import { prisma } from "@/lib/db";
+import { getSiteSettings } from "@/lib/settings";
+import { getCurrentUser } from "@/lib/auth/session";
+import { isAdminRole } from "@/lib/routes/permissions";
 
 export const dynamic = "force-dynamic";
 
 export default async function CabinetSettingsPage() {
+  const [user, siteSettings] = await Promise.all([
+    getCurrentUser(),
+    getSiteSettings(),
+  ]);
+  const isAdmin = user ? isAdminRole(user.role) : false;
   const [users, promos] = await Promise.all([
     prisma.user.findMany({
       select: {
@@ -54,8 +63,16 @@ export default async function CabinetSettingsPage() {
     <div className="mx-auto max-w-6xl space-y-8">
       <PageHeader
         title="Налаштування"
-        subtitle="Користувачі, права агентів і промокоди."
+        subtitle="Користувачі, права агентів, продаж і промокоди."
       />
+      {isAdmin ? (
+        <section>
+          <h2 className="mb-3 text-base font-semibold text-slate-900">
+            Продаж квитків
+          </h2>
+          <SaleSettings initial={siteSettings} />
+        </section>
+      ) : null}
       <section>
         <h2 className="mb-3 text-base font-semibold text-slate-900">Користувачі</h2>
         <UsersPermissions initialUsers={userRows} />

@@ -2,6 +2,7 @@ import type { TicketStatus } from "@prisma/client";
 
 export const TICKET_STATUS_LABEL: Record<TicketStatus, string> = {
   RESERVED: "Зарезервовано",
+  AWAITING_PAYMENT: "Очікує зарахування коштів",
   PAID_ONLINE: "Оплачено онлайн",
   PAID_CASH: "Оплачено готівкою",
   CANCELLED: "Скасовано",
@@ -10,6 +11,7 @@ export const TICKET_STATUS_LABEL: Record<TicketStatus, string> = {
 
 export const TICKET_STATUS_CLASS: Record<TicketStatus, string> = {
   RESERVED: "bg-amber-50 text-amber-800 ring-amber-200",
+  AWAITING_PAYMENT: "bg-violet-50 text-violet-800 ring-violet-200",
   PAID_ONLINE: "bg-emerald-50 text-emerald-800 ring-emerald-200",
   PAID_CASH: "bg-sky-50 text-sky-800 ring-sky-200",
   CANCELLED: "bg-rose-50 text-rose-800 ring-rose-200",
@@ -38,10 +40,14 @@ export const HISTORY_ACTION_LABEL: Record<string, string> = {
   SEAT_CHANGED: "Змінено місце",
   TRIP_CHANGED: "Змінено рейс",
   RETURN_ASSIGNED: "Призначено повернення",
+  PAYMENT_STARTED: "Розпочато онлайн-оплату",
+  PAYMENT_SETTLED: "Кошти зараховано",
+  PAYMENT_EXPIRED: "Знижка за онлайн-оплату згоріла",
 };
 
 export const STATUS_TRANSITIONS: Record<TicketStatus, TicketStatus[]> = {
-  RESERVED: ["PAID_ONLINE", "PAID_CASH", "CANCELLED"],
+  RESERVED: ["AWAITING_PAYMENT", "PAID_ONLINE", "PAID_CASH", "CANCELLED"],
+  AWAITING_PAYMENT: ["PAID_ONLINE", "RESERVED", "CANCELLED"],
   PAID_ONLINE: ["REFUNDED", "CANCELLED"],
   PAID_CASH: ["REFUNDED", "CANCELLED"],
   CANCELLED: [],
@@ -50,6 +56,7 @@ export const STATUS_TRANSITIONS: Record<TicketStatus, TicketStatus[]> = {
 
 export const STATUS_ACTION_LABEL: Record<TicketStatus, string> = {
   RESERVED: "Повернути в резерв",
+  AWAITING_PAYMENT: "Очікує зарахування коштів",
   PAID_ONLINE: "Позначити оплаченим онлайн",
   PAID_CASH: "Позначити оплаченим готівкою",
   CANCELLED: "Скасувати квиток",
@@ -58,6 +65,7 @@ export const STATUS_ACTION_LABEL: Record<TicketStatus, string> = {
 
 export const STATUS_ACTION_CLASS: Record<TicketStatus, string> = {
   RESERVED: "border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100",
+  AWAITING_PAYMENT: "border-violet-200 bg-violet-50 text-violet-800 hover:bg-violet-100",
   PAID_ONLINE: "border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100",
   PAID_CASH: "border-sky-200 bg-sky-50 text-sky-800 hover:bg-sky-100",
   CANCELLED: "border-rose-200 bg-rose-50 text-rose-800 hover:bg-rose-100",

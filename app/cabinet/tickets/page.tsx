@@ -5,6 +5,7 @@ import { inputClass, btnGhost } from "@/components/admin/Field";
 import { getCurrentUser } from "@/lib/auth/session";
 import { hasRoleAtLeast } from "@/lib/auth/constants";
 import { prisma } from "@/lib/db";
+import { reconcileDuePayments } from "@/lib/payments";
 import {
   bookedByLabel,
   eur,
@@ -17,6 +18,7 @@ export const dynamic = "force-dynamic";
 
 const STATUSES: TicketStatus[] = [
   "RESERVED",
+  "AWAITING_PAYMENT",
   "PAID_ONLINE",
   "PAID_CASH",
   "CANCELLED",
@@ -30,6 +32,7 @@ export default async function CabinetTicketsPage({
 }) {
   const user = await getCurrentUser();
   const staff = user ? hasRoleAtLeast(user.role, "AGENT") : false;
+  await reconcileDuePayments();
   const q = (searchParams.q ?? "").trim();
   const statusFilter =
     searchParams.status && STATUSES.includes(searchParams.status as TicketStatus)
