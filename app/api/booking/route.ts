@@ -27,48 +27,32 @@ type PassengerPayload = Partial<BookingPassenger> & {
   ageCategory?: AgeCategory | string;
 };
 
+type PassengerInput = PassengerPayload & {
+  promoCode?: string;
+  seatNumber?: number | null;
+  returnSeatNumber?: number | null;
+};
+
 type CreateBookingBody = {
   tripId?: string;
   carrierId?: string;
-  passenger?: PassengerPayload;
-  promoCode?: string;
   tripSnapshot?: Partial<Trip> & { date?: string };
   tripKind?: string;
-  seatNumber?: number | null;
   returnTripId?: string;
-  returnSeatNumber?: number | null;
   paymentMethod?: string;
   holdSessionId?: string;
+  contact?: { phone?: string; email?: string };
+  passengers?: PassengerInput[];
+  // Legacy single-passenger shape (still accepted).
+  passenger?: PassengerPayload;
+  promoCode?: string;
+  seatNumber?: number | null;
+  returnSeatNumber?: number | null;
 };
 
 const SERVICE_FEE_EUR = 1.5;
+const MAX_PASSENGERS = 6;
 
-/**
- * Split "First Last" into { firstName, lastName }. If only one token is given,
- * the last name defaults to a single dash so the column stays non-null; API
- * consumers that want a real split should send firstName + lastName directly.
- */
-function splitName(full: string): { firstName: string; lastName: string } {
-  const parts = full.trim().split(/\s+/);
-  if (parts.length === 1) return { firstName: parts[0], lastName: "-" };
-  return {
-    firstName: parts[0],
-    lastName: parts.slice(1).join(" "),
-  };
-}
-
-type ResolvedPassenger = {
-  firstName: string;
-  lastName: string;
-  ageCategory: AgeCategory;
-  phone: string;
-  email?: string;
-};
-
-/**
- * Thrown by validation helpers. The POST handler catches it and returns a
- * 400 with the message.
- */
 class ValidationError extends Error {
   constructor(message: string) {
     super(message);
@@ -76,8 +60,23 @@ class ValidationError extends Error {
   }
 }
 
-function resolvePassenger(p?: PassengerPayload): ResolvedPassenger {
-  if (!p) throw new ValidationError("Passenger is required");
+function splitName(full: string): { firstName: string; lastName: string } {
+  const parts = full.trim().split(/\s+/);
+  if (parts.length === 1) return { firstName: parts[0], lastName: "-" };
+  return { firstName: parts[0], lastName: parts.slice(1).join(" ") };
+}
+
+type ResolvedPassenger = {
+  firstName: string;
+  lastName: string;
+  ageCategory: AgeCategory;
+  promoCode?: string;
+  seatNumber?: number | null;
+  returnSeatNumber?: number | null;
+};
+
+function resolvePassenger(p?: PassengerInput): ResolvedPassenger {
+  if (!p) throw new ValidationError("Пасажир обовʼязковий");
 
   let firstName = p.firstName?.trim() ?? "";
   let lastName = p.lastName?.trim() ?? "";
@@ -86,29 +85,14 @@ function resolvePassenger(p?: PassengerPayload): ResolvedPassenger {
     firstName = firstName || split.firstName;
     lastName = lastName || split.lastName;
   }
-
-  if (firstName.length < 1) {
-    throw new ValidationError("First name is required");
-  }
-  if (lastName.length < 1) {
-    throw new ValidationError("Last name is required");
-  }
-
-  const digits = (p.phone ?? "").replace(/\D/g, "");
-  if (digits.length < 7) {
-    throw new ValidationError("Phone must contain at least 7 digits");
-  }
-  if (p.email && !/^\S+@\S+\.\S+$/.test(p.email)) {
-    throw new ValidationError("Email is not a valid address");
-  }
+  if (firstName.length < 1) throw new ValidationError("Вкажіть імʼя");
+  if (lastName.length < 1) throw new ValidationError("Вкажіть прізвище");
 
   const ageCategory = p.ageCategory;
-  if (!ageCategory) {
-    throw new Error("Age category is required");
-  }
+  if (!ageCategory) throw new ValidationError("Вкажіть вікову категорію");
   if (!(ageCategory in AgeCategory)) {
     throw new ValidationError(
-      "Age category must be one of CHILD_0_4, CHILD_5_12, ADULT, SENIOR_60"
+      "Вікова категорія: CHILD_0_4, CHILD_5_12, ADULT, SENIOR_60"
     );
   }
 
@@ -116,8 +100,9 @@ function resolvePassenger(p?: PassengerPayload): ResolvedPassenger {
     firstName,
     lastName,
     ageCategory: ageCategory as AgeCategory,
-    phone: (p.phone ?? "").trim(),
-    email: p.email?.trim() || undefined,
+    promoCode: p.promoCode?.trim() || undefined,
+    seatNumber: p.seatNumber ?? null,
+    returnSeatNumber: p.returnSeatNumber ?? null,
   };
 }
 
@@ -135,14 +120,7 @@ function sameCity(a: string, b: string): boolean {
   return left.some((name) => right.includes(name));
 }
 
-/**
- * Combine a YYYY-MM-DD date (or today) with a HH:MM time into a Date.
- * If arrival < departure, roll the arrival into the next day.
- */
-function combineDateTime(
-  dateStr: string | undefined,
-  time: string
-): Date {
+function combineDateTime(dateStr: string | undefined, time: string): Date {
   const base = dateStr ? new Date(`${dateStr}T00:00:00.000Z`) : new Date();
   if (Number.isNaN(base.getTime())) return new Date();
   const [h, m] = time.split(":").map((v) => Number.parseInt(v, 10) || 0);
@@ -157,9 +135,6 @@ export async function POST(req: NextRequest) {
   const { session } = guard;
   const meta = requestMeta(req);
 
-  // Email is authoritative from the users table — if a userId exists the
-  // email stored against the booking always matches the account, regardless
-  // of what the client sends in passenger.email.
   const account = await prisma.user.findUnique({
     where: { id: session.sub },
     select: { email: true },
@@ -176,17 +151,11 @@ export async function POST(req: NextRequest) {
   try {
     body = (await req.json()) as CreateBookingBody;
   } catch {
-    return NextResponse.json(
-      { error: "Invalid JSON body" },
-      { status: 400 }
-    );
+    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
   if (!body.tripId) {
-    return NextResponse.json(
-      { error: "`tripId` is required" },
-      { status: 400 }
-    );
+    return NextResponse.json({ error: "`tripId` is required" }, { status: 400 });
   }
 
   const storedTrip = await prisma.trip.findUnique({
@@ -194,8 +163,7 @@ export async function POST(req: NextRequest) {
     include: { carrier: true, departure: true },
   });
 
-  const carrierAdapterId =
-    body.carrierId ?? (storedTrip ? "asol" : "mock");
+  const carrierAdapterId = body.carrierId ?? (storedTrip ? "asol" : "mock");
   const adapter = findCarrier(carrierAdapterId) ?? findCarrier("asol");
   if (!adapter) {
     return NextResponse.json(
@@ -210,25 +178,46 @@ export async function POST(req: NextRequest) {
   const holdSessionId = body.holdSessionId?.trim() || undefined;
   const siteSettings = await getSiteSettings();
 
-  let passenger: ResolvedPassenger;
+  const rawPassengers: PassengerInput[] = body.passengers?.length
+    ? body.passengers
+    : [
+        {
+          ...body.passenger,
+          promoCode: body.promoCode,
+          seatNumber: body.seatNumber,
+          returnSeatNumber: body.returnSeatNumber,
+        },
+      ];
+  if (rawPassengers.length > MAX_PASSENGERS) {
+    return NextResponse.json(
+      { error: `Максимум ${MAX_PASSENGERS} пасажирів за одне бронювання` },
+      { status: 400 }
+    );
+  }
+
+  const phone = (body.contact?.phone ?? body.passenger?.phone ?? "").trim();
+  if (phone.replace(/\D/g, "").length < 7) {
+    return NextResponse.json(
+      { error: "Телефон має містити щонайменше 7 цифр" },
+      { status: 400 }
+    );
+  }
+
+  let passengers: ResolvedPassenger[];
   try {
-    passenger = resolvePassenger(body.passenger);
+    passengers = rawPassengers.map(resolvePassenger);
   } catch (err) {
-    if (err instanceof ValidationError || err instanceof Error) {
+    if (err instanceof Error) {
       return NextResponse.json({ error: err.message }, { status: 400 });
     }
     throw err;
   }
 
-  // Snapshot shape for downstream carrier adapter (still expects { name, ... }).
-  // NOTE: we deliberately drop any passenger.email coming from the client —
-  // the canonical email is the one on the authenticated user's account.
   const adapterPassenger: BookingPassenger = {
-    name: `${passenger.firstName} ${passenger.lastName}`.trim(),
-    phone: passenger.phone,
+    name: `${passengers[0].firstName} ${passengers[0].lastName}`.trim(),
+    phone,
     email: accountEmail,
   };
-
 
   const clientSnapshot = body.tripSnapshot ?? {};
   if (!clientSnapshot.from || !clientSnapshot.to) {
@@ -256,8 +245,7 @@ export async function POST(req: NextRequest) {
       durationMinutes: Math.max(
         1,
         Math.round(
-          (storedTrip.arrivalTime.getTime() -
-            storedTrip.departureTime.getTime()) /
+          (storedTrip.arrivalTime.getTime() - storedTrip.departureTime.getTime()) /
             60000
         )
       ),
@@ -284,10 +272,7 @@ export async function POST(req: NextRequest) {
         { status: 409 }
       );
     }
-    snapshot = {
-      ...canonicalTrip,
-      date: clientSnapshot.date,
-    };
+    snapshot = { ...canonicalTrip, date: clientSnapshot.date };
   }
 
   let returnStoredTrip: typeof storedTrip = null;
@@ -319,7 +304,6 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // Hand off to the carrier adapter first (real PNR / reservation).
   let adapterResult;
   try {
     adapterResult = await adapter.book({
@@ -338,47 +322,44 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Base price comes from the server-side canonical trip (re-fetched above).
-  // Age-category discount + promo code are then applied so the client cannot
-  // undercut the fare.
-  //
-  // We resolve the promo *outside* the transaction so invalid-code errors
-  // short-circuit before we book anything. The usedCount increment inside
-  // the transaction re-checks the usage limit atomically (optimistic concurrency).
-  const rawPromoCode = body.promoCode?.trim() || null;
-  let validatedPromo = null as Awaited<ReturnType<typeof validatePromo>> | null;
-  if (rawPromoCode) {
-    try {
-      validatedPromo = await validatePromo(prisma, {
-        rawCode: rawPromoCode,
-        currentUserId: session.sub,
-      });
-    } catch (err) {
-      if (err instanceof PromoError) {
-        return NextResponse.json(
-          { error: err.message, reason: err.reason },
-          { status: 400 }
-        );
-      }
-      throw err;
+  // Per-passenger promos are validated before the transaction; the usedCount
+  // increment inside the transaction re-checks the limit atomically.
+  const validatedPromos: (Awaited<ReturnType<typeof validatePromo>> | null)[] = [];
+  try {
+    for (const p of passengers) {
+      validatedPromos.push(
+        p.promoCode
+          ? await validatePromo(prisma, {
+              rawCode: p.promoCode,
+              currentUserId: session.sub,
+            })
+          : null
+      );
     }
+  } catch (err) {
+    if (err instanceof PromoError) {
+      return NextResponse.json(
+        { error: err.message, reason: err.reason },
+        { status: 400 }
+      );
+    }
+    throw err;
   }
 
   const legsPrice = snapshot.price + (returnStoredTrip?.price ?? 0);
-  const pricing = computePrice(
-    legsPrice,
-    passenger.ageCategory as AgeCategoryId,
-    validatedPromo
+  const pricings = passengers.map((p, i) =>
+    computePrice(legsPrice, p.ageCategory as AgeCategoryId, validatedPromos[i])
   );
-  const basePrice = pricing.basePrice;
-  const fullPrice = pricing.finalPrice;
-  // Online payment gets the configurable discount; paying on the bus doesn't.
-  const finalPrice =
+  const ticketStatus =
     paymentMethod === "ONLINE"
-      ? applyOnlineDiscount(fullPrice, siteSettings)
-      : fullPrice;
-  const appliedPromoCode = validatedPromo?.code ?? null;
-  const appliedPromoId = validatedPromo?.id ?? null;
+      ? TicketStatus.AWAITING_PAYMENT
+      : TicketStatus.RESERVED;
+  const ticketKind =
+    tripKind === "OPEN_RETURN"
+      ? TripKind.OPEN_RETURN
+      : tripKind === "ROUND_TRIP"
+        ? TripKind.ROUND_TRIP
+        : TripKind.ONE_WAY;
 
   const departureAt = combineDateTime(snapshot.date, snapshot.departure);
   const arrivalAt = combineDateTime(snapshot.date, snapshot.arrival);
@@ -386,9 +367,8 @@ export async function POST(req: NextRequest) {
     arrivalAt.setUTCDate(arrivalAt.getUTCDate() + 1);
   }
 
-  // Persist carrier, trip, ticket, and booking in one transaction.
   try {
-    const reference = generateReference();
+    const groupSize = passengers.length;
     const created = await prisma.$transaction(async (tx) => {
       const carrier = storedTrip
         ? await tx.carrier.upsert({
@@ -421,129 +401,134 @@ export async function POST(req: NextRequest) {
             },
           });
 
-      const outboundSeat = await assertSeatAvailable(
-        tx,
-        trip.id,
-        body.seatNumber,
-        undefined,
-        holdSessionId
-      );
-      let returnSeat: number | null = null;
-      if (tripKind === "ROUND_TRIP" && returnStoredTrip) {
-        returnSeat = await assertSeatAvailable(
+      const groupRef = groupSize > 1 ? generateReference() : null;
+      const items: Array<{
+        ticket: Awaited<ReturnType<typeof tx.ticket.create>>;
+        booking: Awaited<ReturnType<typeof tx.booking.create>>;
+        fullPrice: number;
+      }> = [];
+
+      for (let i = 0; i < passengers.length; i += 1) {
+        const p = passengers[i];
+        const pricing = pricings[i];
+        const fullPrice = pricing.finalPrice;
+        const finalPrice =
+          paymentMethod === "ONLINE"
+            ? applyOnlineDiscount(fullPrice, siteSettings)
+            : fullPrice;
+
+        const outboundSeat = await assertSeatAvailable(
           tx,
-          returnStoredTrip.id,
-          body.returnSeatNumber,
+          trip.id,
+          p.seatNumber,
           undefined,
           holdSessionId
         );
-      }
-
-      const ticket = await tx.ticket.create({
-        data: {
-          userId: session.sub,
-          tripId: trip.id,
-          status:
-            paymentMethod === "ONLINE"
-              ? TicketStatus.AWAITING_PAYMENT
-              : TicketStatus.RESERVED,
-          basePrice,
-          finalPrice,
-          seatNumber: outboundSeat,
-          tripKind:
-            tripKind === "OPEN_RETURN"
-              ? TripKind.OPEN_RETURN
-              : tripKind === "ROUND_TRIP"
-                ? TripKind.ROUND_TRIP
-                : TripKind.ONE_WAY,
-          returnTripId: returnStoredTrip?.id ?? null,
-          returnSeatNumber: returnSeat,
-        },
-      });
-
-      const booking = await tx.booking.create({
-        data: {
-          reference,
-          firstName: passenger.firstName,
-          lastName: passenger.lastName,
-          ageCategory: passenger.ageCategory,
-          phone: passenger.phone,
-          email: accountEmail,
-          promoCode: appliedPromoCode,
-          finalPrice,
-          ticketId: ticket.id,
-        },
-      });
-
-      // Atomic usedCount increment with concurrency guard.
-      // If another request just pushed the counter over the usageLimit, the
-      // conditional update matches 0 rows and Prisma throws P2025, which we
-      // turn into a clean 400 outside the transaction so the booking (and
-      // any adapter side effects) rolls back.
-      if (appliedPromoId) {
-        const baseWhere: Prisma.PromoWhereUniqueInput & {
-          isActive?: boolean;
-          usedCount?: { lt: number };
-        } = { id: appliedPromoId, isActive: true };
-        if (validatedPromo?.usageLimit != null) {
-          baseWhere.usedCount = { lt: validatedPromo.usageLimit };
+        let returnSeat: number | null = null;
+        if (tripKind === "ROUND_TRIP" && returnStoredTrip) {
+          returnSeat = await assertSeatAvailable(
+            tx,
+            returnStoredTrip.id,
+            p.returnSeatNumber,
+            undefined,
+            holdSessionId
+          );
         }
-        await tx.promo.update({
-          where: baseWhere as Prisma.PromoWhereUniqueInput,
-          data: { usedCount: { increment: 1 } },
+
+        const ticket = await tx.ticket.create({
+          data: {
+            userId: session.sub,
+            tripId: trip.id,
+            status: ticketStatus,
+            basePrice: pricing.basePrice,
+            finalPrice,
+            seatNumber: outboundSeat,
+            tripKind: ticketKind,
+            returnTripId: returnStoredTrip?.id ?? null,
+            returnSeatNumber: returnSeat,
+          },
         });
+
+        const reference =
+          groupRef && i === 0 ? groupRef : generateReference();
+        const booking = await tx.booking.create({
+          data: {
+            reference,
+            groupRef,
+            firstName: p.firstName,
+            lastName: p.lastName,
+            ageCategory: p.ageCategory,
+            phone,
+            email: accountEmail,
+            promoCode: validatedPromos[i]?.code ?? null,
+            finalPrice,
+            ticketId: ticket.id,
+          },
+        });
+
+        const promo = validatedPromos[i];
+        if (promo) {
+          const baseWhere: Prisma.PromoWhereUniqueInput & {
+            isActive?: boolean;
+            usedCount?: { lt: number };
+          } = { id: promo.id, isActive: true };
+          if (promo.usageLimit != null) {
+            baseWhere.usedCount = { lt: promo.usageLimit };
+          }
+          await tx.promo.update({
+            where: baseWhere as Prisma.PromoWhereUniqueInput,
+            data: { usedCount: { increment: 1 } },
+          });
+        }
+
+        await recordTicketHistory(tx, {
+          ticketId: ticket.id,
+          action: "CREATED",
+          oldStatus: null,
+          newStatus: ticket.status,
+          source: "BOOKING_FORM",
+          changedBy: session.sub,
+          request: meta,
+          changes: {
+            reference: { from: null, to: booking.reference },
+            status: { from: null, to: ticket.status },
+            basePrice: { from: null, to: ticket.basePrice },
+            finalPrice: { from: null, to: ticket.finalPrice },
+            passenger: {
+              from: null,
+              to: {
+                firstName: booking.firstName,
+                lastName: booking.lastName,
+                ageCategory: booking.ageCategory,
+                phone: booking.phone,
+                email: booking.email,
+              },
+            },
+            promoCode: { from: null, to: booking.promoCode },
+            paymentMethod: { from: null, to: paymentMethod },
+            trip: {
+              from: null,
+              to: {
+                from: trip.fromCity,
+                to: trip.toCity,
+                departure: trip.departureTime,
+                arrival: trip.arrivalTime,
+                carrier: carrier.name,
+              },
+            },
+            tripKind: { from: null, to: tripKind },
+            seatNumber: { from: null, to: outboundSeat },
+            returnTripId: { from: null, to: returnStoredTrip?.id ?? null },
+            returnSeatNumber: { from: null, to: returnSeat },
+          },
+        });
+
+        items.push({ ticket, booking, fullPrice });
       }
 
-      // Audit trail: capture the initial snapshot of every user-visible
-      // booking field as a from→to diff. Subsequent mutations (admin panel,
-      // account cancel, carrier callback) append to the same table with
-      // their own source + ip/ua + diff.
-      await recordTicketHistory(tx, {
-        ticketId: ticket.id,
-        action: "CREATED",
-        oldStatus: null,
-        newStatus: ticket.status,
-        source: "BOOKING_FORM",
-        changedBy: session.sub,
-        request: meta,
-        changes: {
-          reference:    { from: null, to: booking.reference },
-          status:       { from: null, to: ticket.status },
-          basePrice:    { from: null, to: ticket.basePrice },
-          finalPrice:   { from: null, to: ticket.finalPrice },
-          passenger: {
-            from: null,
-            to: {
-              firstName:   booking.firstName,
-              lastName:    booking.lastName,
-              ageCategory: booking.ageCategory,
-              phone:       booking.phone,
-              email:       booking.email,
-            },
-          },
-          promoCode: { from: null, to: booking.promoCode },
-          paymentMethod: { from: null, to: paymentMethod },
-          trip: {
-            from: null,
-            to: {
-              from:      trip.fromCity,
-              to:        trip.toCity,
-              departure: trip.departureTime,
-              arrival:   trip.arrivalTime,
-              carrier:   carrier.name,
-            },
-          },
-          tripKind: { from: null, to: tripKind },
-          seatNumber: { from: null, to: outboundSeat },
-          returnTripId: { from: null, to: returnStoredTrip?.id ?? null },
-          returnSeatNumber: { from: null, to: returnSeat },
-        },
-      });
-
-      return { carrier, trip, ticket, booking };
+      return { carrier, trip, items, groupRef };
     });
 
-    // The seat is now owned by the ticket — drop the session holds.
     if (holdSessionId) {
       await releaseSessionHolds(prisma, holdSessionId, [
         created.trip.id,
@@ -551,52 +536,68 @@ export async function POST(req: NextRequest) {
       ]);
     }
 
-    let payment = null as {
-      id: string;
-      amount: number;
-      deadlineAt: Date;
-    } | null;
     if (paymentMethod === "ONLINE") {
-      payment = await prisma.payment.create({
-        data: {
-          ticketId: created.ticket.id,
-          amount: finalPrice,
-          fullAmount: fullPrice,
-          deadlineAt: new Date(
-            Date.now() + siteSettings.paymentDeadlineHours * 3_600_000
-          ),
-        },
-      });
-      await recordTicketHistory(prisma, {
-        ticketId: created.ticket.id,
-        action: "PAYMENT_STARTED",
-        source: "BOOKING_FORM",
-        changedBy: session.sub,
-        request: meta,
-        changes: {
-          amount: { from: null, to: payment.amount },
-          deadlineAt: { from: null, to: payment.deadlineAt },
-        },
-      });
+      const deadlineAt = new Date(
+        Date.now() + siteSettings.paymentDeadlineHours * 3_600_000
+      );
+      for (const item of created.items) {
+        await prisma.payment.create({
+          data: {
+            ticketId: item.ticket.id,
+            amount: item.ticket.finalPrice,
+            fullAmount: item.fullPrice,
+            deadlineAt,
+          },
+        });
+        await recordTicketHistory(prisma, {
+          ticketId: item.ticket.id,
+          action: "PAYMENT_STARTED",
+          source: "BOOKING_FORM",
+          changedBy: session.sub,
+          request: meta,
+          changes: {
+            amount: { from: null, to: item.ticket.finalPrice },
+            deadlineAt: { from: null, to: deadlineAt },
+          },
+        });
+      }
     }
 
-    const totalPaid = finalPrice + SERVICE_FEE_EUR;
+    const first = created.items[0];
+    const totalTickets = created.items.reduce(
+      (sum, item) => sum + item.ticket.finalPrice,
+      0
+    );
+    const totalPaid =
+      Math.round((totalTickets + SERVICE_FEE_EUR * created.items.length) * 100) /
+      100;
+    const payRef = created.groupRef ?? first.booking.reference;
 
     return NextResponse.json(
       {
         booking: {
-          id: created.booking.id,
-          reference: created.booking.reference,
-          status: created.ticket.status,
-          createdAt: created.booking.createdAt,
+          id: first.booking.id,
+          reference: first.booking.reference,
+          groupRef: created.groupRef ?? undefined,
+          status: first.ticket.status,
+          createdAt: first.booking.createdAt,
           passenger: {
-            firstName: created.booking.firstName,
-            lastName: created.booking.lastName,
-            ageCategory: created.booking.ageCategory,
-            phone: created.booking.phone,
-            email: created.booking.email ?? undefined,
+            firstName: first.booking.firstName,
+            lastName: first.booking.lastName,
+            ageCategory: first.booking.ageCategory,
+            phone: first.booking.phone,
+            email: first.booking.email ?? undefined,
           },
-          promoCode: created.booking.promoCode ?? undefined,
+          passengers: created.items.map((item) => ({
+            reference: item.booking.reference,
+            firstName: item.booking.firstName,
+            lastName: item.booking.lastName,
+            ageCategory: item.booking.ageCategory,
+            seatNumber: item.ticket.seatNumber,
+            returnSeatNumber: item.ticket.returnSeatNumber,
+            finalPrice: item.ticket.finalPrice,
+          })),
+          promoCode: first.booking.promoCode ?? undefined,
           trip: {
             from: created.trip.fromCity,
             to: created.trip.toCity,
@@ -604,38 +605,29 @@ export async function POST(req: NextRequest) {
             arrival: snapshot.arrival,
             departureAt: created.trip.departureTime,
             arrivalAt: created.trip.arrivalTime,
-            basePrice: created.ticket.basePrice,
+            basePrice: first.ticket.basePrice,
             price: created.trip.price,
             currency: snapshot.currency ?? "EUR",
           },
-          carrier: {
-            id: created.carrier.id,
-            name: created.carrier.name,
-          },
-          tripKind: created.ticket.tripKind,
-          seatNumber: created.ticket.seatNumber,
-          returnTripId: created.ticket.returnTripId,
-          returnSeatNumber: created.ticket.returnSeatNumber,
+          carrier: { id: created.carrier.id, name: created.carrier.name },
+          tripKind: first.ticket.tripKind,
+          seatNumber: first.ticket.seatNumber,
+          returnTripId: first.ticket.returnTripId,
+          returnSeatNumber: first.ticket.returnSeatNumber,
           paymentMethod,
-          payment: payment
-            ? {
-                amount: payment.amount,
-                deadlineAt: payment.deadlineAt,
-                payUrl: `/pay/${created.booking.reference}`,
-              }
-            : undefined,
-          basePrice: created.ticket.basePrice,
-          finalPrice: created.booking.finalPrice,
-          priceBreakdown: {
-            basePrice: pricing.basePrice,
-            ageDiscount: pricing.ageDiscount,
-            promoDiscount: pricing.promoDiscount,
-            promoCode: appliedPromoCode,
-            finalPrice: pricing.finalPrice,
-            serviceFee: pricing.serviceFee,
-            total: pricing.total,
-          },
-          totalPaid: Math.round(totalPaid * 100) / 100,
+          payment:
+            paymentMethod === "ONLINE"
+              ? {
+                  amount: Math.round(totalTickets * 100) / 100,
+                  deadlineAt: new Date(
+                    Date.now() + siteSettings.paymentDeadlineHours * 3_600_000
+                  ),
+                  payUrl: `/pay/${payRef}`,
+                }
+              : undefined,
+          basePrice: first.ticket.basePrice,
+          finalPrice: first.booking.finalPrice,
+          totalPaid,
         },
         carrierReference: adapterResult.carrierReference,
         fees: { service: SERVICE_FEE_EUR, currency: "EUR" },
@@ -650,13 +642,7 @@ export async function POST(req: NextRequest) {
     ) {
       return NextResponse.json({ error: err.message }, { status: 409 });
     }
-    // P2025 = the conditional promo update matched 0 rows (concurrency race
-    // against usedCount / isActive). Surface a clean 400 rather than 500.
-    if (
-      err instanceof Prisma.PrismaClientKnownRequestError &&
-      err.code === "P2025" &&
-      appliedPromoId
-    ) {
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2025") {
       return NextResponse.json(
         {
           error: "Promo code has reached its usage limit",
@@ -692,12 +678,8 @@ export async function GET(req: NextRequest) {
       },
     });
     if (!booking) {
-      return NextResponse.json(
-        { error: "Booking not found" },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: "Booking not found" }, { status: 404 });
     }
-    // A non-admin user may only read their own bookings.
     if (
       booking.ticket.userId !== session.sub &&
       session.role !== "ADMIN" &&
@@ -708,7 +690,6 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ booking });
   }
 
-  // List bookings for the current user (or all, for admins).
   const isAdmin = session.role === "ADMIN" || session.role === "SUPER_ADMIN";
   const bookings = await prisma.booking.findMany({
     where: isAdmin ? {} : { ticket: { userId: session.sub } },

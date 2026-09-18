@@ -4,9 +4,10 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { btnPrimary } from "@/components/admin/Field";
 
-type PaymentState = {
+type GroupItem = {
+  reference: string;
+  passenger: string;
   ticketStatus: string;
-  finalPrice: number;
   payment: {
     status: string;
     amount: number;
@@ -17,45 +18,50 @@ type PaymentState = {
   } | null;
 };
 
+type GroupState = {
+  groupRef: string;
+  items: GroupItem[];
+  total: number;
+  allSettled: boolean;
+  anyWaiting: boolean;
+  anyPending: boolean;
+};
+
 export default function PaymentPanel({
   reference,
-  initial,
   settleMinutes,
 }: {
   reference: string;
-  initial: PaymentState;
   settleMinutes: number;
 }) {
   const router = useRouter();
-  const [state, setState] = useState(initial);
+  const [state, setState] = useState<GroupState | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const payment = state.payment;
-  const waiting =
-    state.ticketStatus === "AWAITING_PAYMENT" && payment?.status === "SENT";
-  const canPay =
-    state.ticketStatus === "AWAITING_PAYMENT" && payment?.status === "PENDING";
+  const refresh = async () => {
+    try {
+      const res = await fetch(`/api/payments/${reference}/status`);
+      const data = await res.json();
+      if (res.ok) setState(data);
+    } catch {
+      // keep polling
+    }
+  };
 
   useEffect(() => {
-    if (state.ticketStatus !== "AWAITING_PAYMENT") return;
-    const timer = window.setInterval(async () => {
-      try {
-        const res = await fetch(`/api/payments/${reference}/status`);
-        const data = await res.json();
-        if (res.ok) {
-          setState(data);
-          if (data.ticketStatus !== "AWAITING_PAYMENT") {
-            window.clearInterval(timer);
-            router.refresh();
-          }
-        }
-      } catch {
-        // keep polling
-      }
+    void refresh();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reference]);
+
+  useEffect(() => {
+    if (!state || state.allSettled) return;
+    const timer = window.setInterval(() => {
+      void refresh();
     }, 5000);
     return () => window.clearInterval(timer);
-  }, [reference, state.ticketStatus, router]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reference, state?.allSettled]);
 
   const pay = async () => {
     setBusy(true);
@@ -66,8 +72,8 @@ export default function PaymentPanel({
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error ?? "Не вдалося сплатити");
-      const status = await fetch(`/api/payments/${reference}/status`);
-      if (status.ok) setState(await status.json());
+      await refresh();
+      router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Помилка оплати");
     } finally {
@@ -75,17 +81,27 @@ export default function PaymentPanel({
     }
   };
 
-  if (state.ticketStatus === "PAID_ONLINE") {
+  if (!state) {
+    return (
+      <div className="rounded-2xl border border-slate-200 bg-white p-6 text-center text-sm text-slate-500">
+        Завантаження оплати…
+      </div>
+    );
+  }
+
+  if (state.allSettled) {
     return (
       <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-6 text-center">
         <p className="text-lg font-semibold text-emerald-800">
           Оплату зараховано
         </p>
         <p className="mt-1 text-sm text-emerald-700">
-          Квиток {reference} оплачено онлайн.
+          {state.items.length > 1
+            ? `Квитки ${state.items.map((i) => i.reference).join(", ")} оплачено онлайн.`
+            : `Квиток ${state.items[0]?.reference ?? reference} оплачено онлайн.`}
         </p>
         <a
-          href={`/cabinet/tickets/${reference}`}
+          href={`/cabinet/tickets/${state.items[0]?.reference ?? reference}`}
           className="mt-4 inline-block rounded-xl bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white"
         >
           Відкрити квиток
@@ -94,42 +110,49 @@ export default function PaymentPanel({
     );
   }
 
-  if (!payment || state.ticketStatus !== "AWAITING_PAYMENT") {
-    return (
-      <div className="rounded-2xl border border-slate-200 bg-white p-6 text-center text-sm text-slate-600">
-        <p>Для цього квитка немає активної онлайн-оплати.</p>
-        <a
-          href={`/cabinet/tickets/${reference}`}
-          className="mt-3 inline-block text-brand-700 underline"
-        >
-          До квитка
-        </a>
-      </div>
-    );
-  }
+  const deadline = state.items.find((i) => i.payment)?.payment?.deadlineAt;
 
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-6">
       <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-        Оплата квитка {reference}
-      </p>
-      <p className="mt-2 text-3xl font-extrabold tabular-nums text-slate-900">
-        €{payment.amount.toFixed(2)}
-        {payment.fullAmount > payment.amount ? (
-          <span className="ml-2 align-middle text-base font-medium text-slate-400 line-through">
-            €{payment.fullAmount.toFixed(2)}
-          </span>
-        ) : null}
-      </p>
-      <p className="mt-1 text-sm text-slate-500">
-        Оплатіть до{" "}
-        <span className="font-medium text-slate-700">
-          {new Date(payment.deadlineAt).toLocaleString("uk-UA")}
-        </span>{" "}
-        — інакше знижка за онлайн-оплату згорить.
+        Оплата {state.items.length > 1 ? `групи ${state.groupRef}` : `квитка ${reference}`}
       </p>
 
-      {waiting ? (
+      <ul className="mt-3 divide-y divide-slate-100 text-sm">
+        {state.items.map((item) => (
+          <li key={item.reference} className="flex items-center justify-between py-2">
+            <span className="text-slate-700">
+              {item.passenger}
+              <span className="ml-2 text-xs text-slate-400">{item.reference}</span>
+            </span>
+            <span className="tabular-nums text-slate-900">
+              €{(item.payment?.amount ?? 0).toFixed(2)}
+              {item.payment && item.payment.fullAmount > item.payment.amount ? (
+                <span className="ml-1 text-xs text-slate-400 line-through">
+                  €{item.payment.fullAmount.toFixed(2)}
+                </span>
+              ) : null}
+            </span>
+          </li>
+        ))}
+      </ul>
+
+      <p className="mt-3 flex items-center justify-between border-t border-slate-200 pt-3 text-lg font-bold tabular-nums text-slate-900">
+        <span>Разом</span>
+        <span>€{state.total.toFixed(2)}</span>
+      </p>
+
+      {deadline ? (
+        <p className="mt-1 text-sm text-slate-500">
+          Оплатіть до{" "}
+          <span className="font-medium text-slate-700">
+            {new Date(deadline).toLocaleString("uk-UA")}
+          </span>{" "}
+          — інакше знижка за онлайн-оплату згорить.
+        </p>
+      ) : null}
+
+      {state.anyWaiting ? (
         <div className="mt-5 rounded-xl border border-violet-200 bg-violet-50 px-4 py-3">
           <p className="flex items-center gap-2 text-sm font-medium text-violet-800">
             <Spinner className="h-4 w-4" />
@@ -143,14 +166,14 @@ export default function PaymentPanel({
         </div>
       ) : null}
 
-      {canPay ? (
+      {state.anyPending ? (
         <button
           type="button"
           onClick={pay}
           disabled={busy}
           className={`${btnPrimary} mt-5 w-full`}
         >
-          {busy ? "Надсилаємо…" : `Сплатити €${payment.amount.toFixed(2)}`}
+          {busy ? "Надсилаємо…" : `Сплатити €${state.total.toFixed(2)}`}
         </button>
       ) : null}
 

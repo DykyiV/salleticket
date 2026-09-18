@@ -5,19 +5,25 @@ import { findSeat, seatLabels, type BusLayout, type Seat } from "@/lib/seats";
 
 type DisplayStatus = "AVAILABLE" | "SELECTED" | "OCCUPIED" | "HELD";
 
-function displayStatus(seat: Seat, selectedSeatNumber: number | null): DisplayStatus {
+function displayStatus(
+  seat: Seat,
+  selected: boolean
+): DisplayStatus {
   if (seat.status === "OCCUPIED") return "OCCUPIED";
   if (seat.status === "HELD") return "HELD";
-  return seat.number === selectedSeatNumber ? "SELECTED" : "AVAILABLE";
+  return selected ? "SELECTED" : "AVAILABLE";
 }
 
 export default function SeatMap({
   layout,
   selectedSeatNumber,
+  selectedSeatNumbers,
   onSelect,
 }: {
   layout: BusLayout;
-  selectedSeatNumber: number | null;
+  selectedSeatNumber?: number | null;
+  /** Multi-select mode: list of currently chosen seats. */
+  selectedSeatNumbers?: number[];
   onSelect: (seatNumber: number | null) => void;
 }) {
   const rows = useMemo(() => {
@@ -30,7 +36,10 @@ export default function SeatMap({
     return Array.from(byRow.entries()).sort(([a], [b]) => a - b);
   }, [layout.seats]);
 
-  const selectedSeat = findSeat(layout, selectedSeatNumber);
+  const selectedSeat = findSeat(layout, selectedSeatNumber ?? null);
+  const multi = selectedSeatNumbers !== undefined;
+  const isSelected = (n: number) =>
+    multi ? selectedSeatNumbers.includes(n) : n === selectedSeatNumber;
 
   if (!layout.hasAssignedSeats) {
     return (
@@ -42,7 +51,11 @@ export default function SeatMap({
 
   const toggle = (seat: Seat) => {
     if (seat.status !== "AVAILABLE") return;
-    onSelect(seat.number === selectedSeatNumber ? null : seat.number);
+    if (!multi && seat.number === selectedSeatNumber) {
+      onSelect(null);
+      return;
+    }
+    onSelect(seat.number);
   };
 
   return (
@@ -71,7 +84,7 @@ export default function SeatMap({
                       <SeatButton
                         key={seat.number}
                         seat={seat}
-                        status={displayStatus(seat, selectedSeatNumber)}
+                        status={displayStatus(seat, isSelected(seat.number))}
                         onToggle={toggle}
                       />
                     ))}
@@ -87,7 +100,7 @@ export default function SeatMap({
                         <SeatButton
                           key={seat.number}
                           seat={seat}
-                          status={displayStatus(seat, selectedSeatNumber)}
+                          status={displayStatus(seat, isSelected(seat.number))}
                           onToggle={toggle}
                         />
                       ))
@@ -115,9 +128,17 @@ export default function SeatMap({
           </div>
           <div className="rounded-xl border border-brand-200 bg-brand-50 p-3">
             <p className="text-[11px] font-semibold uppercase tracking-wide text-brand-700">
-              Ваше місце
+              {multi ? "Ваші місця" : "Ваше місце"}
             </p>
-            {selectedSeat ? (
+            {multi ? (
+              selectedSeatNumbers.length > 0 ? (
+                <p className="mt-1 text-xl font-bold text-brand-900">
+                  {[...selectedSeatNumbers].sort((a, b) => a - b).join(", ")}
+                </p>
+              ) : (
+                <p className="mt-1 text-sm text-brand-800/70">Ще не вибрано</p>
+              )
+            ) : selectedSeat ? (
               <>
                 <p className="mt-1 text-xl font-bold text-brand-900">
                   № {selectedSeat.number}

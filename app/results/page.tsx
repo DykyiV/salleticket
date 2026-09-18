@@ -5,6 +5,7 @@ import TripCard from "@/components/TripCard";
 import type { Trip } from "@/lib/carriers/types";
 import { parseTripKind } from "@/lib/tickets/kinds";
 import { TRIP_KIND_LABEL } from "@/lib/tickets/labels";
+import { getSiteSettings } from "@/lib/settings";
 
 type SearchParams = {
   from?: string;
@@ -59,6 +60,7 @@ export default async function ResultsPage({
   const date = searchParams.date;
   const tripKind = parseTripKind(searchParams.tripKind);
   const returnDate = searchParams.returnDate;
+  const siteSettings = await getSiteSettings();
 
   const params = new URLSearchParams({ from, to });
   if (date) params.set("date", date);
@@ -259,6 +261,7 @@ export default async function ResultsPage({
                   date={date}
                   tripKind={tripKind}
                   returnDate={returnDate}
+                  onlineDiscountPercent={siteSettings.onlineDiscountPercent}
                 />
               ))
             )}

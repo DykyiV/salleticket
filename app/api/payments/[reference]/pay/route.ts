@@ -13,95 +13,80 @@ export const dynamic = "force-dynamic";
 type Params = { params: { reference: string } };
 
 /**
- * Mock payment-system callback: the passenger confirmed the payment, funds
- * are on the way. The ticket stays AWAITING_PAYMENT until the settle window
- * (20–30 min by default) passes and reconciliation marks it PAID_ONLINE.
+ * Mock payment-system confirmation. Works for single tickets and for a
+ * multi-passenger group (reference = groupRef): every pending payment in the
+ * group is marked SENT and settles after the configured window.
  */
 export async function POST(req: NextRequest, { params }: Params) {
   const guard = await requireAuth();
   if (!guard.ok) return guard.response;
 
-  const booking = await prisma.booking.findUnique({
+  const first = await prisma.booking.findUnique({
     where: { reference: params.reference },
-    include: {
-      ticket: {
-        include: {
-          payments: { orderBy: { createdAt: "desc" }, take: 1 },
-        },
-      },
-    },
+    include: { ticket: true },
   });
-  if (!booking) {
+  if (!first) {
     return NextResponse.json({ error: "Квиток не знайдено" }, { status: 404 });
   }
   const staff = hasRoleAtLeast(guard.session.role, "AGENT");
-  if (booking.ticket.userId !== guard.session.sub && !staff) {
+  if (first.ticket.userId !== guard.session.sub && !staff) {
     return NextResponse.json({ error: "Немає доступу" }, { status: 403 });
   }
 
-  await reconcileTicketPayment(booking.ticket.id);
+  const groupKey = first.groupRef ?? first.reference;
+  const group = await prisma.booking.findMany({
+    where: { OR: [{ groupRef: groupKey }, { reference: groupKey }] },
+    include: {
+      ticket: {
+        include: { payments: { orderBy: { createdAt: "desc" }, take: 1 } },
+      },
+    },
+  });
 
-  const payment = booking.ticket.payments[0];
-  if (!payment) {
-    return NextResponse.json(
-      { error: "Для цього квитка немає онлайн-оплати" },
-      { status: 400 }
-    );
-  }
-  if (booking.ticket.status !== TicketStatus.AWAITING_PAYMENT) {
-    return NextResponse.json(
-      { error: "Квиток уже не очікує оплату" },
-      { status: 409 }
-    );
-  }
-  if (payment.status === PaymentStatus.EXPIRED) {
-    return NextResponse.json(
-      { error: "Час на оплату зі знижкою минув" },
-      { status: 409 }
-    );
+  for (const row of group) {
+    await reconcileTicketPayment(row.ticket.id);
   }
 
   const settings = await getSiteSettings();
   const now = new Date();
-  const updated =
-    payment.status === PaymentStatus.SENT
-      ? payment
-      : await prisma.payment.update({
-          where: { id: payment.id },
-          data: {
-            status: PaymentStatus.SENT,
-            sentAt: now,
-            settleAfter: new Date(
-              now.getTime() + settings.paymentSettleMinutes * 60_000
-            ),
-            providerRef: `MOCK-${Math.random()
-              .toString(36)
-              .slice(2, 10)
-              .toUpperCase()}`,
-          },
-        });
+  const settleAfter = new Date(
+    now.getTime() + settings.paymentSettleMinutes * 60_000
+  );
 
-  await recordTicketHistory(prisma, {
-    ticketId: booking.ticket.id,
-    action: "PAYMENT_STARTED",
-    source: "ACCOUNT",
-    changedBy: guard.session.sub,
-    request: requestMeta(req),
-    changes: {
-      paymentStatus: { from: payment.status, to: updated.status },
-      providerRef: { from: null, to: updated.providerRef },
-    },
-  });
+  const paid: string[] = [];
+  for (const row of group) {
+    const payment = row.ticket.payments[0];
+    if (!payment) continue;
+    if (row.ticket.status !== TicketStatus.AWAITING_PAYMENT) continue;
+    if (payment.status !== PaymentStatus.PENDING) continue;
+    await prisma.payment.update({
+      where: { id: payment.id },
+      data: {
+        status: PaymentStatus.SENT,
+        sentAt: now,
+        settleAfter,
+        providerRef: `MOCK-${Math.random().toString(36).slice(2, 10).toUpperCase()}`,
+      },
+    });
+    await recordTicketHistory(prisma, {
+      ticketId: row.ticket.id,
+      action: "PAYMENT_STARTED",
+      source: "ACCOUNT",
+      changedBy: guard.session.sub,
+      request: requestMeta(req),
+      changes: {
+        paymentStatus: { from: payment.status, to: PaymentStatus.SENT },
+      },
+    });
+    paid.push(row.reference);
+  }
 
-  return NextResponse.json({
-    payment: {
-      id: updated.id,
-      status: updated.status,
-      amount: updated.amount,
-      sentAt: updated.sentAt,
-      settleAfter: updated.settleAfter,
-      deadlineAt: updated.deadlineAt,
-    },
-    ticketStatus: booking.ticket.status,
-  });
+  if (paid.length === 0) {
+    return NextResponse.json(
+      { error: "Немає оплат, що очікують надсилання" },
+      { status: 409 }
+    );
+  }
+
+  return NextResponse.json({ sent: paid, settleAfter });
 }

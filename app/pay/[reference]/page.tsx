@@ -6,7 +6,6 @@ import { getCurrentUser } from "@/lib/auth/session";
 import { hasRoleAtLeast } from "@/lib/auth/constants";
 import { prisma } from "@/lib/db";
 import { getSiteSettings } from "@/lib/settings";
-import { reconcileTicketPayment } from "@/lib/payments";
 
 export const dynamic = "force-dynamic";
 
@@ -20,27 +19,15 @@ export default async function PayPage({
 
   const booking = await prisma.booking.findUnique({
     where: { reference: params.reference },
-    include: {
-      ticket: {
-        include: {
-          payments: { orderBy: { createdAt: "desc" }, take: 1 },
-          trip: true,
-        },
-      },
-    },
+    include: { ticket: { include: { trip: true } } },
   });
   if (!booking) notFound();
   if (booking.ticket.userId !== user.id && !hasRoleAtLeast(user.role, "AGENT")) {
     notFound();
   }
 
-  await reconcileTicketPayment(booking.ticket.id);
-  const fresh = await prisma.ticket.findUnique({
-    where: { id: booking.ticket.id },
-    include: { payments: { orderBy: { createdAt: "desc" }, take: 1 } },
-  });
-  const payment = fresh?.payments[0] ?? null;
   const settings = await getSiteSettings();
+  const payRef = booking.groupRef ?? booking.reference;
 
   return (
     <div className="flex min-h-screen flex-col bg-slate-50">
@@ -54,22 +41,8 @@ export default async function PayPage({
         </p>
         <div className="mt-6">
           <PaymentPanel
-            reference={booking.reference}
+            reference={payRef}
             settleMinutes={settings.paymentSettleMinutes}
-            initial={{
-              ticketStatus: fresh?.status ?? booking.ticket.status,
-              finalPrice: fresh?.finalPrice ?? booking.finalPrice,
-              payment: payment
-                ? {
-                    status: payment.status,
-                    amount: payment.amount,
-                    fullAmount: payment.fullAmount,
-                    sentAt: payment.sentAt?.toISOString() ?? null,
-                    settleAfter: payment.settleAfter?.toISOString() ?? null,
-                    deadlineAt: payment.deadlineAt.toISOString(),
-                  }
-                : null,
-            }}
           />
         </div>
         <p className="mt-4 text-center text-xs text-slate-400">
