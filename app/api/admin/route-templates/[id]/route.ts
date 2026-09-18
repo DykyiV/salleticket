@@ -73,6 +73,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
           defaultBus: parsed.defaultBus,
           comment: parsed.comment,
           hasAssignedSeats: parsed.hasAssignedSeats,
+          allowSegmentSales: parsed.allowSegmentSales,
           isActive: parsed.isActive,
         },
       });

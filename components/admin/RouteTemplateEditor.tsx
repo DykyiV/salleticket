@@ -36,6 +36,7 @@ type FormState = {
   defaultBus: string;
   comment: string;
   hasAssignedSeats: boolean;
+  allowSegmentSales: boolean;
   isActive: boolean;
   stops: StopForm[];
 };
@@ -73,6 +74,7 @@ function fromTemplate(t: TemplateDTO): FormState {
     defaultBus: t.defaultBus ?? "",
     comment: t.comment ?? "",
     hasAssignedSeats: t.hasAssignedSeats !== false,
+    allowSegmentSales: t.allowSegmentSales !== false,
     isActive: t.isActive,
     stops: t.stops.map((s) => ({
       id: s.id,
@@ -105,6 +107,7 @@ const EMPTY: FormState = {
   defaultBus: "",
   comment: "",
   hasAssignedSeats: true,
+  allowSegmentSales: true,
   isActive: true,
   stops: [emptyStop(1), emptyStop(2)],
 };
@@ -210,6 +213,7 @@ export default function RouteTemplateEditor({ countries, template }: Props) {
     defaultBus: values.defaultBus,
     comment: values.comment,
     hasAssignedSeats: values.hasAssignedSeats,
+    allowSegmentSales: values.allowSegmentSales,
     isActive: values.isActive,
     stops: values.stops.map((s, i) => ({
       id: s.id,
@@ -446,6 +450,22 @@ export default function RouteTemplateEditor({ countries, template }: Props) {
             <span className="mt-0.5 block text-xs text-slate-500">
               За замовчуванням пасажир обирає місце. Зніміть галочку — квитки
               без номерів місць.
+            </span>
+          </span>
+        </label>
+
+        <label className="mt-3 flex items-start gap-2 text-sm text-slate-700">
+          <input
+            type="checkbox"
+            className="mt-0.5"
+            checked={values.allowSegmentSales}
+            onChange={(e) => setField("allowSegmentSales", e.target.checked)}
+          />
+          <span>
+            Продаж по сегментах маршруту
+            <span className="mt-0.5 block text-xs text-slate-500">
+              Одне місце можна продати різним пасажирам на різних ділянках
+              (Київ→Львів, Львів→Берлін…). Вимкніть — лише від початку до кінця.
             </span>
           </span>
         </label>

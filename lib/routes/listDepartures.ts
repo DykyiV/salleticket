@@ -8,6 +8,7 @@ export const DEPARTURE_HORIZON_DAYS = 30;
 export const departureListInclude = {
   template: { include: { country: true, originCountry: true } },
   stops: { orderBy: { sortOrder: "asc" as const } },
+  bus: { select: { id: true, plate: true } },
 };
 
 export type DepartureCountryOption = {

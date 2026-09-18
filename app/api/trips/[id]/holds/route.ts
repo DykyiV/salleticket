@@ -15,7 +15,12 @@ export const dynamic = "force-dynamic";
 
 type Params = { params: { id: string } };
 
-type HoldBody = { seatNumber?: number; sessionId?: string };
+type HoldBody = {
+  seatNumber?: number;
+  sessionId?: string;
+  fromStopIndex?: number | null;
+  toStopIndex?: number | null;
+};
 
 function readBody(req: NextRequest): Promise<HoldBody> {
   return req.json().catch(() => ({}));
@@ -52,13 +57,19 @@ export async function POST(req: NextRequest, { params }: Params) {
 
   const settings = await getSiteSettings();
   const expiresAt = new Date(Date.now() + settings.seatHoldMinutes * 60_000);
+  const segment =
+    Number.isInteger(body.fromStopIndex) &&
+    Number.isInteger(body.toStopIndex) &&
+    (body.toStopIndex as number) > (body.fromStopIndex as number)
+      ? { fromIndex: body.fromStopIndex as number, toIndex: body.toStopIndex as number }
+      : undefined;
 
   try {
     const hold = await prisma.$transaction(async (tx) => {
       await tx.seatHold.deleteMany({
         where: { tripId: trip.id, expiresAt: { lte: new Date() } },
       });
-      await assertSeatAvailable(tx, trip.id, seatNumber, undefined, sessionId);
+      await assertSeatAvailable(tx, trip.id, seatNumber, undefined, sessionId, segment);
 
       const existing = await tx.seatHold.findUnique({
         where: { tripId_seatNumber: { tripId: trip.id, seatNumber } },
@@ -69,11 +80,22 @@ export async function POST(req: NextRequest, { params }: Params) {
       if (existing) {
         return tx.seatHold.update({
           where: { id: existing.id },
-          data: { expiresAt },
+          data: {
+            expiresAt,
+            fromStopIndex: segment?.fromIndex ?? null,
+            toStopIndex: segment?.toIndex ?? null,
+          },
         });
       }
       return tx.seatHold.create({
-        data: { tripId: trip.id, seatNumber, sessionId, expiresAt },
+        data: {
+          tripId: trip.id,
+          seatNumber,
+          sessionId,
+          expiresAt,
+          fromStopIndex: segment?.fromIndex ?? null,
+          toStopIndex: segment?.toIndex ?? null,
+        },
       });
     });
     return NextResponse.json({ hold }, { status: 201 });

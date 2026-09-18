@@ -71,6 +71,7 @@ export async function generateDepartures(options: {
         ukraineDepartureWeekday: template.ukraineDepartureWeekday,
         ukraineReturnWeekday: template.ukraineReturnWeekday,
         hasAssignedSeats: template.hasAssignedSeats,
+        allowSegmentSales: template.allowSegmentSales,
         stops: {
           create: template.stops.map((stop) => ({
             templateStopId: stop.id,

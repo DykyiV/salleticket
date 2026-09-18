@@ -46,6 +46,7 @@ export const HISTORY_ACTION_LABEL: Record<string, string> = {
   PAYMENT_SETTLED: "Платіж отримано",
   PAYMENT_EXPIRED: "Знижка за онлайн-оплату згоріла",
   EMAIL_SENT: "Email відправлено",
+  PRICE_RECALCED: "Перераховано ціну",
 };
 
 export const STATUS_TRANSITIONS: Record<TicketStatus, TicketStatus[]> = {

@@ -1,14 +1,17 @@
 "use client";
 
 import { useMemo } from "react";
-import { findSeat, seatLabels, type BusLayout, type Seat } from "@/lib/seats";
+import {
+  findSeat,
+  seatLabels,
+  type BusLayout,
+  type LayoutCell,
+  type Seat,
+} from "@/lib/seats";
 
 type DisplayStatus = "AVAILABLE" | "SELECTED" | "OCCUPIED" | "HELD";
 
-function displayStatus(
-  seat: Seat,
-  selected: boolean
-): DisplayStatus {
+function displayStatus(seat: Seat, selected: boolean): DisplayStatus {
   if (seat.status === "OCCUPIED") return "OCCUPIED";
   if (seat.status === "HELD") return "HELD";
   return selected ? "SELECTED" : "AVAILABLE";
@@ -26,20 +29,15 @@ export default function SeatMap({
   selectedSeatNumbers?: number[];
   onSelect: (seatNumber: number | null) => void;
 }) {
-  const rows = useMemo(() => {
-    const byRow = new Map<number, Seat[]>();
-    for (const seat of layout.seats) {
-      const list = byRow.get(seat.row) ?? [];
-      list.push(seat);
-      byRow.set(seat.row, list);
-    }
-    return Array.from(byRow.entries()).sort(([a], [b]) => a - b);
-  }, [layout.seats]);
+  const multi = selectedSeatNumbers !== undefined;
+  const selectedSet = useMemo(
+    () => new Set(selectedSeatNumbers ?? []),
+    [selectedSeatNumbers]
+  );
+  const isSelected = (n: number) =>
+    multi ? selectedSet.has(n) : n === selectedSeatNumber;
 
   const selectedSeat = findSeat(layout, selectedSeatNumber ?? null);
-  const multi = selectedSeatNumbers !== undefined;
-  const isSelected = (n: number) =>
-    multi ? selectedSeatNumbers.includes(n) : n === selectedSeatNumber;
 
   if (!layout.hasAssignedSeats) {
     return (
@@ -61,55 +59,38 @@ export default function SeatMap({
   return (
     <div>
       <div className="flex flex-col gap-4 lg:flex-row">
-        <div className="flex-1 rounded-2xl border border-slate-200 bg-slate-50 p-3">
-          <p className="mb-2 text-center text-[11px] font-medium uppercase tracking-wide text-slate-400">
-            Водій
-          </p>
-          <div className="space-y-1.5" role="group" aria-label="Схема місць">
-            {rows.map(([rowNumber, seatsInRow]) => {
-              const left = seatsInRow
-                .filter((s) => s.side === "left")
-                .sort((a, b) => a.number - b.number);
-              const right = seatsInRow
-                .filter((s) => s.side === "right")
-                .sort((a, b) => a.number - b.number);
-              const isLast = rowNumber === layout.rows;
-              return (
-                <div
-                  key={rowNumber}
-                  className="grid grid-cols-[1fr_16px_1fr] items-center gap-1"
-                >
-                  <div className="flex justify-end gap-1">
-                    {left.map((seat) => (
-                      <SeatButton
-                        key={seat.number}
-                        seat={seat}
-                        status={displayStatus(seat, isSelected(seat.number))}
+        <div className="flex-1 space-y-4">
+          {layout.decks.map((deck, deckIndex) => (
+            <div
+              key={deck.name + deckIndex}
+              className="rounded-2xl border border-slate-200 bg-slate-50 p-3"
+            >
+              <p className="mb-2 flex items-center justify-between text-[11px] font-medium uppercase tracking-wide text-slate-400">
+                <span>{deck.name}</span>
+                <span>Водій · вперед ↑</span>
+              </p>
+              <div className="space-y-1.5" role="group" aria-label="Схема місць">
+                {deck.rows.map((row, rowIndex) => (
+                  <div
+                    key={rowIndex}
+                    className="grid items-center gap-1"
+                    style={{
+                      gridTemplateColumns: `repeat(${row.length}, minmax(0,1fr))`,
+                    }}
+                  >
+                    {row.map((cell, colIndex) => (
+                      <Cell
+                        key={colIndex}
+                        cell={cell}
+                        selected={cell.type === "seat" && isSelected(cell.seat.number)}
                         onToggle={toggle}
                       />
                     ))}
                   </div>
-                  <div className="h-px bg-slate-200" />
-                  <div className="flex justify-start gap-1">
-                    {isLast && layout.hasToilet ? (
-                      <span className="flex h-8 items-center rounded bg-slate-200 px-2 text-[10px] text-slate-500">
-                        WC
-                      </span>
-                    ) : (
-                      right.map((seat) => (
-                        <SeatButton
-                          key={seat.number}
-                          seat={seat}
-                          status={displayStatus(seat, isSelected(seat.number))}
-                          onToggle={toggle}
-                        />
-                      ))
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+                ))}
+              </div>
+            </div>
+          ))}
         </div>
         <div className="w-full space-y-3 lg:w-52">
           <div className="space-y-1 text-xs text-slate-600">
@@ -124,6 +105,9 @@ export default function SeatMap({
             </p>
             <p className="flex items-center gap-2">
               <span className="h-3 w-3 rounded bg-amber-300" /> Бронь (інший пасажир)
+            </p>
+            <p className="flex items-center gap-2">
+              <span className="h-3 w-3 rounded bg-indigo-100 ring-1 ring-indigo-300" /> Спальне / ×ціна
             </p>
           </div>
           <div className="rounded-xl border border-brand-200 bg-brand-50 p-3">
@@ -146,6 +130,7 @@ export default function SeatMap({
                 <p className="text-xs text-brand-800">
                   {seatLabels(selectedSeat).sideLabel},{" "}
                   {seatLabels(selectedSeat).positionLabel}
+                  {selectedSeat.mult !== 1 ? ` · ×${selectedSeat.mult}` : ""}
                 </p>
               </>
             ) : (
@@ -158,29 +143,50 @@ export default function SeatMap({
   );
 }
 
-function SeatButton({
-  seat,
-  status,
+function Cell({
+  cell,
+  selected,
   onToggle,
 }: {
-  seat: Seat;
-  status: DisplayStatus;
+  cell: LayoutCell;
+  selected: boolean;
   onToggle: (seat: Seat) => void;
 }) {
+  if (cell.type !== "seat") {
+    const label =
+      cell.type === "wc"
+        ? "WC"
+        : cell.type === "door"
+          ? "Двері"
+          : cell.type === "stairs"
+            ? "Сходи"
+            : "";
+    return (
+      <span className="flex h-8 items-center justify-center rounded bg-slate-200/70 text-[9px] font-medium uppercase text-slate-400">
+        {label}
+      </span>
+    );
+  }
+
+  const seat = cell.seat;
+  const status = displayStatus(seat, selected);
   const disabled = status === "OCCUPIED" || status === "HELD";
   return (
     <button
       type="button"
       disabled={disabled}
       onClick={() => onToggle(seat)}
-      className={`flex h-8 w-8 items-center justify-center rounded text-[11px] font-semibold ${
+      title={`${seatLabels(seat).sideLabel}, ${seatLabels(seat).positionLabel}${seat.mult !== 1 ? ` · ×${seat.mult}` : ""}`}
+      className={`flex h-8 w-full items-center justify-center rounded text-[11px] font-semibold ${
         status === "OCCUPIED"
           ? "cursor-not-allowed bg-slate-300 text-slate-500"
           : status === "HELD"
             ? "cursor-not-allowed bg-amber-300 text-amber-900"
             : status === "SELECTED"
               ? "bg-brand-600 text-white"
-              : "bg-white text-slate-700 ring-1 ring-inset ring-slate-300 hover:bg-brand-50"
+              : seat.kind !== "seat" || seat.mult !== 1
+                ? "bg-indigo-100 text-indigo-900 ring-1 ring-inset ring-indigo-300 hover:bg-indigo-200"
+                : "bg-white text-slate-700 ring-1 ring-inset ring-slate-300 hover:bg-brand-50"
       }`}
       aria-label={`Місце ${seat.number}`}
     >

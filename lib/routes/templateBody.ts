@@ -43,6 +43,7 @@ export type ParsedTemplateBody = {
   defaultBus: string | null;
   comment: string | null;
   hasAssignedSeats: boolean;
+  allowSegmentSales: boolean;
   isActive: boolean;
   stops: StopInput[];
 };
@@ -79,6 +80,7 @@ export function parseTemplateBody(body: Record<string, unknown>): ParsedTemplate
     defaultBus: parseOptionalText(body.defaultBus),
     comment: parseOptionalText(body.comment),
     hasAssignedSeats: body.hasAssignedSeats !== false,
+    allowSegmentSales: body.allowSegmentSales !== false,
     isActive: body.isActive !== false,
     stops,
   };

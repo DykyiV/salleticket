@@ -59,7 +59,11 @@ export default function SeatSelectModal({
   }, []);
 
   const loadLayout = (sid: string) => {
-    fetch(`/api/trips/${trip.id}/seats?sessionId=${encodeURIComponent(sid)}`)
+    const seg =
+      trip.fromStopIndex != null && trip.toStopIndex != null
+        ? `&fromIndex=${trip.fromStopIndex}&toIndex=${trip.toStopIndex}`
+        : "";
+    fetch(`/api/trips/${trip.id}/seats?sessionId=${encodeURIComponent(sid)}${seg}`)
       .then((r) => r.json())
       .then((data) => {
         setLayout(data.layout ?? emptySeatLayout());
@@ -107,7 +111,12 @@ export default function SeatSelectModal({
     const res = await fetch(`/api/trips/${tripId}/holds`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ sessionId, seatNumber }),
+      body: JSON.stringify({
+        sessionId,
+        seatNumber,
+        fromStopIndex: trip.fromStopIndex ?? null,
+        toStopIndex: trip.toStopIndex ?? null,
+      }),
     }).catch(() => null);
     if (!res || !res.ok) {
       const data = res ? await res.json().catch(() => ({})) : {};

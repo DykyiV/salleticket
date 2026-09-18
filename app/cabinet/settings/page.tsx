@@ -16,6 +16,13 @@ import {
   seedRolePermissions,
   type Permission,
 } from "@/lib/auth/permissions";
+import {
+  NOTIFICATION_EVENTS,
+  seedNotificationRules,
+} from "@/lib/notify";
+import NotificationRules, {
+  type NotificationRuleRow,
+} from "@/components/admin/NotificationRules";
 import { Role } from "@prisma/client";
 import { getCurrentUser } from "@/lib/auth/session";
 import { isAdminRole } from "@/lib/routes/permissions";
@@ -29,7 +36,8 @@ export default async function CabinetSettingsPage() {
   ]);
   const isAdmin = user ? isAdminRole(user.role) : false;
   await seedRolePermissions();
-  const [users, promos, countries, grids, grants] = await Promise.all([
+  await seedNotificationRules();
+  const [users, promos, countries, grids, grants, rules] = await Promise.all([
     prisma.user.findMany({
       select: {
         id: true,
@@ -49,6 +57,7 @@ export default async function CabinetSettingsPage() {
     prisma.country.findMany({ orderBy: { sortOrder: "asc" } }),
     prisma.tariffGrid.findMany(),
     prisma.rolePermission.findMany(),
+    prisma.notificationRule.findMany({ orderBy: { kind: "asc" } }),
   ]);
 
   const gridByCountry = new Map(grids.map((g) => [g.countryId, g]));
@@ -122,6 +131,35 @@ export default async function CabinetSettingsPage() {
             early-bird / last-minute, у межах мін/макс.
           </p>
           <TariffGrids countries={tariffCountries} />
+        </section>
+      ) : null}
+      {isAdmin ? (
+        <section>
+          <h2 className="mb-3 text-base font-semibold text-slate-900">
+            Правила сповіщень
+          </h2>
+          <p className="mb-3 text-xs text-slate-500">
+            Які події надсилати, кому (ролі) і з яким порогом.
+          </p>
+          <NotificationRules
+            initialRules={NOTIFICATION_EVENTS.map((event) => {
+              const row = rules.find((r) => r.kind === event.kind);
+              let roles = event.defaultRoles;
+              try {
+                if (row) roles = JSON.parse(row.roles) as Role[];
+              } catch {
+                // keep defaults
+              }
+              return {
+                kind: event.kind,
+                label: event.label,
+                enabled: row?.enabled ?? true,
+                roles,
+                thresholdMin: row?.thresholdMin ?? event.defaultThresholdMin ?? null,
+                thresholdLabel: event.thresholdLabel,
+              } satisfies NotificationRuleRow;
+            })}
+          />
         </section>
       ) : null}
       <section>

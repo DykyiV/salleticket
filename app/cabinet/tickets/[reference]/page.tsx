@@ -7,6 +7,7 @@ import CancelTicketButton from "@/components/ticket/CancelTicketButton";
 import PassengerEditor from "@/components/ticket/PassengerEditor";
 import TicketItineraryEditor from "@/components/ticket/TicketItineraryEditor";
 import TicketStatusControl from "@/components/ticket/TicketStatusControl";
+import RecalcPriceButton from "@/components/ticket/RecalcPriceButton";
 import { getCurrentUser } from "@/lib/auth/session";
 import { hasRoleAtLeast } from "@/lib/auth/constants";
 import { prisma } from "@/lib/db";
@@ -128,6 +129,9 @@ export default async function CabinetTicketEditPage({
           {TICKET_STATUS_LABEL[status]}
         </span>
         <span className="text-sm font-bold tabular-nums">{eur(booking.finalPrice)}</span>
+        {user.role === "SUPER_ADMIN" ? (
+          <RecalcPriceButton ticketId={booking.ticket.id} />
+        ) : null}
         <Link
           href={`/account/tickets/${booking.reference}/print`}
           className="ml-auto rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700"
@@ -155,6 +159,12 @@ export default async function CabinetTicketEditPage({
               className="mt-3 inline-block rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-medium text-white"
             >
               Завантажити PDF
+            </a>
+            <a
+              href={`/api/tickets/${booking.reference}/wallet`}
+              className="mt-3 ml-2 inline-block rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700"
+            >
+              Google Wallet
             </a>
           </div>
           <div className="text-center">

@@ -11,10 +11,10 @@ describe("emptySeatLayout", () => {
   it("builds a 46-seat 2+2 coach with a WC in the last row", () => {
     const layout = emptySeatLayout();
     expect(layout.seats).toHaveLength(46);
-    expect(layout.rows).toBe(SEAT_ROWS);
-    expect(layout.hasToilet).toBe(true);
-    const lastRow = layout.seats.filter((s) => s.row === SEAT_ROWS);
-    expect(lastRow).toHaveLength(2);
+    expect(layout.decks).toHaveLength(1);
+    const lastRow = layout.decks[0].rows[SEAT_ROWS - 1];
+    expect(lastRow.filter((c) => c.type === "seat")).toHaveLength(2);
+    expect(lastRow.some((c) => c.type === "wc")).toBe(true);
   });
 
   it("marks occupied and held seats", () => {
@@ -48,5 +48,9 @@ describe("seatLabels", () => {
     const labels = seatLabels(first);
     expect(labels.sideLabel).toMatch(/Ліва|Права/);
     expect(labels.positionLabel).toMatch(/вікна|проходу/);
+  });
+
+  it("labels sleeper seats", () => {
+    expect(seatLabels({ col: 1, kind: "sleeper" }).positionLabel).toBe("Спальне");
   });
 });

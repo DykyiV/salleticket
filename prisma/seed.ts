@@ -167,6 +167,75 @@ async function main() {
   }
   console.log("  upserted tariff grids (Німеччина, Іспанія)");
 
+  // Fleet demo: a standard coach and a double-decker with sleeper seats.
+  const coachLayout = {
+    decks: [
+      {
+        name: "Салон",
+        rows: Array.from({ length: 12 }, (_, i) =>
+          i === 11
+            ? [{ t: "seat" }, { t: "seat" }, { t: "wc" }, { t: "empty" }]
+            : [{ t: "seat" }, { t: "seat" }, { t: "seat" }, { t: "seat" }]
+        ),
+      },
+    ],
+  };
+  const doubleDeck = {
+    decks: [
+      {
+        name: "Нижня палуба",
+        rows: [
+          [{ t: "seat" }, { t: "seat" }, { t: "stairs" }, { t: "door" }],
+          ...Array.from({ length: 5 }, () => [
+            { t: "seat" },
+            { t: "seat" },
+            { t: "seat" },
+            { t: "seat" },
+          ]),
+          [{ t: "seat" }, { t: "seat" }, { t: "wc" }, { t: "empty" }],
+        ],
+      },
+      {
+        name: "Верхня палуба",
+        rows: [
+          ...Array.from({ length: 6 }, () => [
+            { t: "seat" },
+            { t: "seat" },
+            { t: "seat" },
+            { t: "seat" },
+          ]),
+          [
+            { t: "seat", kind: "sleeper", mult: 1.5 },
+            { t: "seat", kind: "sleeper", mult: 1.5 },
+            { t: "seat", kind: "sleeper", mult: 1.5 },
+            { t: "seat", kind: "sleeper", mult: 1.5 },
+          ],
+          [
+            { t: "seat", kind: "sleeper", mult: 1.5 },
+            { t: "seat", kind: "sleeper", mult: 1.5 },
+            { t: "seat", kind: "sleeper", mult: 1.5 },
+            { t: "seat", kind: "sleeper", mult: 1.5 },
+          ],
+        ],
+      },
+    ],
+  };
+  const busSeeder = async (plate: string, model: string, layout: unknown, decks: number) => {
+    const existing = await prisma.bus.findUnique({ where: { plate } });
+    if (existing) return existing;
+    return prisma.bus.create({
+      data: { plate, model, decks, layout: JSON.stringify(layout) },
+    });
+  };
+  const bus1 = await busSeeder("AA 1234 XX", "Mercedes Tourismo", coachLayout, 1);
+  await busSeeder("BB 5678 YY", "Setra S 431 DT (двоповерховий)", doubleDeck, 2);
+  // Assign the coach to all Київ — Берлін departures without a bus.
+  await prisma.departure.updateMany({
+    where: { template: { name: "Київ — Берлін" }, busId: null },
+    data: { busId: bus1.id },
+  });
+  console.log("  upserted buses (coach + double-decker)");
+
   await prisma.routeTemplate.updateMany({
     where: { originCountryId: null, NOT: { countryId: ukraine.id } },
     data: { originCountryId: ukraine.id },

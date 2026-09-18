@@ -18,6 +18,9 @@ export type Trip = {
   /** 1-based tariff tier the price comes from (grid pricing). */
   priceTier?: number;
   pricePhase?: "early_bird" | "last_minute" | "regular";
+  /** Segment of the run (stop indices); undefined = full route. */
+  fromStopIndex?: number;
+  toStopIndex?: number;
 };
 
 const CARRIERS = [

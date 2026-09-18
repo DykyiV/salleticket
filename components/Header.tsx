@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { getCurrentUser } from "@/lib/auth/session";
 import LogoutButton from "@/components/LogoutButton";
+import LanguageToggle from "@/components/LanguageToggle";
 
 const NAV_LINKS = [
   { href: "#", label: "Routes" },
@@ -36,6 +37,7 @@ export default async function Header() {
         </nav>
 
         <div className="flex items-center gap-2">
+          <LanguageToggle />
           {user ? (
             <>
               <Link

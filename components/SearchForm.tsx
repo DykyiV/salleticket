@@ -7,6 +7,7 @@ import {
   TRIP_KIND_OPTIONS,
   type TripKindId,
 } from "@/lib/tickets/kinds";
+import { t, useLang, useLangListener } from "@/lib/i18n";
 
 type SearchValues = {
   from: string;
@@ -37,6 +38,8 @@ const POPULAR_ROUTES = [
 
 export default function SearchForm() {
   const router = useRouter();
+  const [lang, setLang] = useLang();
+  useLangListener(setLang);
   const [values, setValues] = useState<SearchValues>({
     from: "",
     to: "",
@@ -77,7 +80,7 @@ export default function SearchForm() {
       <div className="grid grid-cols-1 gap-3 md:grid-cols-[1fr_auto_1fr] md:items-end">
         <Field
           id="from"
-          label="From"
+          label={t(lang, "from")}
           placeholder="Departure city"
           value={values.from}
           onChange={handleChange("from")}
@@ -96,7 +99,7 @@ export default function SearchForm() {
 
         <Field
           id="to"
-          label="To"
+          label={t(lang, "to")}
           placeholder="Arrival city"
           value={values.to}
           onChange={handleChange("to")}
@@ -107,7 +110,7 @@ export default function SearchForm() {
 
       <fieldset className="mt-4">
         <legend className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
-          Тип квитка
+          {t(lang, "ticketType")}
         </legend>
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
           {TRIP_KIND_OPTIONS.map((option) => {
@@ -147,7 +150,7 @@ export default function SearchForm() {
       <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-[1fr_1fr_auto] md:items-end">
         <Field
           id="date"
-          label="Date"
+          label={t(lang, "date")}
           type="date"
           value={values.date}
           onChange={handleChange("date")}
@@ -174,7 +177,7 @@ export default function SearchForm() {
           className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-brand-600 px-6 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2"
         >
           <SearchIcon className="h-4 w-4" />
-          Search tickets
+          {t(lang, "search")}
         </button>
       </div>
 
@@ -185,7 +188,7 @@ export default function SearchForm() {
       </datalist>
 
       <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-slate-500">
-        <span className="font-medium text-slate-600">Popular:</span>
+        <span className="font-medium text-slate-600">{t(lang, "popular")}</span>
         {POPULAR_ROUTES.map((item) => (
           <button
             key={item}

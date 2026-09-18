@@ -44,6 +44,7 @@ export type TemplateDTO = {
   defaultBus: string | null;
   comment: string | null;
   hasAssignedSeats: boolean;
+  allowSegmentSales: boolean;
   isActive: boolean;
   stops: TemplateStopDTO[];
   departureCount: number;
@@ -89,6 +90,9 @@ export type DepartureDTO = {
   originCity: string;
   destinationCity: string;
   hasAssignedSeats: boolean;
+  allowSegmentSales: boolean;
+  busId: string | null;
+  busPlate: string | null;
   stops: DepartureStopDTO[];
 };
 
@@ -139,6 +143,7 @@ export function toTemplateDTO(row: TemplateRecord): TemplateDTO {
     defaultBus: row.defaultBus,
     comment: row.comment,
     hasAssignedSeats: row.hasAssignedSeats,
+    allowSegmentSales: row.allowSegmentSales,
     isActive: row.isActive,
     stops: [...row.stops]
       .sort((a, b) => a.sortOrder - b.sortOrder)
@@ -174,6 +179,7 @@ type DepartureRecord = Departure & {
     originCountry?: Country | null;
   };
   stops: DepartureStop[];
+  bus?: { id: string; plate: string } | null;
 };
 
 export function toDepartureDTO(row: DepartureRecord): DepartureDTO {
@@ -202,6 +208,9 @@ export function toDepartureDTO(row: DepartureRecord): DepartureDTO {
     originCity: row.template.originCity,
     destinationCity: row.template.destinationCity,
     hasAssignedSeats: row.hasAssignedSeats,
+    allowSegmentSales: row.allowSegmentSales,
+    busId: row.busId ?? null,
+    busPlate: row.bus?.plate ?? null,
     stops: [...row.stops]
       .sort((a, b) => a.sortOrder - b.sortOrder)
       .map(toDepartureStopDTO),

@@ -20,24 +20,33 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     );
   }
 
-  let body: { hasAssignedSeats?: boolean };
+  let body: { hasAssignedSeats?: boolean; allowSegmentSales?: boolean };
   try {
-    body = (await req.json()) as { hasAssignedSeats?: boolean };
+    body = (await req.json()) as typeof body;
   } catch {
     return NextResponse.json({ error: "Некоректний JSON" }, { status: 400 });
   }
-  if (typeof body.hasAssignedSeats !== "boolean") {
-    return NextResponse.json({ error: "Вкажіть hasAssignedSeats" }, { status: 400 });
+
+  const data: Record<string, unknown> = {};
+  if (typeof body.hasAssignedSeats === "boolean") {
+    data.hasAssignedSeats = body.hasAssignedSeats;
+  }
+  if (typeof body.allowSegmentSales === "boolean") {
+    data.allowSegmentSales = body.allowSegmentSales;
+  }
+  if (Object.keys(data).length === 0) {
+    return NextResponse.json({ error: "Немає полів" }, { status: 400 });
   }
 
   try {
     const departure = await prisma.departure.update({
       where: { id: params.id },
-      data: { hasAssignedSeats: body.hasAssignedSeats },
+      data,
     });
     return NextResponse.json({
       id: departure.id,
       hasAssignedSeats: departure.hasAssignedSeats,
+      allowSegmentSales: departure.allowSegmentSales,
     });
   } catch {
     return NextResponse.json({ error: "Виїзд не знайдено" }, { status: 404 });

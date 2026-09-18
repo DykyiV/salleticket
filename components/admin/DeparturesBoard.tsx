@@ -111,7 +111,7 @@ export default function DeparturesBoard({
       ? `/api/admin/departures/${id}`
       : `/api/agent/departures/${id}`;
 
-  const toggleAssignedSeats = async (row: DepartureDTO) => {
+  const patchDeparture = async (row: DepartureDTO, body: Record<string, unknown>) => {
     if (!capabilities.canEdit) return;
     setBusy(true);
     setError(null);
@@ -119,16 +119,12 @@ export default function DeparturesBoard({
       const res = await fetch(patchDepartureUrl(row.id), {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ hasAssignedSeats: !row.hasAssignedSeats }),
+        body: JSON.stringify(body),
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error ?? "Не вдалося змінити місця");
+      if (!res.ok) throw new Error(data.error ?? "Не вдалося оновити виїзд");
       setDepartures((prev) =>
-        prev.map((item) =>
-          item.id === row.id
-            ? { ...item, hasAssignedSeats: Boolean(data.hasAssignedSeats) }
-            : item
-        )
+        prev.map((item) => (item.id === row.id ? { ...item, ...data } : item))
       );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Помилка");
@@ -136,6 +132,12 @@ export default function DeparturesBoard({
       setBusy(false);
     }
   };
+
+  const toggleAssignedSeats = (row: DepartureDTO) =>
+    patchDeparture(row, { hasAssignedSeats: !row.hasAssignedSeats });
+
+  const toggleSegmentSales = (row: DepartureDTO) =>
+    patchDeparture(row, { allowSegmentSales: !row.allowSegmentSales });
 
   const visibleRoutes = useMemo(
     () => routes.filter((route) => routeMatchesCountry(route, countryId)),
@@ -504,18 +506,33 @@ export default function DeparturesBoard({
                               {row.defaultBus ?? "автобус не вказано"}
                             </span>
                             {capabilities.canEdit ? (
-                              <button
-                                type="button"
-                                disabled={busy}
-                                onClick={() => toggleAssignedSeats(row)}
-                                className={`rounded-full px-2 py-0.5 text-[11px] font-medium ring-1 ring-inset ${
-                                  row.hasAssignedSeats
-                                    ? "bg-emerald-50 text-emerald-800 ring-emerald-200"
-                                    : "bg-slate-100 text-slate-600 ring-slate-200"
-                                }`}
-                              >
-                                {row.hasAssignedSeats ? "місця" : "без місць"}
-                              </button>
+                              <>
+                                <button
+                                  type="button"
+                                  disabled={busy}
+                                  onClick={() => toggleAssignedSeats(row)}
+                                  className={`rounded-full px-2 py-0.5 text-[11px] font-medium ring-1 ring-inset ${
+                                    row.hasAssignedSeats
+                                      ? "bg-emerald-50 text-emerald-800 ring-emerald-200"
+                                      : "bg-slate-100 text-slate-600 ring-slate-200"
+                                  }`}
+                                >
+                                  {row.hasAssignedSeats ? "місця" : "без місць"}
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={busy}
+                                  onClick={() => toggleSegmentSales(row)}
+                                  title="Продаж місць по ділянках маршруту"
+                                  className={`rounded-full px-2 py-0.5 text-[11px] font-medium ring-1 ring-inset ${
+                                    row.allowSegmentSales
+                                      ? "bg-indigo-50 text-indigo-800 ring-indigo-200"
+                                      : "bg-slate-100 text-slate-600 ring-slate-200"
+                                  }`}
+                                >
+                                  {row.allowSegmentSales ? "сегменти" : "без сегментів"}
+                                </button>
+                              </>
                             ) : (
                               <span className="text-[11px] text-slate-500">
                                 {row.hasAssignedSeats ? "місця" : "без місць"}

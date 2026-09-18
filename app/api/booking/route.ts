@@ -15,10 +15,12 @@ import {
   SeatTakenError,
   assertSeatAvailable,
   releaseSessionHolds,
+  seatPriceMultiplier,
 } from "@/lib/tickets/inventory";
 import { applyOnlineDiscount, getSiteSettings } from "@/lib/settings";
 import { priceForTrip, soldSeatCount } from "@/lib/pricing/grid";
 import { notifyNewBooking, notifyTripAlmostFull } from "@/lib/notify";
+import { FULL_ROUTE, resolveSegment, type Segment } from "@/lib/trips/segments";
 import { cityNames } from "@/lib/trips/cities";
 import type { BookingPassenger, Trip } from "@/lib/carriers/types";
 
@@ -353,6 +355,36 @@ export async function POST(req: NextRequest) {
     throw err;
   }
 
+  // Segment seat inventory: resolve the sold from→to to stop indices on the
+  // departure so one seat can be resold on non-overlapping legs.
+  let segment: Segment = FULL_ROUTE;
+  let segmentCities: { fromCity: string; toCity: string } | null = null;
+  if (storedTrip?.departure) {
+    const seg = await resolveSegment(
+      prisma,
+      storedTrip.id,
+      String(clientSnapshot.from),
+      String(clientSnapshot.to)
+    );
+    if (seg) {
+      segment = seg;
+      segmentCities = {
+        fromCity: String(clientSnapshot.from),
+        toCity: String(clientSnapshot.to),
+      };
+    }
+  }
+  let returnSegment: Segment = FULL_ROUTE;
+  if (returnStoredTrip?.departure) {
+    const seg = await resolveSegment(
+      prisma,
+      returnStoredTrip.id,
+      String(clientSnapshot.to),
+      String(clientSnapshot.from)
+    );
+    if (seg) returnSegment = seg;
+  }
+
   // Authoritative price: tariff grid of the departure's country when present
   // (tier by sold seat share × month multiplier × time phase), else the flat
   // trip price. Computed server-side — never trusted from the client.
@@ -364,9 +396,6 @@ export async function POST(req: NextRequest) {
     : { price: 0, breakdown: null };
   const legsPrice = outboundPricing.price + returnPricing.price;
   if (storedTrip) snapshot.price = outboundPricing.price;
-  const pricings = passengers.map((p, i) =>
-    computePrice(legsPrice, p.ageCategory as AgeCategoryId, validatedPromos[i])
-  );
   const ticketStatus =
     paymentMethod === "ONLINE"
       ? TicketStatus.AWAITING_PAYMENT
@@ -427,7 +456,16 @@ export async function POST(req: NextRequest) {
 
       for (let i = 0; i < passengers.length; i += 1) {
         const p = passengers[i];
-        const pricing = pricings[i];
+        const seatMult = await seatPriceMultiplier(tx, trip.id, p.seatNumber ?? null);
+        const paxLegsPrice =
+          seatMult !== 1
+            ? Math.round(legsPrice * seatMult * 100) / 100
+            : legsPrice;
+        const pricing = computePrice(
+          paxLegsPrice,
+          p.ageCategory as AgeCategoryId,
+          validatedPromos[i]
+        );
         const fullPrice = pricing.finalPrice;
         const finalPrice =
           paymentMethod === "ONLINE"
@@ -439,7 +477,8 @@ export async function POST(req: NextRequest) {
           trip.id,
           p.seatNumber,
           undefined,
-          holdSessionId
+          holdSessionId,
+          segment
         );
         let returnSeat: number | null = null;
         if (tripKind === "ROUND_TRIP" && returnStoredTrip) {
@@ -448,7 +487,8 @@ export async function POST(req: NextRequest) {
             returnStoredTrip.id,
             p.returnSeatNumber,
             undefined,
-            holdSessionId
+            holdSessionId,
+            returnSegment
           );
         }
 
@@ -460,6 +500,10 @@ export async function POST(req: NextRequest) {
             basePrice: pricing.basePrice,
             finalPrice,
             seatNumber: outboundSeat,
+            fromStopIndex: segmentCities ? segment.fromIndex : null,
+            toStopIndex: segmentCities ? segment.toIndex : null,
+            fromCity: segmentCities?.fromCity ?? null,
+            toCity: segmentCities?.toCity ?? null,
             tripKind: ticketKind,
             returnTripId: returnStoredTrip?.id ?? null,
             returnSeatNumber: returnSeat,
