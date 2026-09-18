@@ -163,6 +163,9 @@ export default async function CabinetTicketsPage({
                         href={`/cabinet/tickets/${booking.reference}`}
                         className="font-medium text-brand-700 hover:underline"
                       >
+                        <span className="mr-2 font-mono text-xs tracking-wider text-slate-500">
+                          {booking.reference}
+                        </span>
                         {name}
                       </Link>
                       <span
