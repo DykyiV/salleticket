@@ -270,6 +270,35 @@ model SiteSetting {
   @@map("site_settings")
 }
 
+/// Flexible tariff grid per country: one grid covers all routes and
+/// departures of that country. Final price = tier price (by sold seat
+/// share) × month multiplier × time phase (early-bird / last-minute),
+/// clamped to [minPrice, maxPrice].
+model TariffGrid {
+  id          String  @id @default(cuid())
+  countryId   String  @unique
+  country     Country @relation(fields: [countryId], references: [id], onDelete: Cascade)
+  /// Coach capacity the shares are computed against.
+  capacity    Int     @default(46)
+  /// JSON array: [{ "share": 0.5, "price": 40 }, ...] — shares sum to 1.
+  tiers       String  @default("[]")
+  /// JSON object: { "1": 1.2, "10": 0.85 } — month number (1–12) → multiplier.
+  monthMultipliers String @default("{}")
+  /// Days before departure from which the early-bird discount applies.
+  earlyBirdDays    Int?
+  earlyBirdPercent Float?
+  /// Days before departure from which the last-minute surcharge applies.
+  lastMinuteDays    Int?
+  lastMinutePercent Float?
+  minPrice Float?
+  maxPrice Float?
+  isActive Boolean @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("tariff_grids")
+}
+
 model Booking {
   id          String      @id @default(cuid())
   reference   String      @unique
@@ -305,6 +334,7 @@ model Country {
 
   templates       RouteTemplate[] @relation("RouteDestinationCountry")
   originTemplates RouteTemplate[] @relation("RouteOriginCountry")
+  tariffGrid      TariffGrid?
 
   @@map("countries")
 }

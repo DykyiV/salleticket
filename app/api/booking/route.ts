@@ -16,6 +16,7 @@ import {
   releaseSessionHolds,
 } from "@/lib/tickets/inventory";
 import { applyOnlineDiscount, getSiteSettings } from "@/lib/settings";
+import { priceForTrip } from "@/lib/pricing/grid";
 import { cityNames } from "@/lib/trips/cities";
 import type { BookingPassenger, Trip } from "@/lib/carriers/types";
 
@@ -343,7 +344,17 @@ export async function POST(req: NextRequest) {
     throw err;
   }
 
-  const legsPrice = snapshot.price + (returnStoredTrip?.price ?? 0);
+  // Authoritative price: tariff grid of the departure's country when present
+  // (tier by sold seat share × month multiplier × time phase), else the flat
+  // trip price. Computed server-side — never trusted from the client.
+  const outboundPricing = storedTrip
+    ? await priceForTrip(prisma, storedTrip)
+    : { price: snapshot.price, breakdown: null };
+  const returnPricing = returnStoredTrip
+    ? await priceForTrip(prisma, returnStoredTrip)
+    : { price: 0, breakdown: null };
+  const legsPrice = outboundPricing.price + returnPricing.price;
+  if (storedTrip) snapshot.price = outboundPricing.price;
   const pricings = passengers.map((p, i) =>
     computePrice(legsPrice, p.ageCategory as AgeCategoryId, validatedPromos[i])
   );
@@ -517,6 +528,17 @@ export async function POST(req: NextRequest) {
             seatNumber: { from: null, to: outboundSeat },
             returnTripId: { from: null, to: returnStoredTrip?.id ?? null },
             returnSeatNumber: { from: null, to: returnSeat },
+            tariff: {
+              from: null,
+              to: outboundPricing.breakdown
+                ? {
+                    tier: outboundPricing.breakdown.tierIndex + 1,
+                    tierPrice: outboundPricing.breakdown.tierPrice,
+                    monthMultiplier: outboundPricing.breakdown.monthMultiplier,
+                    phase: outboundPricing.breakdown.phase,
+                  }
+                : "flat",
+            },
           },
         });
 

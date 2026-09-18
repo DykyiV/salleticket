@@ -6,6 +6,7 @@ import type {
 } from "@/lib/carriers/types";
 import type { Trip } from "@/lib/mockTrips";
 import { occupiedSeatNumbers } from "@/lib/tickets/inventory";
+import { priceForTrip } from "@/lib/pricing/grid";
 import { prisma } from "@/lib/db";
 import {
   listInternalTrips,
@@ -29,6 +30,11 @@ async function toSearchTrip(option: InternalTripOption): Promise<Trip> {
     const taken = await occupiedSeatNumbers(prisma, option.id);
     seatsLeft = Math.max(0, 46 - taken.size);
   }
+  const { price, breakdown } = await priceForTrip(prisma, {
+    id: option.id,
+    price: option.price,
+    departureTime: new Date(option.departureTime),
+  });
   return {
     id: option.id,
     carrierId: "asol",
@@ -40,12 +46,14 @@ async function toSearchTrip(option: InternalTripOption): Promise<Trip> {
     departure: hhmm(option.departureTime),
     arrival: hhmm(option.arrivalTime),
     durationMinutes: durationMinutes(option.departureTime, option.arrivalTime),
-    price: option.price,
+    price,
     currency: "EUR",
     seatsLeft,
     amenities: ["Wi-Fi", "USB", "A/C", "WC"],
     rating: 4.8,
     hasAssignedSeats: assigns,
+    priceTier: breakdown ? breakdown.tierIndex + 1 : undefined,
+    pricePhase: breakdown?.phase,
   };
 }
 

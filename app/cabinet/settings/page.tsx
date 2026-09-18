@@ -6,8 +6,10 @@ import DiscountsAdmin, {
   type DiscountRow,
 } from "@/components/admin/DiscountsAdmin";
 import SaleSettings from "@/components/admin/SaleSettings";
+import TariffGrids, { type TariffCountry } from "@/components/admin/TariffGrids";
 import { prisma } from "@/lib/db";
 import { getSiteSettings } from "@/lib/settings";
+import { parseMonthMultipliers, parseTiers } from "@/lib/pricing/grid";
 import { getCurrentUser } from "@/lib/auth/session";
 import { isAdminRole } from "@/lib/routes/permissions";
 
@@ -19,7 +21,7 @@ export default async function CabinetSettingsPage() {
     getSiteSettings(),
   ]);
   const isAdmin = user ? isAdminRole(user.role) : false;
-  const [users, promos] = await Promise.all([
+  const [users, promos, countries, grids] = await Promise.all([
     prisma.user.findMany({
       select: {
         id: true,
@@ -36,7 +38,34 @@ export default async function CabinetSettingsPage() {
       orderBy: { createdAt: "desc" },
       include: { user: { select: { id: true, email: true } } },
     }),
+    prisma.country.findMany({ orderBy: { sortOrder: "asc" } }),
+    prisma.tariffGrid.findMany(),
   ]);
+
+  const gridByCountry = new Map(grids.map((g) => [g.countryId, g]));
+  const tariffCountries: TariffCountry[] = countries.map((country) => {
+    const grid = gridByCountry.get(country.id);
+    return {
+      id: country.id,
+      name: country.name,
+      code: country.code,
+      grid: grid
+        ? {
+            id: grid.id,
+            capacity: grid.capacity,
+            tiers: parseTiers(grid.tiers),
+            monthMultipliers: parseMonthMultipliers(grid.monthMultipliers),
+            earlyBirdDays: grid.earlyBirdDays,
+            earlyBirdPercent: grid.earlyBirdPercent,
+            lastMinuteDays: grid.lastMinuteDays,
+            lastMinutePercent: grid.lastMinutePercent,
+            minPrice: grid.minPrice,
+            maxPrice: grid.maxPrice,
+            isActive: grid.isActive,
+          }
+        : null,
+    };
+  });
 
   const userRows: UserRow[] = users.map((u) => ({
     ...u,
@@ -71,6 +100,19 @@ export default async function CabinetSettingsPage() {
             Продаж квитків
           </h2>
           <SaleSettings initial={siteSettings} />
+        </section>
+      ) : null}
+      {isAdmin ? (
+        <section>
+          <h2 className="mb-3 text-base font-semibold text-slate-900">
+            Тарифні сітки
+          </h2>
+          <p className="mb-3 text-xs text-slate-500">
+            Одна сітка на країну — діє на всі її маршрути й виїзди. Ціна =
+            рівень за часткою проданих місць × місячний коефіцієнт ×
+            early-bird / last-minute, у межах мін/макс.
+          </p>
+          <TariffGrids countries={tariffCountries} />
         </section>
       ) : null}
       <section>

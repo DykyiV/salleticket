@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/db";
 import { addUtcDays, todayUtc, utcDateOnly } from "@/lib/routes/dates";
+import { priceForTrip } from "@/lib/pricing/grid";
 import { cityNames } from "@/lib/trips/cities";
 
 export type InternalTripOption = {
@@ -61,7 +62,7 @@ export async function listInternalTrips(options: {
     include: tripInclude,
     orderBy: { departureTime: "asc" },
   });
-  return trips.map(toOption);
+  return withGridPrices(trips);
 }
 
 export async function upcomingInternalTrips(options: {
@@ -80,5 +81,31 @@ export async function upcomingInternalTrips(options: {
     orderBy: { departureTime: "asc" },
     take: options.take ?? 12,
   });
-  return trips.map(toOption);
+  return withGridPrices(trips);
+}
+
+async function withGridPrices(
+  trips: Array<{
+    id: string;
+    fromCity: string;
+    toCity: string;
+    departureTime: Date;
+    arrivalTime: Date;
+    price: number;
+    carrier: { name: string };
+    departure: { hasAssignedSeats: boolean; defaultBus: string | null } | null;
+  }>
+): Promise<InternalTripOption[]> {
+  const out: InternalTripOption[] = [];
+  for (const trip of trips) {
+    const option = toOption(trip);
+    const { price } = await priceForTrip(prisma, {
+      id: trip.id,
+      price: trip.price,
+      departureTime: trip.departureTime,
+    });
+    option.price = price;
+    out.push(option);
+  }
+  return out;
 }

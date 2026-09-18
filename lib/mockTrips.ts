@@ -15,6 +15,9 @@ export type Trip = {
   amenities: string[];
   rating: number;
   hasAssignedSeats?: boolean;
+  /** 1-based tariff tier the price comes from (grid pricing). */
+  priceTier?: number;
+  pricePhase?: "early_bird" | "last_minute" | "regular";
 };
 
 const CARRIERS = [

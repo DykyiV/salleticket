@@ -95,6 +95,68 @@ async function main() {
     update: { code: "DE", sortOrder: 4 },
   });
 
+  const GRIDS: Array<{
+    countryId: string;
+    tiers: { share: number; price: number }[];
+    months: Record<number, number>;
+    earlyBirdDays: number;
+    earlyBirdPercent: number;
+    lastMinuteDays: number;
+    lastMinutePercent: number;
+    minPrice: number;
+    maxPrice: number;
+  }> = [
+    {
+      countryId: germany.id,
+      tiers: [
+        { share: 0.5, price: 40 },
+        { share: 0.25, price: 60 },
+        { share: 0.25, price: 90 },
+      ],
+      months: { 1: 1.2, 2: 0.85, 10: 0.85 },
+      earlyBirdDays: 60,
+      earlyBirdPercent: 25,
+      lastMinuteDays: 5,
+      lastMinutePercent: 15,
+      minPrice: 30,
+      maxPrice: 150,
+    },
+    {
+      countryId: spain.id,
+      tiers: [
+        { share: 0.5, price: 45 },
+        { share: 0.25, price: 65 },
+        { share: 0.25, price: 95 },
+      ],
+      months: { 1: 0.9, 7: 1.15, 8: 1.15 },
+      earlyBirdDays: 30,
+      earlyBirdPercent: 15,
+      lastMinuteDays: 2,
+      lastMinutePercent: 10,
+      minPrice: 35,
+      maxPrice: 160,
+    },
+  ];
+  for (const grid of GRIDS) {
+    await prisma.tariffGrid.upsert({
+      where: { countryId: grid.countryId },
+      create: {
+        countryId: grid.countryId,
+        capacity: 46,
+        tiers: JSON.stringify(grid.tiers),
+        monthMultipliers: JSON.stringify(grid.months),
+        earlyBirdDays: grid.earlyBirdDays,
+        earlyBirdPercent: grid.earlyBirdPercent,
+        lastMinuteDays: grid.lastMinuteDays,
+        lastMinutePercent: grid.lastMinutePercent,
+        minPrice: grid.minPrice,
+        maxPrice: grid.maxPrice,
+      },
+      update: {},
+    });
+  }
+  console.log("  upserted tariff grids (Німеччина, Іспанія)");
+
   await prisma.routeTemplate.updateMany({
     where: { originCountryId: null, NOT: { countryId: ukraine.id } },
     data: { originCountryId: ukraine.id },
