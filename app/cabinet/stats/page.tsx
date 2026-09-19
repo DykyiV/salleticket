@@ -2,66 +2,121 @@ import Link from "next/link";
 import PageHeader from "@/components/cabinet/PageHeader";
 import { prisma } from "@/lib/db";
 import { reconcileDuePayments } from "@/lib/payments";
+import { buildLayout, parseCoachLayout } from "@/lib/seats";
+import { occupiedSeatNumbers } from "@/lib/tickets/inventory";
 import { eur, TICKET_STATUS_CLASS, TICKET_STATUS_LABEL } from "@/lib/tickets/labels";
-import { todayUtc } from "@/lib/routes/dates";
+import { addUtcDays, todayUtc, utcDateOnly } from "@/lib/routes/dates";
 
 export const dynamic = "force-dynamic";
 
-export default async function CabinetStatsPage() {
+const ISO = /^\d{4}-\d{2}-\d{2}$/;
+
+function parseDay(raw: string | undefined, fallback: Date): Date {
+  if (raw && ISO.test(raw)) {
+    try {
+      return utcDateOnly(raw);
+    } catch {
+      // fall through
+    }
+  }
+  return fallback;
+}
+
+export default async function CabinetStatsPage({
+  searchParams,
+}: {
+  searchParams?: { from?: string; to?: string };
+}) {
   await reconcileDuePayments();
   const today = todayUtc();
-  const tomorrow = new Date(today.getTime() + 86_400_000);
+  const tomorrow = addUtcDays(today, 1);
 
-  const [
-    salesToday,
-    bookingsToday,
-    refundedToday,
-    todaysDepartures,
-    recent,
-    totals,
-  ] = await Promise.all([
-    prisma.ticket.aggregate({
-      _sum: { finalPrice: true },
-      where: {
-        createdAt: { gte: today, lt: tomorrow },
-        status: { in: ["PAID_ONLINE", "PAID_CASH"] },
-      },
-    }),
-    prisma.booking.count({
-      where: { createdAt: { gte: today, lt: tomorrow } },
-    }),
-    prisma.ticket.aggregate({
-      _sum: { finalPrice: true },
-      where: {
-        status: "REFUNDED",
-        updatedAt: { gte: today, lt: tomorrow },
-      },
-    }),
-    prisma.departure.findMany({
-      where: { date: { gte: today, lt: tomorrow } },
-      include: { trips: { select: { id: true } } },
-    }),
-    prisma.booking.findMany({
-      orderBy: { createdAt: "desc" },
-      take: 8,
-      include: {
-        ticket: { include: { trip: { select: { fromCity: true, toCity: true } } } },
-      },
-    }),
-    prisma.ticket.count(),
-  ]);
+  const from = parseDay(searchParams?.from, today);
+  const to = addUtcDays(parseDay(searchParams?.to, from), 1);
+  const fromIso = from.toISOString().slice(0, 10);
+  const toIso = addUtcDays(to, -1).toISOString().slice(0, 10);
 
-  const tripIds = todaysDepartures.flatMap((d) => d.trips.map((t) => t.id));
-  const soldToday = tripIds.length
-    ? await prisma.ticket.count({
+  const [salesToday, bookingsToday, refundedToday, recent, totals] =
+    await Promise.all([
+      prisma.ticket.aggregate({
+        _sum: { finalPrice: true },
         where: {
-          status: { in: ["RESERVED", "AWAITING_PAYMENT", "PAID_ONLINE", "PAID_CASH"] },
-          OR: [{ tripId: { in: tripIds } }, { returnTripId: { in: tripIds } }],
+          createdAt: { gte: today, lt: tomorrow },
+          status: { in: ["PAID_ONLINE", "PAID_CASH"] },
         },
-      })
-    : 0;
-  const seatsTotal = todaysDepartures.length * 46;
-  const seatsPct = seatsTotal ? Math.round((soldToday / seatsTotal) * 100) : 0;
+      }),
+      prisma.booking.count({ where: { createdAt: { gte: today, lt: tomorrow } } }),
+      prisma.ticket.aggregate({
+        _sum: { finalPrice: true },
+        where: { status: "REFUNDED", updatedAt: { gte: today, lt: tomorrow } },
+      }),
+      prisma.booking.findMany({
+        orderBy: { createdAt: "desc" },
+        take: 8,
+        include: {
+          ticket: {
+            include: { trip: { select: { fromCity: true, toCity: true } } },
+          },
+        },
+      }),
+      prisma.ticket.count(),
+    ]);
+
+  // Free seats across departures in the selected period.
+  const departures = await prisma.departure.findMany({
+    where: { date: { gte: from, lt: to } },
+    include: {
+      template: { select: { name: true } },
+      bus: { select: { layout: true } },
+      trips: { select: { id: true, fromCity: true } },
+    },
+    orderBy: { date: "asc" },
+  });
+
+  type Row = {
+    id: string;
+    label: string;
+    date: string;
+    free: number;
+    capacity: number;
+  };
+  const rows: Row[] = [];
+  for (const departure of departures) {
+    const capacity = departure.bus
+      ? buildLayout(parseCoachLayout(departure.bus.layout)).seatCount
+      : 46;
+    for (const direction of ["out", "back"] as const) {
+      const destination = departure.template.name.split("—")[1]?.trim();
+      const trips = departure.trips.filter((t) =>
+        direction === "out"
+          ? destination
+            ? t.fromCity !== destination
+            : true
+          : destination
+            ? t.fromCity === destination
+            : false
+      );
+      if (!trips.length) continue;
+      const taken = await occupiedSeatNumbers(prisma, trips[0].id);
+      const free = Math.max(0, capacity - taken.size);
+      rows.push({
+        id: `${departure.id}-${direction}`,
+        label: `${departure.template.name} ${direction === "out" ? "туди" : "назад"}`,
+        date: departure.date.toISOString().slice(0, 10),
+        free,
+        capacity,
+      });
+    }
+  }
+  const freeTotal = rows.reduce((sum, r) => sum + r.free, 0);
+  const capacityTotal = rows.reduce((sum, r) => sum + r.capacity, 0);
+
+  const presets = [
+    { label: "Сьогодні", from: today, days: 1 },
+    { label: "Завтра", from: addUtcDays(today, 1), days: 1 },
+    { label: "7 днів", from: today, days: 7 },
+    { label: "30 днів", from: today, days: 30 },
+  ];
 
   const cards = [
     {
@@ -71,9 +126,12 @@ export default async function CabinetStatsPage() {
     },
     { label: "Бронювання", value: String(bookingsToday), hint: "за сьогодні" },
     {
-      label: "Місця",
-      value: `${seatsPct}%`,
-      hint: `${soldToday} з ${seatsTotal} на сьогоднішніх виїздах`,
+      label: "Вільні місця",
+      value: String(freeTotal),
+      hint:
+        rows.length > 0
+          ? `з ${capacityTotal} · ${fromIso}${fromIso !== toIso ? ` — ${toIso}` : ""}`
+          : `немає виїздів у періоді`,
     },
     {
       label: "Повернення",
@@ -86,7 +144,7 @@ export default async function CabinetStatsPage() {
     <div className="mx-auto max-w-6xl">
       <PageHeader
         title="Dashboard"
-        subtitle="Продажі, заповненість і повернення за сьогодні."
+        subtitle="Продажі, вільні місця й повернення."
       />
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         {cards.map((c) => (
@@ -104,6 +162,100 @@ export default async function CabinetStatsPage() {
           </article>
         ))}
       </div>
+
+      <section className="mt-6 rounded-2xl bg-white p-5 ring-1 ring-slate-200">
+        <div className="flex flex-wrap items-end gap-2">
+          <h2 className="text-sm font-semibold text-slate-900">
+            Вільні місця на виїздах
+          </h2>
+          <form method="GET" action="/cabinet/stats" className="ml-auto flex flex-wrap items-end gap-2">
+            <label className="block text-xs">
+              <span className="mb-0.5 block text-slate-500">Від</span>
+              <input
+                type="date"
+                name="from"
+                defaultValue={fromIso}
+                className="h-8 rounded border border-slate-300 px-2 text-xs"
+              />
+            </label>
+            <label className="block text-xs">
+              <span className="mb-0.5 block text-slate-500">До</span>
+              <input
+                type="date"
+                name="to"
+                defaultValue={toIso}
+                className="h-8 rounded border border-slate-300 px-2 text-xs"
+              />
+            </label>
+            <button
+              type="submit"
+              className="h-8 rounded border border-slate-300 bg-white px-3 text-xs font-medium text-slate-700 hover:border-brand-300"
+            >
+              Показати
+            </button>
+          </form>
+          <div className="flex gap-1.5">
+            {presets.map((p) => {
+              const f = p.from.toISOString().slice(0, 10);
+              const t = addUtcDays(p.from, p.days - 1).toISOString().slice(0, 10);
+              const active = f === fromIso && t === toIso;
+              return (
+                <Link
+                  key={p.label}
+                  href={`/cabinet/stats?from=${f}&to=${t}`}
+                  className={`rounded-full px-2.5 py-1 text-[11px] font-medium ring-1 ring-inset ${
+                    active
+                      ? "bg-brand-600 text-white ring-brand-600"
+                      : "bg-slate-50 text-slate-600 ring-slate-200 hover:bg-slate-100"
+                  }`}
+                >
+                  {p.label}
+                </Link>
+              );
+            })}
+          </div>
+        </div>
+
+        {rows.length === 0 ? (
+          <p className="mt-4 text-sm text-slate-500">
+            У вибраному періоді виїздів немає.
+          </p>
+        ) : (
+          <table className="mt-4 w-full text-sm">
+            <thead className="text-left text-xs uppercase tracking-wide text-slate-500">
+              <tr>
+                <th className="py-1.5">Дата</th>
+                <th>Напрямок</th>
+                <th className="text-right">Вільно</th>
+                <th className="text-right">Місць</th>
+                <th className="w-40"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row) => (
+                <tr key={row.id} className="border-t border-slate-100">
+                  <td className="py-1.5 tabular-nums text-slate-600">{row.date}</td>
+                  <td className="text-slate-900">{row.label}</td>
+                  <td className="text-right font-semibold tabular-nums">
+                    {row.free}
+                  </td>
+                  <td className="text-right tabular-nums text-slate-500">
+                    {row.capacity}
+                  </td>
+                  <td>
+                    <span className="block h-2 overflow-hidden rounded-full bg-slate-100">
+                      <span
+                        className={`block h-full ${row.free / row.capacity < 0.15 ? "bg-rose-500" : "bg-emerald-500"}`}
+                        style={{ width: `${(row.free / row.capacity) * 100}%` }}
+                      />
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </section>
 
       <section className="mt-6 overflow-hidden rounded-2xl bg-white ring-1 ring-slate-200">
         <h2 className="border-b border-slate-100 bg-slate-50 px-4 py-2.5 text-sm font-semibold text-slate-900">
