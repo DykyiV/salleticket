@@ -89,6 +89,16 @@ export default function TripCard({
               {a}
             </span>
           ))}
+          {trip.transferCity ? (
+            <span className="inline-flex items-center rounded-full bg-amber-50 px-2.5 py-1 text-[11px] font-medium text-amber-800 ring-1 ring-inset ring-amber-200">
+              Пересадка: {trip.transferCity} · {trip.legSegments?.length ?? 2} автобуси
+            </span>
+          ) : null}
+          {trip.legSegments?.some((l) => l.isDirect) ? (
+            <span className="inline-flex items-center rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-medium text-emerald-800 ring-1 ring-inset ring-emerald-200">
+              Прямий автобус
+            </span>
+          ) : null}
         </div>
       </div>
 

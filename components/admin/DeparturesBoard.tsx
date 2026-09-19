@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import Field, { btnGhost, btnPrimary, inputClass } from "@/components/admin/Field";
 import CountryFlags from "@/components/cabinet/CountryFlags";
 import DateRangeCalendar from "@/components/cabinet/DateRangeCalendar";
+import DepartureOps from "@/components/admin/DepartureOps";
 import { mapsUrl } from "@/lib/routes/boarding";
 import { groupDeparturesByDayAndDirection } from "@/lib/routes/groupDepartures";
 import {
@@ -547,7 +548,11 @@ export default function DeparturesBoard({
                             </button>
                           </div>
                           {expanded.has(row.id) ? (
-                            <table className="mt-3 w-full text-xs">
+                            <>
+                              {capabilities.canEdit ? (
+                                <DepartureOps departureId={row.id} />
+                              ) : null}
+                              <table className="mt-3 w-full text-xs">
                               <thead className="text-left text-slate-500">
                                 <tr>
                                   <th className="py-1">№</th>
@@ -602,6 +607,7 @@ export default function DeparturesBoard({
                                 })}
                               </tbody>
                             </table>
+                            </>
                           ) : null}
                         </div>
                       );

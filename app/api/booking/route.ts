@@ -21,6 +21,7 @@ import { applyOnlineDiscount, getSiteSettings } from "@/lib/settings";
 import { priceForTrip, soldSeatCount } from "@/lib/pricing/grid";
 import { notifyNewBooking, notifyTripAlmostFull } from "@/lib/notify";
 import { FULL_ROUTE, resolveSegment, type Segment } from "@/lib/trips/segments";
+import { pickAssignment } from "@/lib/ops/legs";
 import { cityNames } from "@/lib/trips/cities";
 import type { BookingPassenger, Trip } from "@/lib/carriers/types";
 
@@ -37,6 +38,17 @@ type PassengerInput = PassengerPayload & {
   promoCode?: string;
   seatNumber?: number | null;
   returnSeatNumber?: number | null;
+  /** Seat per operational leg (transfer bookings). */
+  legSeats?: (number | null)[];
+};
+
+type LegSegmentInput = {
+  legId: string;
+  assignmentId?: string;
+  fromStopIndex: number;
+  toStopIndex: number;
+  fromCity?: string;
+  toCity?: string;
 };
 
 type CreateBookingBody = {
@@ -49,6 +61,8 @@ type CreateBookingBody = {
   holdSessionId?: string;
   contact?: { phone?: string; email?: string };
   passengers?: PassengerInput[];
+  /** Operational legs of the selected option (from search results). */
+  legSegments?: LegSegmentInput[];
   // Legacy single-passenger shape (still accepted).
   passenger?: PassengerPayload;
   promoCode?: string;
@@ -79,6 +93,7 @@ type ResolvedPassenger = {
   promoCode?: string;
   seatNumber?: number | null;
   returnSeatNumber?: number | null;
+  legSeats?: (number | null)[];
 };
 
 function resolvePassenger(p?: PassengerInput): ResolvedPassenger {
@@ -106,9 +121,10 @@ function resolvePassenger(p?: PassengerInput): ResolvedPassenger {
     firstName,
     lastName,
     ageCategory: ageCategory as AgeCategory,
-    promoCode: p.promoCode?.trim() || undefined,
+        promoCode: p.promoCode?.trim() || undefined,
     seatNumber: p.seatNumber ?? null,
     returnSeatNumber: p.returnSeatNumber ?? null,
+    legSeats: p.legSeats,
   };
 }
 
@@ -509,6 +525,88 @@ export async function POST(req: NextRequest) {
             returnSeatNumber: returnSeat,
           },
         });
+
+        // Operational legs: one TicketLeg per leg (transfer = two seats in
+        // one booking). The primary ticket columns mirror leg 1.
+        const legInputs = body.legSegments?.length ? body.legSegments : null;
+        let firstAssignmentId: string | null = null;
+        if (legInputs && storedTrip) {
+          for (let li = 0; li < legInputs.length; li += 1) {
+            const legInput = legInputs[li];
+            const legSeat =
+              p.legSeats?.[li] ?? (li === 0 ? outboundSeat : null);
+            const legSegment: Segment = {
+              fromIndex: legInput.fromStopIndex,
+              toIndex: legInput.toStopIndex,
+            };
+            let assignmentId = legInput.assignmentId ?? null;
+            if (!assignmentId) {
+              const picked = await pickAssignment({
+                db: tx,
+                legId: legInput.legId,
+                seatNumber: legSeat,
+                segment: legSegment,
+                destinationLabel: segmentCities?.toCity ?? snapshot.to,
+              });
+              assignmentId = picked?.id ?? null;
+            }
+            if (legSeat != null) {
+              await assertSeatAvailable(
+                tx,
+                trip.id,
+                legSeat,
+                undefined,
+                holdSessionId,
+                legSegment,
+                assignmentId ?? undefined
+              );
+            }
+            await tx.ticketLeg.create({
+              data: {
+                ticketId: ticket.id,
+                order: li + 1,
+                tripId: trip.id,
+                assignmentId,
+                seatNumber: legSeat,
+                fromStopIndex: legInput.fromStopIndex,
+                toStopIndex: legInput.toStopIndex,
+                fromCity: legInput.fromCity ?? null,
+                toCity: legInput.toCity ?? null,
+              },
+            });
+            if (li === 0) firstAssignmentId = assignmentId;
+          }
+        } else {
+          let assignmentId: string | null = null;
+          if (storedTrip?.legId) {
+            const picked = await pickAssignment({
+              db: tx,
+              legId: storedTrip.legId,
+              seatNumber: outboundSeat,
+              segment,
+              destinationLabel: segmentCities?.toCity ?? snapshot.to,
+            });
+            assignmentId = picked?.id ?? null;
+          }
+          await tx.ticketLeg.create({
+            data: {
+              ticketId: ticket.id,
+              order: 1,
+              tripId: trip.id,
+              assignmentId,
+              seatNumber: outboundSeat,
+              fromStopIndex: segmentCities ? segment.fromIndex : null,
+              toStopIndex: segmentCities ? segment.toIndex : null,
+            },
+          });
+          firstAssignmentId = assignmentId;
+        }
+        if (firstAssignmentId) {
+          await tx.ticket.update({
+            where: { id: ticket.id },
+            data: { assignmentId: firstAssignmentId },
+          });
+        }
 
         const reference =
           groupRef && i === 0 ? groupRef : await uniqueReference(tx);

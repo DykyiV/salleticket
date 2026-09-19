@@ -11,6 +11,7 @@ import {
   segmentsOverlap,
   type Segment,
 } from "@/lib/trips/segments";
+import { soldOnAssignment } from "@/lib/ops/legs";
 
 export class SeatTakenError extends Error {
   constructor(seat: number) {
@@ -156,13 +157,37 @@ export async function heldSeatNumbers(
   return held;
 }
 
-/** Coach layout for the trip: the assigned bus layout or the default coach. */
-export async function coachLayoutForTrip(db: Db, tripId: string) {
+/** Coach layout: assigned bus on the leg/assignment, else departure bus. */
+export async function coachLayoutForTrip(
+  db: Db,
+  tripId: string,
+  assignmentId?: string
+) {
+  if (assignmentId) {
+    const assignment = await db.vehicleAssignment.findUnique({
+      where: { id: assignmentId },
+      select: { bus: { select: { layout: true } } },
+    });
+    if (assignment) return parseCoachLayout(assignment.bus.layout);
+  }
   const trip = await db.trip.findUnique({
     where: { id: tripId },
-    select: { departure: { select: { bus: { select: { layout: true } } } } },
+    select: {
+      departure: { select: { bus: { select: { layout: true } } } },
+      leg: {
+        select: {
+          assignments: {
+            where: { active: true },
+            select: { bus: { select: { layout: true } } },
+            orderBy: { createdAt: "asc" },
+            take: 1,
+          },
+        },
+      },
+    },
   });
-  const raw = trip?.departure?.bus?.layout;
+  const legLayout = trip?.leg?.assignments[0]?.bus.layout;
+  const raw = legLayout ?? trip?.departure?.bus?.layout;
   return raw ? parseCoachLayout(raw) : defaultCoachLayoutJSON();
 }
 
@@ -171,16 +196,19 @@ export async function getTripSeatLayout(
   tripId: string,
   exceptTicketId?: string,
   sessionId?: string,
-  segment: Segment = FULL_ROUTE
+  segment: Segment = FULL_ROUTE,
+  assignmentId?: string
 ): Promise<BusLayout> {
   const assigns = await tripAssignsSeats(db, tripId);
   if (!assigns) {
     return { decks: [], hasAssignedSeats: false, seatCount: 0, seats: [] };
   }
   const [taken, held, coach] = await Promise.all([
-    occupiedSeatNumbers(db, tripId, exceptTicketId, segment),
+    assignmentId
+      ? soldOnAssignment(db, assignmentId, segment)
+      : occupiedSeatNumbers(db, tripId, exceptTicketId, segment),
     heldSeatNumbers(db, tripId, sessionId, segment),
-    coachLayoutForTrip(db, tripId),
+    coachLayoutForTrip(db, tripId, assignmentId),
   ]);
   return buildLayout(coach, taken, held);
 }
@@ -196,17 +224,20 @@ export async function assertSeatAvailable(
   seatNumber: number | null | undefined,
   exceptTicketId?: string,
   sessionId?: string,
-  segment: Segment = FULL_ROUTE
+  segment: Segment = FULL_ROUTE,
+  assignmentId?: string
 ): Promise<number | null> {
   const assigns = await tripAssignsSeats(db, tripId);
   if (!assigns) return null;
-  const coach = await coachLayoutForTrip(db, tripId);
+  const coach = await coachLayoutForTrip(db, tripId, assignmentId);
   const layout = buildLayout(coach);
   if (seatNumber == null || !isValidSeatNumber(seatNumber, layout)) {
     throw new SeatRequiredError();
   }
   const [taken, held] = await Promise.all([
-    occupiedSeatNumbers(db, tripId, exceptTicketId, segment),
+    assignmentId
+      ? soldOnAssignment(db, assignmentId, segment)
+      : occupiedSeatNumbers(db, tripId, exceptTicketId, segment),
     heldSeatNumbers(db, tripId, sessionId, segment),
   ]);
   if (taken.has(seatNumber)) throw new SeatTakenError(seatNumber);

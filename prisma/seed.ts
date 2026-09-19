@@ -11,6 +11,7 @@ import { addUtcDays, combineUtcDateTime, todayUtc } from "../lib/routes/dates";
 import { computePrice, type AgeCategoryId } from "../lib/pricing";
 import { DEFAULT_SITE_SETTINGS } from "../lib/settings";
 import { seedRolePermissions } from "../lib/auth/permissions";
+import { migrateToOperationalModel } from "../lib/ops/migrate";
 import { recordTicketHistory } from "../lib/tickets/history";
 
 const prisma = new PrismaClient();
@@ -381,8 +382,7 @@ async function main() {
   });
 
   await seedCorridor({
-    name: "Берлін — Київ",
-    originCountryId: germany.id,
+    name: "Берлін — Київ",originCountryId: germany.id,
     destinationCountryId: ukraine.id,
     originCity: "Берлін",
     destinationCity: "Київ",
@@ -418,6 +418,127 @@ async function main() {
       },
     ],
   });
+
+  // Operational model migration for existing departures (idempotent).
+  const migrated = await migrateToOperationalModel();
+  console.log(
+    `  operational model: legs=${migrated.legs} assignments=${migrated.assignments} ticketLegs=${migrated.ticketLegs}`
+  );
+
+  // Transfer demo: Харків → Андернах with a transfer in Львів.
+  const lvivTransfer = await prisma.transferPoint.upsert({
+    where: { id: "seed-lviv" },
+    create: {
+      id: "seed-lviv",
+      name: "Львів, автовокзал",
+      city: "Львів",
+      location: "вул. Стрийська, 109",
+      description: "Пересадка між українським і німецьким плечами",
+      defaultTransferTime: 45,
+    },
+    update: { city: "Львів" },
+  });
+
+  let transferTemplate = await prisma.routeTemplate.findFirst({
+    where: { name: "Харків — Андернах" },
+  });
+  if (!transferTemplate) {
+    transferTemplate = await prisma.routeTemplate.create({
+      data: {
+        countryId: germany.id,
+        originCountryId: ukraine.id,
+        name: "Харків — Андернах",
+        originCity: "Харків",
+        destinationCity: "Андернах",
+        departureWeekdays: stringifyWeekdays([2]),
+        ukraineDepartureWeekday: 2,
+        defaultBus: "Mercedes Tourismo AA 1234 XX",
+        stops: {
+          create: [
+            { sortOrder: 1, city: "Харків", outboundDay: 1, outboundTime: "06:00", returnDay: 3, returnTime: "23:00", addressLabel: "Харків, автовокзал" },
+            { sortOrder: 2, city: "Полтава", outboundDay: 1, outboundTime: "08:30", returnDay: 3, returnTime: "20:30" },
+            { sortOrder: 3, city: "Київ", outboundDay: 1, outboundTime: "11:00", returnDay: 3, returnTime: "18:00", addressLabel: "Київ, Центральний автовокзал", boardingAddress: "вул. Симона Петлюри, 32" },
+            { sortOrder: 4, city: "Львів", outboundDay: 1, outboundTime: "18:00", returnDay: 2, returnTime: "14:00", addressLabel: "Львів, автовокзал", boardingAddress: "вул. Стрийська, 109" },
+            { sortOrder: 5, city: "Андернах", outboundDay: 2, outboundTime: "18:00", returnDay: 1, returnTime: "08:00", addressLabel: "Andernach Bahnhof" },
+          ],
+        },
+      },
+    });
+    console.log("  created template Харків — Андернах");
+  }
+  const transferGenerated = await generateDepartures({
+    templateId: transferTemplate.id,
+    from: todayUtc(),
+    to: addUtcDays(todayUtc(), 56),
+  });
+  console.log(
+    `  generated Харків — Андернах: created=${transferGenerated.created} skipped=${transferGenerated.skipped}`
+  );
+
+  // Split the next departure into two legs with two different buses.
+  const nextDeparture = await prisma.departure.findFirst({
+    where: { templateId: transferTemplate.id, date: { gte: todayUtc() } },
+    include: { stops: { orderBy: { sortOrder: "asc" } }, legs: true, trips: true },
+    orderBy: { date: "asc" },
+  });
+  if (nextDeparture && nextDeparture.legs.length <= 1) {
+    const lvivStop = nextDeparture.stops.find((s) => s.city === "Львів");
+    const firstStop = nextDeparture.stops[0];
+    const lastStop = nextDeparture.stops[nextDeparture.stops.length - 1];
+    const existingLeg = nextDeparture.legs[0];
+    if (existingLeg) {
+      await prisma.leg.update({
+        where: { id: existingLeg.id },
+        data: {
+          label: "Харківський напрямок",
+          fromStopId: firstStop.id,
+          toStopId: lvivStop?.id ?? null,
+        },
+      });
+    }
+    const leg1 = existingLeg ?? (await prisma.leg.create({
+      data: {
+        departureId: nextDeparture.id,
+        order: 1,
+        label: "Харківський напрямок",
+        fromStopId: firstStop.id,
+        toStopId: lvivStop?.id ?? null,
+      },
+    }));
+    const leg2 = await prisma.leg.create({
+      data: {
+        departureId: nextDeparture.id,
+        order: 2,
+        label: "Львів — Андернах",
+        fromStopId: lvivStop?.id ?? null,
+        toStopId: lastStop.id,
+      },
+    });
+    const busA = await prisma.bus.findUnique({ where: { plate: "AA 1234 XX" } });
+    const busB = await prisma.bus.findUnique({ where: { plate: "BB 5678 YY" } });
+    if (busA) {
+      const hasA = await prisma.vehicleAssignment.findFirst({
+        where: { legId: leg1.id, busId: busA.id },
+      });
+      if (!hasA) {
+        await prisma.vehicleAssignment.create({
+          data: { legId: leg1.id, busId: busA.id },
+        });
+      }
+    }
+    if (busB) {
+      const hasB = await prisma.vehicleAssignment.findFirst({
+        where: { legId: leg2.id, busId: busB.id },
+      });
+      if (!hasB) {
+        await prisma.vehicleAssignment.create({
+          data: { legId: leg2.id, busId: busB.id },
+        });
+      }
+    }
+    console.log("  split Харків — Андернах into two legs with two buses");
+  }
+  void lvivTransfer;
 
   await seedDemoTickets();
 

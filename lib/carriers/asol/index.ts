@@ -9,6 +9,7 @@ import { occupiedSeatNumbers, seatCapacity } from "@/lib/tickets/inventory";
 import { priceForTrip } from "@/lib/pricing/grid";
 import { prisma } from "@/lib/db";
 import { findSegmentTrips, type SegmentTripOption } from "@/lib/trips/segments";
+import { coverSegment } from "@/lib/ops/coverage";
 import { upcomingInternalTrips } from "@/lib/trips/internal";
 
 function hhmm(iso: string): string {
@@ -37,6 +38,12 @@ async function toSearchTrip(option: SegmentTripOption): Promise<Trip> {
   const seatsLeft = option.hasAssignedSeats
     ? Math.max(0, capacity - taken.size)
     : 46;
+  const coverage = await coverSegment({
+    tripId: option.tripId,
+    fromIndex: option.fromStopIndex,
+    toIndex: option.toStopIndex,
+    destinationLabel: option.toCity,
+  });
   return {
     id: option.tripId,
     carrierId: "asol",
@@ -58,6 +65,18 @@ async function toSearchTrip(option: SegmentTripOption): Promise<Trip> {
     pricePhase: priced.breakdown?.phase,
     fromStopIndex: option.fromStopIndex,
     toStopIndex: option.toStopIndex,
+    transferCity: coverage.transferCity ?? undefined,
+    legSegments: coverage.legs.map((leg) => ({
+      legId: leg.legId,
+      label: leg.label,
+      fromIndex: leg.fromIndex,
+      toIndex: leg.toIndex,
+      fromCity: leg.fromCity,
+      toCity: leg.toCity,
+      assignmentId: leg.assignment?.id,
+      busPlate: leg.assignment?.busPlate,
+      isDirect: leg.assignment?.isDirect,
+    })),
   };
 }
 

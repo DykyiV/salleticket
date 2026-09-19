@@ -21,6 +21,19 @@ export type Trip = {
   /** Segment of the run (stop indices); undefined = full route. */
   fromStopIndex?: number;
   toStopIndex?: number;
+  /** Operational legs covering the sale; >1 means a transfer. */
+  legSegments?: {
+    legId: string;
+    label: string;
+    fromIndex: number;
+    toIndex: number;
+    fromCity: string;
+    toCity: string;
+    assignmentId?: string;
+    busPlate?: string;
+    isDirect?: boolean;
+  }[];
+  transferCity?: string;
 };
 
 const CARRIERS = [

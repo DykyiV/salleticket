@@ -41,6 +41,13 @@ export default async function CabinetTicketEditPage({
       ticket: {
         include: {
           history: { orderBy: { timestamp: "desc" } },
+          legs: {
+            orderBy: { order: "asc" },
+            include: {
+              trip: { select: { fromCity: true, toCity: true } },
+              assignment: { include: { bus: true } },
+            },
+          },
           trip: {
             include: {
               carrier: true,
@@ -220,6 +227,38 @@ export default async function CabinetTicketEditPage({
           <BoardingHint label="Посадка" stop={board} />
           <BoardingHint label="Висадка" stop={alight} />
         </div>
+        {booking.ticket.legs.length > 0 ? (
+          <div className="mt-4 border-t border-slate-100 pt-4">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+              Плечі поїздки (реальні автобуси)
+            </h3>
+            <ul className="mt-2 space-y-1.5 text-sm">
+              {booking.ticket.legs.map((leg) => (
+                <li
+                  key={leg.id}
+                  className="flex flex-wrap items-center gap-2 rounded-lg bg-slate-50 px-3 py-1.5"
+                >
+                  <span className="text-xs font-semibold text-slate-500">
+                    Плече {leg.order}
+                  </span>
+                  <span className="text-slate-900">
+                    {leg.fromCity ?? leg.trip.fromCity} → {leg.toCity ?? leg.trip.toCity}
+                  </span>
+                  <span className="font-mono text-xs text-slate-600">
+                    {leg.assignment
+                      ? `${leg.assignment.bus.model ?? "Автобус"} ${leg.assignment.bus.plate}`
+                      : "автобус не призначено"}
+                  </span>
+                  {leg.seatNumber != null ? (
+                    <span className="rounded bg-white px-1.5 py-0.5 text-xs font-semibold text-brand-800 ring-1 ring-brand-200">
+                      місце {leg.seatNumber}
+                    </span>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
         <div className="mt-4 border-t border-slate-100 pt-4">
           <TicketItineraryEditor
             ticketId={booking.ticket.id}

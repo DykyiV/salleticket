@@ -128,9 +128,14 @@ model Trip {
   carrierId String
   carrier   Carrier @relation(fields: [carrierId], references: [id], onDelete: Restrict)
 
+  /// Operational leg this trip belongs to (null = legacy whole-route trip).
+  legId String?
+  leg   Leg?    @relation(fields: [legId], references: [id], onDelete: SetNull)
+
   tickets       Ticket[]
   returnTickets Ticket[] @relation("ReturnTrip")
   seatHolds     SeatHold[]
+  ticketLegs    TicketLeg[]
 
   departureId String?
   departure   Departure? @relation(fields: [departureId], references: [id], onDelete: SetNull)
@@ -175,9 +180,14 @@ model Ticket {
   /// and the caller retries with fresh state.
   version    Int          @default(0)
 
+  /// Operational leg this ticket rides on (denormalized from trip).
+  assignmentId String?
+  assignment   VehicleAssignment? @relation(fields: [assignmentId], references: [id], onDelete: SetNull)
+
   booking Booking?
   history TicketHistory[]
   payments Payment[]
+  legs    TicketLeg[]
 
   @@index([userId])
   @@index([status])
@@ -311,9 +321,106 @@ model Bus {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  departures Departure[]
+  departures  Departure[]
+  assignments VehicleAssignment[]
 
   @@map("buses")
+}
+
+/// Transfer point between legs (e.g. Львів). Names are data, not code.
+model TransferPoint {
+  id                   String   @id @default(cuid())
+  name                 String
+  city                 String
+  location             String?
+  description          String?
+  /// Minutes between legs by default.
+  defaultTransferTime  Int      @default(45)
+  active               Boolean  @default(true)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  @@map("transfer_points")
+}
+
+/// Operational leg of a departure — the part of the journey performed by
+/// one (or several) real buses. Labels are editable, never hardcoded.
+model Leg {
+  id          String    @id @default(cuid())
+  departureId String
+  departure   Departure @relation(fields: [departureId], references: [id], onDelete: Cascade)
+  order       Int       @default(1)
+  label       String
+  /// Stop range this leg covers (null = whole run).
+  fromStopId  String?
+  toStopId    String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  trips       Trip[]
+  assignments VehicleAssignment[]
+
+  @@index([departureId])
+  @@map("legs")
+}
+
+/// How a physical bus is used on a specific leg of a specific departure.
+/// `isDirect` + `directDestinationCity` live here — never on the bus itself.
+model VehicleAssignment {
+  id                   String   @id @default(cuid())
+  legId                String
+  leg                  Leg      @relation(fields: [legId], references: [id], onDelete: Cascade)
+  busId                String
+  bus                  Bus      @relation(fields: [busId], references: [id], onDelete: Restrict)
+  isDirect             Boolean  @default(false)
+  directDestinationCity String?
+  allowCrossZoneSales  Boolean  @default(false)
+  active               Boolean  @default(true)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  zones      SeatZone[]
+  tickets    Ticket[]
+  ticketLegs TicketLeg[]
+
+  @@index([legId])
+  @@map("vehicle_assignments")
+}
+
+/// Optional logical seat range on an assignment (e.g. 1–25 for one group of
+/// destinations, 26–50 for another). Off by default.
+model SeatZone {
+  id           String            @id @default(cuid())
+  assignmentId String
+  assignment   VehicleAssignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  name         String
+  fromSeat     Int
+  toSeat       Int
+  /// Free-form destination group label (editable in admin).
+  groupLabel   String?
+
+  @@map("seat_zones")
+}
+
+/// One leg of a passenger's journey (transfer bookings have several).
+model TicketLeg {
+  id            String             @id @default(cuid())
+  ticketId      String
+  ticket        Ticket             @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  order         Int
+  tripId        String
+  trip          Trip               @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  assignmentId  String?
+  assignment    VehicleAssignment? @relation(fields: [assignmentId], references: [id], onDelete: SetNull)
+  seatNumber    Int?
+  fromStopIndex Int?
+  toStopIndex   Int?
+  /// Leg cities as sold (for the agent view).
+  fromCity      String?
+  toCity        String?
+
+  @@index([ticketId])
+  @@map("ticket_legs")
 }
 
 /// Per-event notification rule: which roles get which alert, and the
@@ -507,6 +614,7 @@ model Departure {
 
   stops DepartureStop[]
   trips Trip[]
+  legs  Leg[]
 
   @@unique([templateId, date])
   @@index([date])

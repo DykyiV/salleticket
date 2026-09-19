@@ -27,6 +27,7 @@ type SearchParams = {
   seats?: string;
   returnSeats?: string;
   passengers?: string;
+  legs?: string;
 };
 
 function formatDate(dateStr?: string): string {
@@ -46,7 +47,27 @@ function parseSeats(raw?: string): number[] {
   return raw
     .split(",")
     .map((v) => Number.parseInt(v, 10))
-    .filter((n) => Number.isInteger(n) && n >= 1 && n <= 46);
+    .filter((n) => Number.isInteger(n) && n >= 1 && n <= 999);
+}
+
+type LegParam = {
+  legId: string;
+  assignmentId?: string;
+  fromStopIndex: number;
+  toStopIndex: number;
+  fromCity?: string;
+  toCity?: string;
+  seats: number[];
+};
+
+function parseLegs(raw?: string): LegParam[] {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw) as LegParam[];
+    return Array.isArray(parsed) ? parsed.filter((l) => l.legId) : [];
+  } catch {
+    return [];
+  }
 }
 
 export default async function BookingPage({
@@ -75,6 +96,7 @@ export default async function BookingPage({
     : 0;
   const seats = parseSeats(searchParams.seats);
   const returnSeats = parseSeats(searchParams.returnSeats);
+  const legs = parseLegs(searchParams.legs);
   const passengersCount = searchParams.passengers
     ? Math.max(1, Number.parseInt(searchParams.passengers, 10) || 1)
     : Math.max(1, seats.length);
@@ -148,6 +170,7 @@ export default async function BookingPage({
             returnTripId={searchParams.returnTripId}
             returnPrice={returnPrice}
             passengersCount={passengersCount}
+            legs={legs}
           />
 
           <aside className="lg:sticky lg:top-20 lg:self-start">

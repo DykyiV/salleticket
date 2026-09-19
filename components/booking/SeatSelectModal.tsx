@@ -53,10 +53,35 @@ export default function SeatSelectModal({
 
   const roundTrip = tripKind === "ROUND_TRIP";
   const assignsSeats = trip.hasAssignedSeats !== false;
+  const legSegments = trip.legSegments ?? [];
+  const hasLegs = legSegments.length > 1;
+
+  // Per-leg seat selections for transfer bookings (leg 0 mirrors `seats`).
+  const [legLayouts, setLegLayouts] = useState<Record<string, BusLayout | null>>({});
+  const [legSeatsMap, setLegSeatsMap] = useState<Record<string, number[]>>({});
 
   useEffect(() => {
     setSessionId(getBookingSessionId());
   }, []);
+
+  const loadLegLayout = (sid: string, legId: string, assignmentId: string | undefined, fromIndex: number, toIndex: number) => {
+    fetch(
+      `/api/trips/${trip.id}/seats?sessionId=${encodeURIComponent(sid)}&fromIndex=${fromIndex}&toIndex=${toIndex}${assignmentId ? `&assignmentId=${assignmentId}` : ""}`
+    )
+      .then((r) => r.json())
+      .then((data) =>
+        setLegLayouts((prev) => ({ ...prev, [legId]: data.layout ?? emptySeatLayout() }))
+      )
+      .catch(() => {});
+  };
+
+  useEffect(() => {
+    if (sessionId === "server" || !hasLegs) return;
+    for (const leg of legSegments) {
+      loadLegLayout(sessionId, leg.legId, leg.assignmentId, leg.fromIndex, leg.toIndex);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionId, trip.id]);
 
   const loadLayout = (sid: string) => {
     const seg =
@@ -171,11 +196,56 @@ export default function SeatSelectModal({
     }
   };
 
+  const toggleLegSeat = async (
+    leg: NonNullable<Trip["legSegments"]>[number],
+    n: number | null
+  ) => {
+    if (n == null) return;
+    setError(null);
+    const current = legSeatsMap[leg.legId] ?? [];
+    if (current.includes(n)) {
+      setLegSeatsMap((prev) => ({
+        ...prev,
+        [leg.legId]: current.filter((s) => s !== n),
+      }));
+      release(trip.id, n);
+      return;
+    }
+    if (current.length >= seats.length) {
+      setError("На кожному плечі місць стільки ж, скільки пасажирів");
+      return;
+    }
+    const res = await fetch(`/api/trips/${trip.id}/holds`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        sessionId,
+        seatNumber: n,
+        fromStopIndex: leg.fromIndex,
+        toStopIndex: leg.toIndex,
+      }),
+    }).catch(() => null);
+    if (!res || !res.ok) {
+      const data = res ? await res.json().catch(() => ({})) : {};
+      setError(data.error ?? "Місце щойно забронювали");
+      loadLegLayout(sessionId, leg.legId, leg.assignmentId, leg.fromIndex, leg.toIndex);
+      return;
+    }
+    setLegSeatsMap((prev) => ({ ...prev, [leg.legId]: [...current, n] }));
+  };
+
   const onlinePrice =
     Math.round(trip.price * (1 - onlineDiscountPercent / 100) * 100) / 100;
 
+  const legsComplete =
+    !hasLegs ||
+    legSegments
+      .slice(1)
+      .every((leg) => (legSeatsMap[leg.legId] ?? []).length === seats.length);
+
   const canContinue =
     (!assignsSeats || seats.length > 0) &&
+    legsComplete &&
     (!roundTrip ||
       (returnTripId != null &&
         (!returnLayout?.hasAssignedSeats ||
@@ -206,6 +276,22 @@ export default function SeatSelectModal({
     });
     if (date) params.set("date", date);
     if (seats.length) params.set("seats", seats.join(","));
+    if (hasLegs) {
+      params.set(
+        "legs",
+        JSON.stringify(
+          legSegments.map((leg, i) => ({
+            legId: leg.legId,
+            assignmentId: leg.assignmentId,
+            fromStopIndex: leg.fromIndex,
+            toStopIndex: leg.toIndex,
+            fromCity: leg.fromCity,
+            toCity: leg.toCity,
+            seats: i === 0 ? seats : (legSeatsMap[leg.legId] ?? []),
+          }))
+        )
+      );
+    }
     if (roundTrip && returnTripId) {
       params.set("returnTripId", returnTripId);
       if (returnSeats.length) params.set("returnSeats", returnSeats.join(","));
@@ -256,11 +342,20 @@ export default function SeatSelectModal({
         <div className="mt-4">
           {assignsSeats ? (
             layout ? (
-              <SeatMap
-                layout={layout}
-                selectedSeatNumbers={seats}
-                onSelect={(n) => void toggleSeat(n)}
-              />
+              <>
+                {hasLegs ? (
+                  <p className="mb-2 text-xs font-medium text-slate-600">
+                    Плече 1: {legSegments[0].fromCity || trip.from} →{" "}
+                    {legSegments[0].toCity || trip.transferCity} · автобус{" "}
+                    {legSegments[0].busPlate ?? "—"}
+                  </p>
+                ) : null}
+                <SeatMap
+                  layout={layout}
+                  selectedSeatNumbers={seats}
+                  onSelect={(n) => void toggleSeat(n)}
+                />
+              </>
             ) : (
               <p className="text-sm text-slate-500">Завантаження схеми місць…</p>
             )
@@ -270,6 +365,33 @@ export default function SeatSelectModal({
             </p>
           )}
         </div>
+
+        {hasLegs ? (
+          <div className="mt-4 space-y-4">
+            <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+              Пересадка: {trip.transferCity}. Далі — інший автобус, місце
+              обирається окремо.
+            </p>
+            {legSegments.slice(1).map((leg) => (
+              <div key={leg.legId}>
+                <p className="mb-2 text-xs font-medium text-slate-600">
+                  Плече {legSegments.indexOf(leg) + 2}: {leg.fromCity} →{" "}
+                  {leg.toCity || trip.to} · автобус {leg.busPlate ?? "—"} · місць
+                  обрано {(legSeatsMap[leg.legId] ?? []).length} з {seats.length}
+                </p>
+                {legLayouts[leg.legId] ? (
+                  <SeatMap
+                    layout={legLayouts[leg.legId]!}
+                    selectedSeatNumbers={legSeatsMap[leg.legId] ?? []}
+                    onSelect={(n) => void toggleLegSeat(leg, n)}
+                  />
+                ) : (
+                  <p className="text-sm text-slate-500">Завантаження схеми…</p>
+                )}
+              </div>
+            ))}
+          </div>
+        ) : null}
 
         {roundTrip ? (
           <div className="mt-5 border-t border-slate-100 pt-4">

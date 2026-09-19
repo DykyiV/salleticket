@@ -63,6 +63,15 @@ type Props = {
   returnTripId?: string;
   returnPrice?: number;
   passengersCount?: number;
+  legs?: {
+    legId: string;
+    assignmentId?: string;
+    fromStopIndex: number;
+    toStopIndex: number;
+    fromCity?: string;
+    toCity?: string;
+    seats: number[];
+  }[];
 };
 
 type Confirmation = {
@@ -94,6 +103,7 @@ export default function BookingForm({
   returnTripId,
   returnPrice = 0,
   passengersCount,
+  legs = [],
 }: Props) {
   const router = useRouter();
   const isAuthed = Boolean(currentUser);
@@ -288,7 +298,13 @@ export default function BookingForm({
             seatNumber: seats[i] ?? null,
             returnSeatNumber:
               tripKind === "ROUND_TRIP" ? (returnSeats[i] ?? null) : null,
+            legSeats: legs.length
+              ? legs.map((leg) => leg.seats[i] ?? null)
+              : undefined,
           })),
+          legSegments: legs.length
+            ? legs.map(({ seats: _seats, ...leg }) => leg)
+            : undefined,
           tripSnapshot: {
             carrier: tripSummary.carrier,
             from: tripSummary.from,
@@ -434,6 +450,16 @@ export default function BookingForm({
               </h3>
               <span className="text-xs text-slate-500">
                 {seats[i] != null ? `Місце ${seats[i]}` : "Без місця"}
+                {legs.length > 1
+                  ? legs
+                      .slice(1)
+                      .map((leg, li) =>
+                        leg.seats[i] != null
+                          ? ` · плече ${li + 2}: ${leg.seats[i]}`
+                          : ""
+                      )
+                      .join("")
+                  : ""}
                 {tripKind === "ROUND_TRIP" && returnSeats[i] != null
                   ? ` · назад ${returnSeats[i]}`
                   : ""}
