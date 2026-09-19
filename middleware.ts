@@ -6,29 +6,30 @@ import {
   hasRoleAtLeast,
 } from "@/lib/auth/constants";
 
-/**
- * Edge middleware for role-based access control.
- *
- * We configure the matcher to only run on protected prefixes so public pages
- * stay free of any auth overhead.
- */
-
 type Rule = {
   match: (pathname: string) => boolean;
   role: Role;
-  /** "json" → respond with 401/403 JSON; "page" → redirect to /login or /. */
   mode: "json" | "page";
 };
 
 const RULES: Rule[] = [
   { match: (p) => p.startsWith("/api/admin"), role: "ADMIN", mode: "json" },
   { match: (p) => p.startsWith("/api/agent"), role: "AGENT", mode: "json" },
+  { match: (p) => p.startsWith("/api/account"), role: "CUSTOMER", mode: "json" },
   { match: (p) => p.startsWith("/admin"), role: "ADMIN", mode: "page" },
   { match: (p) => p.startsWith("/agent"), role: "AGENT", mode: "page" },
-  { match: (p) => p.startsWith("/account"), role: "USER", mode: "page" },
-  // NOTE: /booking is intentionally PUBLIC so guests can fill the form.
-  // POST /api/booking still calls requireAuth() and returns 401; the client
-  // then redirects to /login?next=... so users sign in before charging.
+  {
+    match: (p) =>
+      p.startsWith("/cabinet/routes") ||
+      p.startsWith("/cabinet/settings") ||
+      p.startsWith("/cabinet/reports") ||
+      p.startsWith("/cabinet/stats"),
+    role: "ADMIN",
+    mode: "page",
+  },
+  { match: (p) => p.startsWith("/cabinet/departures"), role: "AGENT", mode: "page" },
+  { match: (p) => p.startsWith("/cabinet"), role: "CUSTOMER", mode: "page" },
+  { match: (p) => p.startsWith("/account"), role: "CUSTOMER", mode: "page" },
 ];
 
 function matchRule(pathname: string): Rule | null {
@@ -62,13 +63,11 @@ export async function middleware(req: NextRequest) {
         { status: 403 }
       );
     }
-    const home = new URL("/", req.url);
-    home.searchParams.set("error", "forbidden");
-    return NextResponse.redirect(home);
+    const cabinet = new URL("/cabinet", req.url);
+    cabinet.searchParams.set("error", "forbidden");
+    return NextResponse.redirect(cabinet);
   }
 
-  // Forward identity to downstream handlers/pages as request headers so
-  // server components / route handlers can read them without re-verifying.
   const requestHeaders = new Headers(req.headers);
   requestHeaders.set("x-user-id", session.sub);
   requestHeaders.set("x-user-email", session.email);
@@ -81,8 +80,14 @@ export const config = {
   matcher: [
     "/api/admin/:path*",
     "/api/agent/:path*",
+    "/api/account/:path*",
+    "/admin",
     "/admin/:path*",
+    "/agent",
     "/agent/:path*",
+    "/account",
     "/account/:path*",
+    "/cabinet",
+    "/cabinet/:path*",
   ],
 };

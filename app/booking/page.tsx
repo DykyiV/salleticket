@@ -1,8 +1,11 @@
 import Link from "next/link";
 import Header from "@/components/Header";
 import BookingForm from "@/components/BookingForm";
+import LegalLinks from "@/components/booking/LegalLinks";
 import { formatDuration } from "@/lib/mockTrips";
 import { getCurrentUser } from "@/lib/auth/session";
+import { parseTripKind } from "@/lib/tickets/kinds";
+import { TRIP_KIND_LABEL } from "@/lib/tickets/labels";
 
 export const dynamic = "force-dynamic";
 
@@ -17,6 +20,14 @@ type SearchParams = {
   arrival?: string;
   duration?: string;
   price?: string;
+  tripKind?: string;
+  returnDate?: string;
+  returnTripId?: string;
+  returnPrice?: string;
+  seats?: string;
+  returnSeats?: string;
+  passengers?: string;
+  legs?: string;
 };
 
 function formatDate(dateStr?: string): string {
@@ -29,6 +40,34 @@ function formatDate(dateStr?: string): string {
     month: "short",
     year: "numeric",
   });
+}
+
+function parseSeats(raw?: string): number[] {
+  if (!raw) return [];
+  return raw
+    .split(",")
+    .map((v) => Number.parseInt(v, 10))
+    .filter((n) => Number.isInteger(n) && n >= 1 && n <= 999);
+}
+
+type LegParam = {
+  legId: string;
+  assignmentId?: string;
+  fromStopIndex: number;
+  toStopIndex: number;
+  fromCity?: string;
+  toCity?: string;
+  seats: number[];
+};
+
+function parseLegs(raw?: string): LegParam[] {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw) as LegParam[];
+    return Array.isArray(parsed) ? parsed.filter((l) => l.legId) : [];
+  } catch {
+    return [];
+  }
 }
 
 export default async function BookingPage({
@@ -50,9 +89,17 @@ export default async function BookingPage({
   const price = searchParams.price
     ? Number.parseFloat(searchParams.price)
     : 22.0;
-
-  const serviceFee = 1.5;
-  const total = price + serviceFee;
+  const tripKind = parseTripKind(searchParams.tripKind);
+  const returnDate = searchParams.returnDate;
+  const returnPrice = searchParams.returnPrice
+    ? Number.parseFloat(searchParams.returnPrice)
+    : 0;
+  const seats = parseSeats(searchParams.seats);
+  const returnSeats = parseSeats(searchParams.returnSeats);
+  const legs = parseLegs(searchParams.legs);
+  const passengersCount = searchParams.passengers
+    ? Math.max(1, Number.parseInt(searchParams.passengers, 10) || 1)
+    : Math.max(1, seats.length);
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -81,10 +128,16 @@ export default async function BookingPage({
           </Link>
           <div>
             <h1 className="text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">
-              Complete your booking
+              Дані пасажирів
             </h1>
             <p className="mt-0.5 text-sm text-slate-500">
-              Step 2 of 3 · Passenger details
+              {TRIP_KIND_LABEL[tripKind]} · {passengersCount}{" "}
+              {passengersCount === 1
+                ? "пасажир"
+                : passengersCount <= 4
+                  ? "пасажири"
+                  : "пасажирів"}
+              {seats.length > 0 ? ` · місця ${seats.join(", ")}` : ""}
             </p>
           </div>
         </div>
@@ -103,20 +156,28 @@ export default async function BookingPage({
               departure,
               arrival,
               price,
-              total,
+              total: price + 1.5,
             }}
             currentUser={
               user
                 ? { id: user.id, email: user.email, role: user.role }
                 : null
             }
+            tripKind={tripKind}
+            returnDate={returnDate}
+            seats={seats}
+            returnSeats={returnSeats}
+            returnTripId={searchParams.returnTripId}
+            returnPrice={returnPrice}
+            passengersCount={passengersCount}
+            legs={legs}
           />
 
           <aside className="lg:sticky lg:top-20 lg:self-start">
             <div className="overflow-hidden rounded-2xl bg-white ring-1 ring-slate-200">
               <div className="border-b border-slate-200 bg-slate-50 p-5">
                 <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  Your trip
+                  Ваша поїздка
                 </p>
                 <p className="mt-1 text-base font-semibold text-slate-900">
                   {carrier}
@@ -153,30 +214,47 @@ export default async function BookingPage({
                     </p>
                   </div>
                 </div>
+
+                {tripKind === "ROUND_TRIP" && returnDate ? (
+                  <p className="mt-3 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                    Назад: {to} → {from} · {formatDate(returnDate)}
+                    {returnSeats.length > 0
+                      ? ` · місця ${returnSeats.join(", ")}`
+                      : ""}
+                  </p>
+                ) : null}
+                {tripKind === "OPEN_RETURN" ? (
+                  <p className="mt-3 rounded-lg bg-brand-50 px-3 py-2 text-xs text-brand-800">
+                    Зворотня поїздка з відкритою датою — оберете пізніше в
+                    квитку.
+                  </p>
+                ) : null}
               </div>
 
               <div className="border-t border-dashed border-slate-200 p-5 text-sm">
                 <div className="flex items-center justify-between text-slate-600">
-                  <span>Ticket (1 passenger)</span>
+                  <span>Базова ціна (пасажир)</span>
                   <span className="tabular-nums">€{price.toFixed(2)}</span>
                 </div>
                 <div className="mt-1.5 flex items-center justify-between text-slate-600">
-                  <span>Service fee</span>
-                  <span className="tabular-nums">€{serviceFee.toFixed(2)}</span>
+                  <span>Пасажирів</span>
+                  <span className="tabular-nums">{passengersCount}</span>
                 </div>
-                <div className="mt-4 flex items-center justify-between border-t border-slate-200 pt-3">
-                  <span className="text-sm font-semibold text-slate-900">
-                    Total
-                  </span>
-                  <span className="text-xl font-extrabold tracking-tight text-slate-900 tabular-nums">
-                    €{total.toFixed(2)}
-                  </span>
-                </div>
+                {seats.length > 0 ? (
+                  <div className="mt-1.5 flex items-center justify-between text-slate-600">
+                    <span>Місця</span>
+                    <span className="tabular-nums">{seats.join(", ")}</span>
+                  </div>
+                ) : null}
+              </div>
+
+              <div className="border-t border-slate-200 p-5">
+                <LegalLinks />
               </div>
             </div>
 
             <p className="mt-3 px-1 text-xs text-slate-400">
-              No real payment is processed — this is a demo booking flow.
+              Демо — реальна оплата не проводиться.
             </p>
           </aside>
         </div>

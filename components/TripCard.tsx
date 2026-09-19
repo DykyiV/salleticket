@@ -1,29 +1,29 @@
-import Link from "next/link";
+"use client";
+
+import { useState } from "react";
+import SeatSelectModal from "@/components/booking/SeatSelectModal";
 import type { Trip } from "@/lib/mockTrips";
 import { formatDuration } from "@/lib/mockTrips";
 
 type Props = {
   trip: Trip;
   date?: string;
+  tripKind?: string;
+  returnDate?: string;
+  onlineDiscountPercent?: number;
 };
 
-function buildBookingHref(trip: Trip, date?: string): string {
-  const params = new URLSearchParams({
-    carrier: trip.carrier,
-    carrierId: trip.carrierId,
-    tripId: trip.id,
-    from: trip.from,
-    to: trip.to,
-    departure: trip.departure,
-    arrival: trip.arrival,
-    duration: String(trip.durationMinutes),
-    price: trip.price.toFixed(2),
-  });
-  if (date) params.set("date", date);
-  return `/booking?${params.toString()}`;
-}
+export default function TripCard({
+  trip,
+  date,
+  tripKind,
+  returnDate,
+  onlineDiscountPercent = 0,
+}: Props) {
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const onlinePrice =
+    Math.round(trip.price * (1 - onlineDiscountPercent / 100) * 100) / 100;
 
-export default function TripCard({ trip, date }: Props) {
   return (
     <article className="group relative flex flex-col overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-slate-200 transition hover:shadow-lg hover:ring-brand-300 md:flex-row">
       <div className="flex flex-1 flex-col gap-5 p-5 sm:p-6">
@@ -89,6 +89,16 @@ export default function TripCard({ trip, date }: Props) {
               {a}
             </span>
           ))}
+          {trip.transferCity ? (
+            <span className="inline-flex items-center rounded-full bg-amber-50 px-2.5 py-1 text-[11px] font-medium text-amber-800 ring-1 ring-inset ring-amber-200">
+              Пересадка: {trip.transferCity} · {trip.legSegments?.length ?? 2} автобуси
+            </span>
+          ) : null}
+          {trip.legSegments?.some((l) => l.isDirect) ? (
+            <span className="inline-flex items-center rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-medium text-emerald-800 ring-1 ring-inset ring-emerald-200">
+              Прямий автобус
+            </span>
+          ) : null}
         </div>
       </div>
 
@@ -111,30 +121,49 @@ export default function TripCard({ trip, date }: Props) {
 
         <div>
           <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
-            From
+            Базова
           </p>
           <p className="mt-0.5 text-2xl font-extrabold tracking-tight text-slate-900 sm:text-3xl">
             €{trip.price.toFixed(2)}
           </p>
+          {onlineDiscountPercent > 0 ? (
+            <p className="mt-0.5 text-xs font-semibold text-emerald-700">
+              €{onlinePrice.toFixed(2)} онлайн (−{onlineDiscountPercent}%)
+            </p>
+          ) : null}
           <p className="mt-0.5 text-xs text-slate-500">
-            {trip.seatsLeft <= 5 ? (
+            {trip.hasAssignedSeats === false ? (
+              <span>Без місць</span>
+            ) : trip.seatsLeft <= 5 ? (
               <span className="font-semibold text-rose-600">
-                Only {trip.seatsLeft} seats left
+                Лишилось {trip.seatsLeft} місць
               </span>
             ) : (
-              <>{trip.seatsLeft} seats left</>
+              <>{trip.seatsLeft} місць вільно</>
             )}
           </p>
         </div>
 
-        <Link
-          href={buildBookingHref(trip, date)}
+        <button
+          type="button"
+          onClick={() => setPickerOpen(true)}
           className="inline-flex h-11 shrink-0 items-center justify-center gap-1.5 rounded-xl bg-brand-600 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2"
         >
-          Book
+          Обрати місце
           <ArrowRightIcon className="h-4 w-4" />
-        </Link>
+        </button>
       </div>
+
+      {pickerOpen ? (
+        <SeatSelectModal
+          trip={trip}
+          date={date}
+          tripKind={tripKind ?? "ONE_WAY"}
+          returnDate={returnDate}
+          onlineDiscountPercent={onlineDiscountPercent}
+          onClose={() => setPickerOpen(false)}
+        />
+      ) : null}
     </article>
   );
 }

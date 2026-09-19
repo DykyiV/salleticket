@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { getCurrentUser } from "@/lib/auth/session";
 import LogoutButton from "@/components/LogoutButton";
+import LanguageToggle from "@/components/LanguageToggle";
 
 const NAV_LINKS = [
   { href: "#", label: "Routes" },
@@ -36,10 +37,11 @@ export default async function Header() {
         </nav>
 
         <div className="flex items-center gap-2">
+          <LanguageToggle />
           {user ? (
             <>
               <Link
-                href="/account"
+                href="/cabinet"
                 className="hidden items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100 sm:inline-flex"
               >
                 <span className="hidden max-w-[140px] truncate md:inline">
@@ -48,6 +50,12 @@ export default async function Header() {
                 <span className="rounded-full bg-brand-50 px-2 py-0.5 text-[11px] font-semibold text-brand-700 ring-1 ring-inset ring-brand-100">
                   {user.role}
                 </span>
+              </Link>
+              <Link
+                href="/cabinet"
+                className="hidden rounded-lg px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100 md:inline-flex"
+              >
+                Кабінет
               </Link>
               <LogoutButton className="inline-flex items-center rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white transition hover:bg-slate-700" />
             </>

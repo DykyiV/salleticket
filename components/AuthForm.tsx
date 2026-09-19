@@ -13,7 +13,7 @@ type Props = {
 export default function AuthForm({ mode }: Props) {
   const router = useRouter();
   const params = useSearchParams();
-  const nextPath = params.get("next") || "/";
+  const nextPath = params.get("next") || "/cabinet";
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
