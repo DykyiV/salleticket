@@ -7,6 +7,7 @@ import {
   computePrice,
   type AgeCategoryId,
 } from "@/lib/pricing";
+import { seatLabels, type SelectedSeat } from "@/lib/seats";
 
 type PromoPreview = {
   code: string;
@@ -44,6 +45,14 @@ type CurrentUser = {
 type Props = {
   tripSummary: TripSummary;
   currentUser?: CurrentUser | null;
+  /**
+   * Seat chosen in the previous step (see components/SeatMap.tsx +
+   * lib/seats.ts). Only carried along for display and as forward-compatible
+   * metadata on the /api/booking request — the API/DB don't persist a seat
+   * yet (no seat inventory table), so it isn't part of the authoritative
+   * booking record until that lands.
+   */
+  selectedSeat?: SelectedSeat | null;
 };
 
 type BookingConfirmation = {
@@ -66,7 +75,11 @@ type Values = {
 
 type Errors = Partial<Record<keyof Values, string>>;
 
-export default function BookingForm({ tripSummary, currentUser }: Props) {
+export default function BookingForm({
+  tripSummary,
+  currentUser,
+  selectedSeat,
+}: Props) {
   const router = useRouter();
   const isAuthed = Boolean(currentUser);
 
@@ -213,6 +226,10 @@ export default function BookingForm({ tripSummary, currentUser }: Props) {
           tripId: tripSummary.tripId ?? "unknown",
           carrierId: tripSummary.carrierId ?? "mock",
           promoCode: activePromo?.code ?? undefined,
+          // Forward-compatible metadata: /api/booking doesn't persist a seat
+          // yet (see lib/seats.ts), but sending it now means nothing needs
+          // to change here once a seat-inventory table exists server-side.
+          seat: selectedSeat ?? undefined,
           passenger: {
             firstName: values.firstName.trim(),
             lastName: values.lastName.trim(),
@@ -294,6 +311,12 @@ export default function BookingForm({ tripSummary, currentUser }: Props) {
             />
           ) : null}
           <SummaryRow label="Passenger" value={fullName} />
+          {selectedSeat ? (
+            <SummaryRow
+              label="Seat"
+              value={`#${selectedSeat.number} · ${seatLabels(selectedSeat).sideLabel} · ${seatLabels(selectedSeat).positionLabel}`}
+            />
+          ) : null}
           {ageLabel ? <SummaryRow label="Age category" value={ageLabel} /> : null}
           <SummaryRow label="Phone" value={values.phone} />
           {values.email ? <SummaryRow label="Email" value={values.email} /> : null}
