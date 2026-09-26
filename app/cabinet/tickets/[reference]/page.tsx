@@ -27,11 +27,12 @@ import {
 
 export const dynamic = "force-dynamic";
 
-export default async function CabinetTicketEditPage({
-  params,
-}: {
-  params: { reference: string };
-}) {
+export default async function CabinetTicketEditPage(
+  props: {
+    params: Promise<{ reference: string }>;
+  }
+) {
+  const params = await props.params;
   const user = await getCurrentUser();
   if (!user) return null;
 
@@ -105,8 +106,8 @@ export default async function CabinetTicketEditPage({
     (action) => HISTORY_ACTION_LABEL[action] ?? action
   );
 
-  const host = headers().get("x-forwarded-host") ?? headers().get("host");
-  const proto = headers().get("x-forwarded-proto") ?? "http";
+  const host = (await headers()).get("x-forwarded-host") ?? (await headers()).get("host");
+  const proto = (await headers()).get("x-forwarded-proto") ?? "http";
   const qrPayload = `${proto}://${host}/check/${booking.reference}`;
   const qrCode = await qrCodeDataUrl(qrPayload);
 

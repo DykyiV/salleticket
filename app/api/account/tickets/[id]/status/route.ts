@@ -12,11 +12,12 @@ import { notifyRefundRequested, notifySeatFreed } from "@/lib/notify";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-type Params = { params: { id: string } };
+type Params = { params: Promise<{ id: string }> };
 
 const ALLOWED = new Set<TicketStatus>(Object.values(TicketStatus));
 
-export async function PATCH(req: NextRequest, { params }: Params) {
+export async function PATCH(req: NextRequest, props: Params) {
+  const params = await props.params;
   const guard = await requireAuth();
   if (!guard.ok) return guard.response;
 

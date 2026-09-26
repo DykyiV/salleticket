@@ -8,10 +8,11 @@ import { updateTicketVersioned } from "@/lib/tickets/version";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-type Params = { params: { id: string } };
+type Params = { params: Promise<{ id: string }> };
 
 /** SUPER_ADMIN: reprice the ticket at the current tariff grid. */
-export async function POST(req: NextRequest, { params }: Params) {
+export async function POST(req: NextRequest, props: Params) {
+  const params = await props.params;
   const guard = await requireRole("SUPER_ADMIN");
   if (!guard.ok) return guard.response;
 

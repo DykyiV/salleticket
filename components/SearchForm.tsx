@@ -7,7 +7,7 @@ import {
   TRIP_KIND_OPTIONS,
   type TripKindId,
 } from "@/lib/tickets/kinds";
-import { t, useLang, useLangListener } from "@/lib/i18n";
+import { t, useLang } from "@/lib/i18n";
 
 type SearchValues = {
   from: string;
@@ -38,8 +38,7 @@ const POPULAR_ROUTES = [
 
 export default function SearchForm() {
   const router = useRouter();
-  const [lang, setLang] = useLang();
-  useLangListener(setLang);
+  const [lang] = useLang();
   const [values, setValues] = useState<SearchValues>({
     from: "",
     to: "",

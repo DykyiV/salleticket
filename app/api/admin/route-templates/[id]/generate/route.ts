@@ -7,9 +7,10 @@ import { RouteValidationError } from "@/lib/routes/validate";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-type Params = { params: { id: string } };
+type Params = { params: Promise<{ id: string }> };
 
-export async function POST(req: NextRequest, { params }: Params) {
+export async function POST(req: NextRequest, props: Params) {
+  const params = await props.params;
   const guard = await requireRole("ADMIN");
   if (!guard.ok) return guard.response;
 

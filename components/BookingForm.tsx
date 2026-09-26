@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   AGE_CATEGORIES,
@@ -10,7 +11,7 @@ import {
 import { AGE_LABEL } from "@/lib/tickets/labels";
 import { parseTripKind, type TripKindId } from "@/lib/tickets/kinds";
 import { TRIP_KIND_LABEL } from "@/lib/tickets/labels";
-import { getBookingSessionId } from "@/lib/seatSession";
+import { useBookingSessionId } from "@/lib/seatSession";
 
 type PromoPreview = {
   code: string;
@@ -94,6 +95,8 @@ function emptyPassenger(): PassengerForm {
   };
 }
 
+const noopSubscribe = () => () => {};
+
 export default function BookingForm({
   tripSummary,
   currentUser,
@@ -110,11 +113,14 @@ export default function BookingForm({
   const tripKind = parseTripKind(tripKindProp);
   const count = Math.max(1, passengersCount ?? seats.length ?? 1);
 
-  const [loginHref, setLoginHref] = useState("/login");
-  useEffect(() => {
-    const next = window.location.pathname + window.location.search;
-    setLoginHref(`/login?next=${encodeURIComponent(next)}`);
-  }, []);
+  // window.location is client-only: "/login" on the server, the real
+  // return path once hydrated (no setState-in-effect round trip).
+  const loginHref = useSyncExternalStore(
+    noopSubscribe,
+    () =>
+      `/login?next=${encodeURIComponent(window.location.pathname + window.location.search)}`,
+    () => "/login"
+  );
 
   const [passengers, setPassengers] = useState<PassengerForm[]>(() =>
     Array.from({ length: count }, emptyPassenger)
@@ -126,14 +132,13 @@ export default function BookingForm({
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [confirmation, setConfirmation] = useState<Confirmation | null>(null);
-  const [sessionId, setSessionId] = useState("server");
+  const sessionId = useBookingSessionId();
   const [salesSettings, setSalesSettings] = useState({
     onlineDiscountPercent: 0,
     paymentDeadlineHours: 24,
   });
 
   useEffect(() => {
-    setSessionId(getBookingSessionId());
     fetch("/api/settings/public")
       .then((r) => r.json())
       .then((data) =>
@@ -303,7 +308,7 @@ export default function BookingForm({
               : undefined,
           })),
           legSegments: legs.length
-            ? legs.map(({ seats: _seats, ...leg }) => leg)
+            ? legs.map(({ seats: _omit, ...leg }) => { void _omit; return leg; })
             : undefined,
           tripSnapshot: {
             carrier: tripSummary.carrier,
@@ -399,12 +404,12 @@ export default function BookingForm({
           >
             Відкрити квиток
           </a>
-          <a
+          <Link
             href="/"
             className="inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-brand-300 hover:text-brand-700"
           >
             Ще одне бронювання
-          </a>
+          </Link>
         </div>
       </div>
     );

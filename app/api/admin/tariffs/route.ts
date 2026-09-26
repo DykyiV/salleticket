@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { requireAuth, requireRole } from "@/lib/auth/guard";
+import { requireAuth } from "@/lib/auth/guard";
 import { can } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/db";
 import { parseMonthMultipliers, parseTiers } from "@/lib/pricing/grid";

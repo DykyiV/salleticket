@@ -15,11 +15,12 @@ import {
 export const dynamic = "force-dynamic";
 
 /** Boarding check page — the QR code on the ticket points here. */
-export default async function CheckTicketPage({
-  params,
-}: {
-  params: { reference: string };
-}) {
+export default async function CheckTicketPage(
+  props: {
+    params: Promise<{ reference: string }>;
+  }
+) {
+  const params = await props.params;
   const user = await getCurrentUser();
   if (!user || !hasRoleAtLeast(user.role, "DRIVER")) notFound();
 

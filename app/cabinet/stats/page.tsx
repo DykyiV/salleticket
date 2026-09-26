@@ -22,11 +22,12 @@ function parseDay(raw: string | undefined, fallback: Date): Date {
   return fallback;
 }
 
-export default async function CabinetStatsPage({
-  searchParams,
-}: {
-  searchParams?: { from?: string; to?: string };
-}) {
+export default async function CabinetStatsPage(
+  props: {
+    searchParams?: Promise<{ from?: string; to?: string }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   await reconcileDuePayments();
   const today = todayUtc();
   const tomorrow = addUtcDays(today, 1);

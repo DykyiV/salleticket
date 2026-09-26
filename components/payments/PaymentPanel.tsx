@@ -27,6 +27,16 @@ type GroupState = {
   anyPending: boolean;
 };
 
+async function fetchStatus(reference: string): Promise<GroupState | null> {
+  try {
+    const res = await fetch(`/api/payments/${reference}/status`);
+    const data = await res.json();
+    return res.ok ? (data as GroupState) : null;
+  } catch {
+    return null; // keep polling
+  }
+}
+
 export default function PaymentPanel({
   reference,
   settleMinutes,
@@ -46,18 +56,18 @@ export default function PaymentPanel({
   }, []);
 
   const refresh = async () => {
-    try {
-      const res = await fetch(`/api/payments/${reference}/status`);
-      const data = await res.json();
-      if (res.ok) setState(data);
-    } catch {
-      // keep polling
-    }
+    const data = await fetchStatus(reference);
+    if (data) setState(data);
   };
 
   useEffect(() => {
-    void refresh();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    let cancelled = false;
+    fetchStatus(reference).then((data) => {
+      if (!cancelled && data) setState(data);
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [reference]);
 
   useEffect(() => {

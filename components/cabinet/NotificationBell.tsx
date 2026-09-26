@@ -23,6 +23,17 @@ const KIND_ICON: Record<string, string> = {
   payment_received: "💶",
 };
 
+type Feed = { notifications?: Item[]; unread?: number };
+
+async function fetchFeed(): Promise<Feed | null> {
+  try {
+    const res = await fetch("/api/notifications");
+    return res.ok ? ((await res.json()) as Feed) : null;
+  } catch {
+    return null;
+  }
+}
+
 export default function NotificationBell() {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -30,22 +41,20 @@ export default function NotificationBell() {
   const [unread, setUnread] = useState(0);
   const boxRef = useRef<HTMLDivElement>(null);
 
-  const load = async () => {
-    try {
-      const res = await fetch("/api/notifications");
-      if (!res.ok) return;
-      const data = await res.json();
-      setItems(data.notifications ?? []);
-      setUnread(data.unread ?? 0);
-    } catch {
-      // offline — keep old state
-    }
-  };
-
   useEffect(() => {
-    void load();
-    const timer = window.setInterval(load, 30_000);
-    return () => window.clearInterval(timer);
+    let cancelled = false;
+    const tick = () =>
+      fetchFeed().then((feed) => {
+        if (cancelled || !feed) return; // offline — keep old state
+        setItems(feed.notifications ?? []);
+        setUnread(feed.unread ?? 0);
+      });
+    void tick();
+    const timer = window.setInterval(tick, 30_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
   }, []);
 
   useEffect(() => {

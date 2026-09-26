@@ -6,11 +6,12 @@ import { toTemplateDTO } from "@/lib/routes/serialize";
 
 export const dynamic = "force-dynamic";
 
-export default async function EditCabinetRoutePage({
-  params,
-}: {
-  params: { id: string };
-}) {
+export default async function EditCabinetRoutePage(
+  props: {
+    params: Promise<{ id: string }>;
+  }
+) {
+  const params = await props.params;
   const [template, countries] = await Promise.all([
     prisma.routeTemplate.findUnique({
       where: { id: params.id },

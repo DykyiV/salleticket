@@ -3,7 +3,6 @@ import { prisma } from "@/lib/db";
 import { coverSegment } from "@/lib/ops/coverage";
 import { pickAssignment } from "@/lib/ops/legs";
 import { swapAssignmentBus, SwapCapacityError } from "@/lib/ops/swap";
-import type { CoachLayoutJSON } from "@/lib/seats";
 
 function layoutWith(seats: number): string {
   const rows: CoachCell[][] = [];

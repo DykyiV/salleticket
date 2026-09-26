@@ -10,9 +10,10 @@ import {
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-type Params = { params: { id: string } };
+type Params = { params: Promise<{ id: string }> };
 
-export async function GET(_req: NextRequest, { params }: Params) {
+export async function GET(_req: NextRequest, props: Params) {
+  const params = await props.params;
   const guard = await requireRole("ADMIN");
   if (!guard.ok) return guard.response;
 
@@ -26,7 +27,8 @@ export async function GET(_req: NextRequest, { params }: Params) {
   return NextResponse.json({ discount });
 }
 
-export async function PATCH(req: NextRequest, { params }: Params) {
+export async function PATCH(req: NextRequest, props: Params) {
+  const params = await props.params;
   const guard = await requireRole("ADMIN");
   if (!guard.ok) return guard.response;
 
@@ -77,7 +79,8 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   }
 }
 
-export async function DELETE(_req: NextRequest, { params }: Params) {
+export async function DELETE(_req: NextRequest, props: Params) {
+  const params = await props.params;
   const guard = await requireRole("ADMIN");
   if (!guard.ok) return guard.response;
 

@@ -7,10 +7,11 @@ import { reconcileTicketPayment } from "@/lib/payments";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-type Params = { params: { reference: string } };
+type Params = { params: Promise<{ reference: string }> };
 
 /** Polled by the payment page; reconciles the whole group before answering. */
-export async function GET(_req: NextRequest, { params }: Params) {
+export async function GET(_req: NextRequest, props: Params) {
+  const params = await props.params;
   const guard = await requireAuth();
   if (!guard.ok) return guard.response;
 

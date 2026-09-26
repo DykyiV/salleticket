@@ -1,6 +1,11 @@
 "use client";
 
+import { useSyncExternalStore } from "react";
+
 const KEY = "asol_booking_session";
+
+/** Used only if localStorage is unavailable; memoized so the id stays stable. */
+let fallbackId: string | null = null;
 
 /**
  * Stable anonymous booking-session id shared by the results page (seat
@@ -18,6 +23,17 @@ export function getBookingSessionId(): string {
     window.localStorage.setItem(KEY, id);
     return id;
   } catch {
-    return `sess-${Math.random().toString(36).slice(2)}${Date.now()}`;
+    fallbackId ??= `sess-${Math.random().toString(36).slice(2)}${Date.now()}`;
+    return fallbackId;
   }
+}
+
+const noopSubscribe = () => () => {};
+
+/**
+ * React hook form of getBookingSessionId(): "server" during SSR/hydration,
+ * then the persisted browser id — without a setState-in-effect round trip.
+ */
+export function useBookingSessionId(): string {
+  return useSyncExternalStore(noopSubscribe, getBookingSessionId, () => "server");
 }

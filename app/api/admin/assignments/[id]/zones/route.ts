@@ -6,9 +6,10 @@ import { prisma } from "@/lib/db";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-type Params = { params: { id: string } };
+type Params = { params: Promise<{ id: string }> };
 
-export async function POST(req: NextRequest, { params }: Params) {
+export async function POST(req: NextRequest, props: Params) {
+  const params = await props.params;
   const guard = await requireAuth();
   if (!guard.ok) return guard.response;
   if (!(await can({ role: guard.session.role }, "route.edit"))) {
@@ -40,7 +41,8 @@ export async function POST(req: NextRequest, { params }: Params) {
   return NextResponse.json({ zone }, { status: 201 });
 }
 
-export async function DELETE(req: NextRequest, { params }: Params) {
+export async function DELETE(req: NextRequest, props: Params) {
+  const params = await props.params;
   const guard = await requireAuth();
   if (!guard.ok) return guard.response;
   if (!(await can({ role: guard.session.role }, "route.edit"))) {

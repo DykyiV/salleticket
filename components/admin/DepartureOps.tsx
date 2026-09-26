@@ -33,6 +33,16 @@ type OpsData = {
 };
 type BusOption = { id: string; plate: string; model: string | null; seatCount: number };
 
+type OpsResult = { ok: true; data: OpsData } | { ok: false; error: string };
+
+async function fetchOps(departureId: string): Promise<OpsResult> {
+  const res = await fetch(`/api/admin/departures/${departureId}/legs`);
+  const json = await res.json();
+  return res.ok
+    ? { ok: true, data: json as OpsData }
+    : { ok: false, error: json.error ?? "Не вдалося завантажити плечі" };
+}
+
 export default function DepartureOps({ departureId }: { departureId: string }) {
   const [data, setData] = useState<OpsData | null>(null);
   const [buses, setBuses] = useState<BusOption[]>([]);
@@ -53,19 +63,31 @@ export default function DepartureOps({ departureId }: { departureId: string }) {
   const [zoneGroup, setZoneGroup] = useState("");
 
   const load = async () => {
-    const res = await fetch(`/api/admin/departures/${departureId}/legs`);
-    const json = await res.json();
-    if (res.ok) setData(json);
-    else setError(json.error ?? "Не вдалося завантажити плечі");
+    const r = await fetchOps(departureId);
+    if (r.ok) setData(r.data);
+    else setError(r.error);
   };
 
   useEffect(() => {
-    void load();
+    // State is only set from promise callbacks, and ignored after unmount or
+    // when departureId changes mid-flight.
+    let cancelled = false;
+    fetchOps(departureId)
+      .then((r) => {
+        if (cancelled) return;
+        if (r.ok) setData(r.data);
+        else setError(r.error);
+      })
+      .catch(() => {});
     fetch("/api/admin/buses")
       .then((r) => r.json())
-      .then((json) => setBuses(json.buses ?? []))
+      .then((json) => {
+        if (!cancelled) setBuses(json.buses ?? []);
+      })
       .catch(() => {});
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    return () => {
+      cancelled = true;
+    };
   }, [departureId]);
 
   const call = async (url: string, method: string, body?: unknown) => {

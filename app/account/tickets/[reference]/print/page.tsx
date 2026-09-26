@@ -16,11 +16,12 @@ import {
 
 export const dynamic = "force-dynamic";
 
-export default async function PrintTicketPage({
-  params,
-}: {
-  params: { reference: string };
-}) {
+export default async function PrintTicketPage(
+  props: {
+    params: Promise<{ reference: string }>;
+  }
+) {
+  const params = await props.params;
   const user = await getCurrentUser();
   if (!user) notFound();
 

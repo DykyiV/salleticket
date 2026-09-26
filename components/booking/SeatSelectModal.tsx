@@ -8,7 +8,7 @@ import { btnGhost, btnPrimary, inputClass } from "@/components/admin/Field";
 import { formatUkDate } from "@/lib/routes/dates";
 import { formatDuration } from "@/lib/mockTrips";
 import { emptySeatLayout, type BusLayout } from "@/lib/seats";
-import { getBookingSessionId } from "@/lib/seatSession";
+import { useBookingSessionId } from "@/lib/seatSession";
 import type { Trip } from "@/lib/mockTrips";
 
 const MAX_SEATS = 6;
@@ -39,7 +39,7 @@ export default function SeatSelectModal({
   onClose: () => void;
 }) {
   const router = useRouter();
-  const [sessionId, setSessionId] = useState("server");
+  const sessionId = useBookingSessionId();
   const [virtual, setVirtual] = useState(false);
   const [layout, setLayout] = useState<BusLayout | null>(null);
   const [seats, setSeats] = useState<number[]>([]);
@@ -59,10 +59,6 @@ export default function SeatSelectModal({
   // Per-leg seat selections for transfer bookings (leg 0 mirrors `seats`).
   const [legLayouts, setLegLayouts] = useState<Record<string, BusLayout | null>>({});
   const [legSeatsMap, setLegSeatsMap] = useState<Record<string, number[]>>({});
-
-  useEffect(() => {
-    setSessionId(getBookingSessionId());
-  }, []);
 
   const loadLegLayout = (sid: string, legId: string, assignmentId: string | undefined, fromIndex: number, toIndex: number) => {
     fetch(

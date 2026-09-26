@@ -9,11 +9,12 @@ import { getSiteSettings } from "@/lib/settings";
 
 export const dynamic = "force-dynamic";
 
-export default async function PayPage({
-  params,
-}: {
-  params: { reference: string };
-}) {
+export default async function PayPage(
+  props: {
+    params: Promise<{ reference: string }>;
+  }
+) {
+  const params = await props.params;
   const user = await getCurrentUser();
   if (!user) notFound();
 

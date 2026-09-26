@@ -13,7 +13,7 @@ import {
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-type Params = { params: { id: string } };
+type Params = { params: Promise<{ id: string }> };
 
 type HoldBody = {
   seatNumber?: number;
@@ -30,7 +30,8 @@ function readBody(req: NextRequest): Promise<HoldBody> {
  * Lock a seat for the booking session so nobody else can take it while the
  * passenger finishes the form. Holds expire after `seatHoldMinutes`.
  */
-export async function POST(req: NextRequest, { params }: Params) {
+export async function POST(req: NextRequest, props: Params) {
+  const params = await props.params;
   const body = await readBody(req);
   const sessionId = body.sessionId?.trim();
   const seatNumber = body.seatNumber;
@@ -115,7 +116,8 @@ export async function POST(req: NextRequest, { params }: Params) {
 }
 
 /** Release a session hold (passenger deselected the seat). */
-export async function DELETE(req: NextRequest, { params }: Params) {
+export async function DELETE(req: NextRequest, props: Params) {
+  const params = await props.params;
   const body = await readBody(req);
   const sessionId = body.sessionId?.trim();
   const seatNumber = body.seatNumber;

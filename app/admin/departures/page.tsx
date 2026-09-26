@@ -1,10 +1,11 @@
 import { redirect } from "next/navigation";
 
-export default function Redirect({
-  searchParams,
-}: {
-  searchParams?: Record<string, string | undefined>;
-}) {
+export default async function Redirect(
+  props: {
+    searchParams?: Promise<Record<string, string | undefined>>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const q = new URLSearchParams();
   if (searchParams?.templateId) q.set("templateId", searchParams.templateId);
   if (searchParams?.from) q.set("from", searchParams.from);

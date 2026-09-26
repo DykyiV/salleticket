@@ -13,13 +13,14 @@ import {
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-type Params = { params: { id: string } };
+type Params = { params: Promise<{ id: string }> };
 
 async function canMutate(ticketUserId: string, sessionSub: string, role: string) {
   return ticketUserId === sessionSub || hasRoleAtLeast(role as never, "AGENT");
 }
 
-export async function PATCH(req: NextRequest, { params }: Params) {
+export async function PATCH(req: NextRequest, props: Params) {
+  const params = await props.params;
   const guard = await requireAuth();
   if (!guard.ok) return guard.response;
 

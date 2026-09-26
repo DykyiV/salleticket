@@ -25,11 +25,12 @@ const STATUSES: TicketStatus[] = [
   "REFUNDED",
 ];
 
-export default async function CabinetTicketsPage({
-  searchParams,
-}: {
-  searchParams: { status?: string; q?: string };
-}) {
+export default async function CabinetTicketsPage(
+  props: {
+    searchParams: Promise<{ status?: string; q?: string }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const user = await getCurrentUser();
   const staff = user ? hasRoleAtLeast(user.role, "AGENT") : false;
   await reconcileDuePayments();

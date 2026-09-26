@@ -7,14 +7,15 @@ import { prisma } from "@/lib/db";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-type Params = { params: { reference: string } };
+type Params = { params: Promise<{ reference: string }> };
 
 /**
  * Google Wallet "Add to wallet" link. Needs env credentials:
  *   GOOGLE_WALLET_ISSUER_ID, GOOGLE_WALLET_SA_EMAIL, GOOGLE_WALLET_SA_KEY
  * Without them the route explains what to configure instead of failing.
  */
-export async function GET(_req: NextRequest, { params }: Params) {
+export async function GET(_req: NextRequest, props: Params) {
+  const params = await props.params;
   const guard = await requireAuth();
   if (!guard.ok) return guard.response;
 

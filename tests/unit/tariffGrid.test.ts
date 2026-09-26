@@ -110,7 +110,9 @@ describe("computeGridPrice — clamps", () => {
       departureTime: departure("2027-01-20T08:00:00.000Z"), // Jan ×1.2, early-bird −25%
       now,
     });
-    // 90 × 1.2 × 0.75 = 81 — under max; craft a real clamp case:
+    // 90 × 1.2 × 0.75 = 81 — under the default max, so unclamped:
+    expect(r?.price).toBe(81);
+    // …and a real clamp case:
     const clamped = computeGridPrice(
       { ...baseConfig, maxPrice: 50 },
       { soldSeats: 45, departureTime: departure("2026-09-20T08:00:00.000Z"), now }

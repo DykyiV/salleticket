@@ -6,10 +6,11 @@ import { swapAssignmentBus, SwapCapacityError } from "@/lib/ops/swap";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-type Params = { params: { id: string } };
+type Params = { params: Promise<{ id: string }> };
 
 /** Quick bus swap: allowed when the new capacity covers booked passengers. */
-export async function POST(req: NextRequest, { params }: Params) {
+export async function POST(req: NextRequest, props: Params) {
+  const params = await props.params;
   const guard = await requireAuth();
   if (!guard.ok) return guard.response;
   if (!(await can({ role: guard.session.role }, "route.edit"))) {

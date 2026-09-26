@@ -9,17 +9,18 @@ import { departureCapabilities, isAdminRole } from "@/lib/routes/permissions";
 
 export const dynamic = "force-dynamic";
 
-export default async function CabinetDeparturesPage({
-  searchParams,
-}: {
-  searchParams?: {
-    templateId?: string;
-    countryId?: string;
-    from?: string;
-    to?: string;
-    page?: string;
-  };
-}) {
+export default async function CabinetDeparturesPage(
+  props: {
+    searchParams?: Promise<{
+      templateId?: string;
+      countryId?: string;
+      from?: string;
+      to?: string;
+      page?: string;
+    }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const user = await getCurrentUser();
   if (!user) return null;
 

@@ -3,15 +3,15 @@ import { requireAuth } from "@/lib/auth/guard";
 import { can } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/db";
 import { destinationDistribution, soldOnAssignment, toAssignmentView } from "@/lib/ops/legs";
-import { buildLayout, parseCoachLayout } from "@/lib/seats";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-type Params = { params: { id: string } };
+type Params = { params: Promise<{ id: string }> };
 
 /** Operational structure of a departure: legs with buses and load. */
-export async function GET(_req: NextRequest, { params }: Params) {
+export async function GET(_req: NextRequest, props: Params) {
+  const params = await props.params;
   const guard = await requireAuth();
   if (!guard.ok) return guard.response;
   if (!(await can({ role: guard.session.role }, "route.read"))) {
@@ -72,7 +72,8 @@ export async function GET(_req: NextRequest, { params }: Params) {
 }
 
 /** Add a leg to the departure (split at stops). */
-export async function POST(req: NextRequest, { params }: Params) {
+export async function POST(req: NextRequest, props: Params) {
+  const params = await props.params;
   const guard = await requireAuth();
   if (!guard.ok) return guard.response;
   if (!(await can({ role: guard.session.role }, "route.edit"))) {

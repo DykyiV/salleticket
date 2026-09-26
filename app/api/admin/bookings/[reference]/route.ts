@@ -11,7 +11,7 @@ import {
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-type Params = { params: { reference: string } };
+type Params = { params: Promise<{ reference: string }> };
 
 const ALLOWED_STATUSES = new Set<TicketStatus>([
   TicketStatus.RESERVED,
@@ -26,7 +26,8 @@ const ALLOWED_STATUSES = new Set<TicketStatus>([
  * PATCH /api/admin/bookings/[reference]  -> admin changes status (delegates
  *                                           to updateTicketStatus service)
  */
-export async function GET(_req: NextRequest, { params }: Params) {
+export async function GET(_req: NextRequest, props: Params) {
+  const params = await props.params;
   const guard = await requireRole("ADMIN");
   if (!guard.ok) return guard.response;
 
@@ -53,7 +54,8 @@ type PatchBody = {
   action?: string;
 };
 
-export async function PATCH(req: NextRequest, { params }: Params) {
+export async function PATCH(req: NextRequest, props: Params) {
+  const params = await props.params;
   const guard = await requireRole("ADMIN");
   if (!guard.ok) return guard.response;
   const { session } = guard;

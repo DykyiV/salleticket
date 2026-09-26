@@ -7,7 +7,7 @@ import { FULL_ROUTE, type Segment } from "@/lib/trips/segments";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-type Params = { params: { id: string } };
+type Params = { params: Promise<{ id: string }> };
 
 function parseSegment(req: NextRequest): Segment {
   const from = Number(req.nextUrl.searchParams.get("fromIndex"));
@@ -18,7 +18,8 @@ function parseSegment(req: NextRequest): Segment {
   return FULL_ROUTE;
 }
 
-export async function GET(req: NextRequest, { params }: Params) {
+export async function GET(req: NextRequest, props: Params) {
+  const params = await props.params;
   const trip = await prisma.trip.findUnique({
     where: { id: params.id },
     select: { id: true },

@@ -30,6 +30,9 @@ export default function RolePermissionsMatrix({
   permissions: Permission[];
   grants: Grant[];
 }) {
+  // ADMIN / SUPER_ADMIN always hold every permission, so they are never
+  // editable here even when the caller passes every role.
+  const shownRoles = EDITABLE_ROLES.filter((r) => roles.includes(r));
   const [map, setMap] = useState(() => {
     const m = new Map<string, boolean>();
     for (const g of grants) {
@@ -68,7 +71,7 @@ export default function RolePermissionsMatrix({
         <thead className="bg-slate-50 text-left uppercase tracking-wide text-slate-500">
           <tr>
             <th className="px-3 py-2">Дозвіл</th>
-            {EDITABLE_ROLES.map((role) => (
+            {shownRoles.map((role) => (
               <th key={role} className="px-2 py-2 text-center">
                 {ROLE_LABEL[role]}
               </th>
@@ -85,7 +88,7 @@ export default function RolePermissionsMatrix({
                   {permission}
                 </span>
               </td>
-              {EDITABLE_ROLES.map((role) => (
+              {shownRoles.map((role) => (
                 <td key={role} className="px-2 py-1.5 text-center">
                   <input
                     type="checkbox"

@@ -8,9 +8,10 @@ import { notifyScheduleChanged } from "@/lib/notify";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-type Params = { params: { id: string } };
+type Params = { params: Promise<{ id: string }> };
 
-export async function PATCH(req: NextRequest, { params }: Params) {
+export async function PATCH(req: NextRequest, props: Params) {
+  const params = await props.params;
   const guard = await requireRole("ADMIN");
   if (!guard.ok) return guard.response;
   const user = await getCurrentUser();

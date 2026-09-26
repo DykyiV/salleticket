@@ -20,16 +20,6 @@ export function segmentsOverlap(a: Segment, b: Segment): boolean {
   return a.fromIndex < b.toIndex && b.fromIndex < a.toIndex;
 }
 
-type StopRow = {
-  sortOrder: number;
-  city: string;
-  outboundDay: number;
-  outboundTime: string;
-  returnDay: number;
-  returnTime: string;
-  isVisible: boolean;
-  saleEnabled: boolean;
-};
 
 async function stopsForTrip(db: Db, tripId: string) {
   const trip = await db.trip.findUnique({

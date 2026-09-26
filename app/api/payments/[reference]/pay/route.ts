@@ -10,14 +10,15 @@ import { recordTicketHistory, requestMeta } from "@/lib/tickets/history";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-type Params = { params: { reference: string } };
+type Params = { params: Promise<{ reference: string }> };
 
 /**
  * Mock payment-system confirmation. Works for single tickets and for a
  * multi-passenger group (reference = groupRef): every pending payment in the
  * group is marked SENT and settles after the configured window.
  */
-export async function POST(req: NextRequest, { params }: Params) {
+export async function POST(req: NextRequest, props: Params) {
+  const params = await props.params;
   const guard = await requireAuth();
   if (!guard.ok) return guard.response;
 

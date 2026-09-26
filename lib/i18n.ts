@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useSyncExternalStore } from "react";
 
 export type Lang = "uk" | "en";
 
@@ -34,23 +34,27 @@ export function t(lang: Lang, key: keyof (typeof DICT)["uk"]): string {
   return DICT[lang][key];
 }
 
-export function useLang(): [Lang, (lang: Lang) => void] {
-  const [lang, setLangState] = useState<Lang>("uk");
-  useEffect(() => {
-    setLangState(getLang());
-  }, []);
-  const setLang = (next: Lang) => {
-    window.localStorage.setItem(KEY, next);
-    setLangState(next);
-    window.dispatchEvent(new Event("asol-lang"));
+/** Subscribe to language changes from this tab (custom event) and other tabs (storage). */
+function subscribeLang(onChange: () => void) {
+  window.addEventListener("asol-lang", onChange);
+  window.addEventListener("storage", onChange);
+  return () => {
+    window.removeEventListener("asol-lang", onChange);
+    window.removeEventListener("storage", onChange);
   };
-  return [lang, setLang];
 }
 
-export function useLangListener(setLang: (lang: Lang) => void) {
-  useEffect(() => {
-    const handler = () => setLang(getLang());
-    window.addEventListener("asol-lang", handler);
-    return () => window.removeEventListener("asol-lang", handler);
-  }, [setLang]);
+/**
+ * Current UI language, backed by localStorage. Every component using this
+ * hook re-renders when any of them switches language, so no extra listener
+ * is needed (the previous useLangListener re-dispatched the same event from
+ * inside its own handler, which recursed forever on a language switch).
+ */
+export function useLang(): [Lang, (lang: Lang) => void] {
+  const lang = useSyncExternalStore(subscribeLang, getLang, (): Lang => "uk");
+  const setLang = useCallback((next: Lang) => {
+    window.localStorage.setItem(KEY, next);
+    window.dispatchEvent(new Event("asol-lang"));
+  }, []);
+  return [lang, setLang];
 }

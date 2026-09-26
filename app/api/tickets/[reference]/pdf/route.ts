@@ -13,10 +13,11 @@ import { TICKET_STATUS_LABEL, TRIP_KIND_LABEL, AGE_LABEL } from "@/lib/tickets/l
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-type Params = { params: { reference: string } };
+type Params = { params: Promise<{ reference: string }> };
 
 /** Ticket PDF: booking number, QR code, route, passenger, price. */
-export async function GET(req: NextRequest, { params }: Params) {
+export async function GET(req: NextRequest, props: Params) {
+  const params = await props.params;
   const guard = await requireAuth();
   if (!guard.ok) return guard.response;
 
