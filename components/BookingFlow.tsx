@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { motion, AnimatePresence } from "motion/react";
+import { motion, AnimatePresence, MotionConfig } from "motion/react";
 import BookingForm from "@/components/BookingForm";
 import SeatMap from "@/components/SeatMap";
 import { formatDuration } from "@/lib/mockTrips";
@@ -63,7 +63,10 @@ export default function BookingFlow({
   const serviceFee = tripSummary.total - tripSummary.price;
 
   return (
-    <>
+    // reducedMotion="user": for visitors with prefers-reduced-motion, Motion
+    // skips transform animations (the step slide, seat scale, row focus) and
+    // keeps only gentle opacity fades.
+    <MotionConfig reducedMotion="user">
       <section className="border-b border-slate-200 bg-white">
         <div className="mx-auto flex max-w-6xl items-center gap-3 px-4 py-6 sm:px-6 lg:px-8">
           {step === "seat" ? (
@@ -113,16 +116,50 @@ export default function BookingFlow({
                   selectedSeatNumber={selectedSeatNumber}
                   onSelect={setSelectedSeatNumber}
                 />
-                <div className="mt-4 flex justify-end">
-                  <button
-                    type="button"
-                    disabled={!selectedSeat}
-                    onClick={() => setStep("passenger")}
-                    className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-brand-600 px-6 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
-                  >
-                    Продовжити
-                    <ArrowRightIcon className="h-4 w-4" />
-                  </button>
+                {/* On phones the cabin is taller than the screen, so this bar
+                    sticks to the bottom: the chosen seat and the CTA stay in
+                    reach wherever the passenger has scrolled. Static on lg. */}
+                <div className="sticky bottom-0 z-30 -mx-4 mt-4 border-t border-slate-200 bg-white/95 px-4 py-3 backdrop-blur sm:mx-0 sm:rounded-2xl sm:border sm:shadow-sm lg:static lg:border-0 lg:bg-transparent lg:p-0 lg:shadow-none lg:backdrop-blur-none">
+                  <div className="flex items-center justify-between gap-3">
+                    <div
+                      className="min-w-0 text-sm text-slate-600 lg:hidden"
+                      aria-live="polite"
+                    >
+                      <AnimatePresence mode="wait" initial={false}>
+                        <motion.div
+                          key={selectedSeat?.number ?? "none"}
+                          initial={{ opacity: 0, y: 4 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, y: -4 }}
+                          transition={{ duration: 0.15 }}
+                          className="min-w-0 leading-tight"
+                        >
+                          {selectedSeat ? (
+                            <>
+                              <p className="font-semibold text-slate-900">
+                                Місце {selectedSeat.number}
+                              </p>
+                              <p className="mt-0.5 truncate text-xs text-slate-500">
+                                {seatLabels(selectedSeat).sideLabel} ·{" "}
+                                {seatLabels(selectedSeat).positionLabel}
+                              </p>
+                            </>
+                          ) : (
+                            <p>Оберіть вільне місце</p>
+                          )}
+                        </motion.div>
+                      </AnimatePresence>
+                    </div>
+                    <button
+                      type="button"
+                      disabled={!selectedSeat}
+                      onClick={() => setStep("passenger")}
+                      className="inline-flex h-12 shrink-0 items-center justify-center gap-2 rounded-xl bg-brand-600 px-6 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 lg:ml-auto"
+                    >
+                      Продовжити
+                      <ArrowRightIcon className="h-4 w-4" />
+                    </button>
+                  </div>
                 </div>
               </motion.div>
             ) : (
@@ -240,7 +277,7 @@ export default function BookingFlow({
           </aside>
         </div>
       </main>
-    </>
+    </MotionConfig>
   );
 }
 

@@ -55,7 +55,7 @@ export default function SeatMap({ layout, selectedSeatNumber, onSelect }: Props)
         initial={{ opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.45, ease: "easeOut" }}
-        className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200 sm:p-8"
+        className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200 sm:p-8"
       >
         <div className="flex flex-col gap-1">
           <h2 className="text-lg font-semibold text-slate-900">
@@ -87,9 +87,12 @@ export default function SeatMap({ layout, selectedSeatNumber, onSelect }: Props)
                   const focused = selectedSeat?.row === rowNumber;
 
                   return (
+                    // Layout via Tailwind, not the <style jsx> block: styled-jsx
+                    // only scopes classes on native elements, so a `.bus-row`
+                    // rule would never reach this motion.div.
                     <motion.div
                       key={rowNumber}
-                      className="bus-row"
+                      className="relative z-10 grid grid-cols-[1fr_auto_1fr] items-center gap-2"
                       animate={{ scale: focused ? 1.03 : 1 }}
                       transition={{ type: "spring", stiffness: 260, damping: 22 }}
                     >
@@ -129,7 +132,7 @@ export default function SeatMap({ layout, selectedSeatNumber, onSelect }: Props)
             </div>
           </div>
 
-          <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-4 lg:sticky lg:top-24 lg:self-start">
             <Legend />
             <SeatInfoPanel seat={selectedSeat} />
           </div>
@@ -141,51 +144,79 @@ export default function SeatMap({ layout, selectedSeatNumber, onSelect }: Props)
             padding: 4px 0 12px;
           }
           .bus-scene {
+            max-width: 300px;
+            margin: 0 auto;
+            /* Single-plane tilt. Deliberately NOT transform-style: preserve-3d:
+               with it the browser depth-sorts .bus-rows above the seats and
+               swallows every click on desktop. */
             transform: rotateX(7deg);
-            transform-style: preserve-3d;
-            border-radius: 28px;
+            transform-origin: 50% 0%;
+            /* rounded nose at the front, squarer rear */
+            border-radius: 44px 44px 22px 22px;
             background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
             border: 1px solid #e2e8f0;
-            padding: 20px 14px 26px;
-            box-shadow: 0 30px 60px -30px rgba(15, 23, 42, 0.28);
+            padding: 18px 16px 22px;
+            box-shadow:
+              0 1px 0 #ffffff inset,
+              0 30px 60px -30px rgba(15, 23, 42, 0.3);
           }
           .bus-rows {
+            position: relative;
             display: flex;
             flex-direction: column;
             gap: 10px;
             margin-top: 14px;
+            padding: 0 12px;
+            /* one continuous aisle floor down the middle of the cabin */
+            background: linear-gradient(
+              to right,
+              transparent calc(50% - 13px),
+              #f1f5f9 calc(50% - 13px),
+              #f1f5f9 calc(50% + 13px),
+              transparent calc(50% + 13px)
+            );
           }
-          .bus-row {
-            display: grid;
-            grid-template-columns: 1fr auto 1fr;
-            align-items: center;
-            gap: 8px;
+          /* window strips along both sides — makes "біля вікна" obvious */
+          .bus-rows::before,
+          .bus-rows::after {
+            content: "";
+            position: absolute;
+            top: 2px;
+            bottom: 2px;
+            width: 4px;
+            border-radius: 2px;
+            pointer-events: none;
+            background: repeating-linear-gradient(
+              to bottom,
+              #bfdbfe 0,
+              #bfdbfe 38px,
+              transparent 38px,
+              transparent 48px
+            );
+          }
+          .bus-rows::before {
+            left: 0;
+          }
+          .bus-rows::after {
+            right: 0;
           }
           .seat-group {
             display: flex;
             justify-content: center;
             gap: 8px;
-            min-width: 100px;
+            min-width: 96px;
           }
           .aisle {
             width: 22px;
-            height: 2px;
-            justify-self: center;
-            background: repeating-linear-gradient(
-              to right,
-              #cbd5e1 0,
-              #cbd5e1 4px,
-              transparent 4px,
-              transparent 9px
-            );
           }
           @media (max-width: 480px) {
             .bus-scene {
               transform: none;
               padding: 16px 8px 20px;
+              border-radius: 36px 36px 18px 18px;
             }
-            .seat-group {
-              min-width: 88px;
+            .bus-rows {
+              padding: 0 10px;
             }
           }
           @media (prefers-reduced-motion: reduce) {
@@ -302,28 +333,26 @@ function SeatInfoPanel({ seat }: { seat: Seat | null }) {
 
 function BusFront() {
   return (
-    <div
-      className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 sm:px-4"
-      aria-hidden="true"
-    >
-      <div className="flex items-center gap-2">
-        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-700 text-white">
-          <SteeringWheelIcon className="h-4 w-4" />
-        </span>
-        <span className="hidden text-[11px] font-medium uppercase tracking-wide text-slate-400 sm:inline">
-          Водій
-        </span>
-      </div>
-      <span className="text-[11px] font-medium uppercase tracking-wide text-slate-400">
-        Лобове скло
-      </span>
-      <div className="flex items-center gap-2">
-        <span className="hidden text-[11px] font-medium uppercase tracking-wide text-slate-400 sm:inline">
-          Двері
-        </span>
-        <span className="flex h-8 w-6 shrink-0 items-center justify-center rounded-md border-2 border-dashed border-slate-300 text-slate-400">
-          <DoorIcon className="h-4 w-4" />
-        </span>
+    <div aria-hidden="true">
+      {/* windshield drawn as a shape rather than a label */}
+      <div className="mx-6 h-2 rounded-full bg-gradient-to-r from-sky-100 via-sky-200 to-sky-100" />
+      <div className="mt-2.5 flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+        <div className="flex items-center gap-2">
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-700 text-white">
+            <SteeringWheelIcon className="h-4 w-4" />
+          </span>
+          <span className="text-[11px] font-medium uppercase tracking-wide text-slate-400">
+            Водій
+          </span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-[11px] font-medium uppercase tracking-wide text-slate-400">
+            Двері
+          </span>
+          <span className="flex h-8 w-6 shrink-0 items-center justify-center rounded-md border-2 border-dashed border-slate-300 text-slate-400">
+            <DoorIcon className="h-4 w-4" />
+          </span>
+        </div>
       </div>
     </div>
   );
