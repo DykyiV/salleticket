@@ -8,6 +8,9 @@ import PassengerEditor from "@/components/ticket/PassengerEditor";
 import TicketItineraryEditor from "@/components/ticket/TicketItineraryEditor";
 import TicketStatusControl from "@/components/ticket/TicketStatusControl";
 import RecalcPriceButton from "@/components/ticket/RecalcPriceButton";
+import TicketComments from "@/components/ticket/TicketComments";
+import SendSmsButton from "@/components/ticket/SendSmsButton";
+import { ticketAccess } from "@/lib/tickets/permissions";
 import { getCurrentUser } from "@/lib/auth/session";
 import { hasRoleAtLeast } from "@/lib/auth/constants";
 import { prisma } from "@/lib/db";
@@ -42,6 +45,7 @@ export default async function CabinetTicketEditPage(
       ticket: {
         include: {
           history: { orderBy: { timestamp: "desc" } },
+          comments: { orderBy: { createdAt: "asc" } },
           legs: {
             orderBy: { order: "asc" },
             include: {
@@ -69,6 +73,10 @@ export default async function CabinetTicketEditPage(
 
   const staff = hasRoleAtLeast(user.role, "AGENT");
   if (booking.ticket.userId !== user.id && !staff) notFound();
+  const access = await ticketAccess(
+    { sub: user.id, role: user.role },
+    booking.ticket.userId
+  );
 
   await reconcileTicketPayment(booking.ticket.id);
   const freshTicket = await prisma.ticket.findUnique({
@@ -293,10 +301,20 @@ export default async function CabinetTicketEditPage(
 
       {staff ? (
         <section className="rounded-2xl bg-white p-5 ring-1 ring-slate-200">
-          <h2 className="text-sm font-semibold text-slate-900">Статус</h2>
-          <p className="mt-1 text-xs text-slate-500">
-            Зміна записується в історію квитка.
-          </p>
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-semibold text-slate-900">Статус</h2>
+              <p className="mt-1 text-xs text-slate-500">
+                Зміна записується в історію квитка.
+              </p>
+            </div>
+            {hasRoleAtLeast(user.role, "ADMIN") ? (
+              <SendSmsButton
+                ticketId={booking.ticket.id}
+                passengerName={`${booking.firstName} ${booking.lastName}`.trim()}
+              />
+            ) : null}
+          </div>
           <div className="mt-4">
             <TicketStatusControl
               ticketId={booking.ticket.id}
@@ -358,6 +376,20 @@ export default async function CabinetTicketEditPage(
             ) : null}
           </div>
         ) : null}
+      </section>
+
+      <section className="rounded-2xl bg-white p-5 ring-1 ring-slate-200">
+        <h2 className="mb-3 text-sm font-semibold text-slate-900">Коментарі</h2>
+        <TicketComments
+          ticketId={booking.ticket.id}
+          comments={booking.ticket.comments.map((c) => ({
+            id: c.id,
+            text: c.text,
+            authorEmail: c.authorEmail,
+            createdAt: c.createdAt.toISOString(),
+          }))}
+          canComment={access.canEdit}
+        />
       </section>
 
       {timeline.length > 0 ? (

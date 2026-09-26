@@ -14,6 +14,10 @@ const DICT = {
     search: "Знайти виїзд",
     ticketType: "Тип квитка",
     popular: "Популярні:",
+    transport: "Вид транспорту",
+    transportBus: "Автобус",
+    transportFlight: "Літак",
+    transportTrain: "Потяг",
   },
   en: {
     from: "From",
@@ -22,6 +26,10 @@ const DICT = {
     search: "Search trips",
     ticketType: "Ticket type",
     popular: "Popular:",
+    transport: "Transport type",
+    transportBus: "Bus",
+    transportFlight: "Flight",
+    transportTrain: "Train",
   },
 } as const;
 

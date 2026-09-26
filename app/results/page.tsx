@@ -13,6 +13,13 @@ type SearchParams = {
   date?: string;
   tripKind?: string;
   returnDate?: string;
+  transport?: string;
+};
+
+const TRANSPORT_LABELS: Record<string, string> = {
+  BUS: "Автобус",
+  FLIGHT: "Літак",
+  TRAIN: "Потяг",
 };
 
 type SearchApiResponse = {
@@ -63,8 +70,12 @@ export default async function ResultsPage(
   const returnDate = searchParams.returnDate;
   const siteSettings = await getSiteSettings();
 
+  const transport = searchParams.transport?.toUpperCase();
+  const transportLabel = transport ? TRANSPORT_LABELS[transport] ?? null : null;
+
   const params = new URLSearchParams({ from, to });
   if (date) params.set("date", date);
+  if (transportLabel) params.set("transport", transport as string);
 
   let trips: Trip[] = [];
   let failedCarriers: { carrierId: string; carrierName: string; error: string }[] = [];
@@ -144,6 +155,7 @@ export default async function ResultsPage(
                 <span>{to}</span>
               </h1>
               <p className="mt-0.5 text-sm text-slate-500">
+                {transportLabel ? `${transportLabel} · ` : ""}
                 {formatDate(date)} · {TRIP_KIND_LABEL[tripKind]}
                 {tripKind === "ROUND_TRIP" && returnDate
                   ? ` · назад ${formatDate(returnDate)}`

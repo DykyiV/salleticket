@@ -15,6 +15,8 @@ export const PERMISSIONS = [
   "price.edit",
   "route.read",
   "route.edit",
+  "finance.read",
+  "finance.edit",
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number];
@@ -32,6 +34,8 @@ export const PERMISSION_LABEL: Record<Permission, string> = {
   "price.edit": "Ціни: редагування",
   "route.read": "Маршрути: перегляд",
   "route.edit": "Маршрути: редагування",
+  "finance.read": "Фінанси: звіти перевізників і розрахунки (перегляд)",
+  "finance.edit": "Фінанси: комісії, формування і оплата розрахунків",
 };
 
 export const DEFAULT_ROLE_PERMISSIONS: Record<Role, Permission[]> = {
@@ -46,7 +50,14 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "passenger.read",
     "passenger.edit",
   ],
-  ACCOUNTANT: ["booking.read", "payment.read", "payment.refund", "price.read"],
+  ACCOUNTANT: [
+    "booking.read",
+    "payment.read",
+    "payment.refund",
+    "price.read",
+    "finance.read",
+    "finance.edit",
+  ],
   AGENT: [
     "booking.read",
     "booking.create",
@@ -70,6 +81,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "price.edit",
     "route.read",
     "route.edit",
+    "finance.read",
   ],
   ADMIN: [...PERMISSIONS],
   SUPER_ADMIN: [...PERMISSIONS],
@@ -105,8 +117,12 @@ export async function rolePermissions(
 }
 
 /**
- * Admins always pass. Everyone else follows the editable grants; when a role
- * has no rows yet (fresh DB), the built-in defaults apply.
+ * Admins always pass. Everyone else follows the editable grants: an explicit
+ * row (allowed true OR false — the matrix never deletes rows, it flips
+ * `allowed`) always wins. Only when there is no row for this role+permission
+ * do the built-in defaults apply — on a fresh DB, and for permissions added
+ * after the DB was seeded (e.g. finance.*), so existing installs get sane
+ * defaults without a reseed while every admin decision is preserved.
  */
 export async function can(
   user: { role: Role },
@@ -114,7 +130,10 @@ export async function can(
   db: Db = prisma
 ): Promise<boolean> {
   if (isAdminRole(user.role)) return true;
-  const granted = await rolePermissions(user.role, db);
-  if (granted.size > 0) return granted.has(permission);
+  const row = await db.rolePermission.findUnique({
+    where: { role_permission: { role: user.role, permission } },
+    select: { allowed: true },
+  });
+  if (row) return row.allowed;
   return DEFAULT_ROLE_PERMISSIONS[user.role]?.includes(permission) ?? false;
 }

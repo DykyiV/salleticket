@@ -74,3 +74,26 @@ describe("booking timeline", () => {
     expect(timelineLines(null)).toEqual([]);
   });
 });
+
+describe("booking timeline — creation snapshots read as text, not JSON", () => {
+  it("formats passenger, trip and commission snapshots", () => {
+    const lines = timelineLines(
+      JSON.stringify({
+        passenger: { from: null, to: { firstName: "Олена", lastName: "Коваленко", phone: "+380671234567", email: null } },
+        trip: { from: null, to: { from: "Kyiv", to: "Lviv", departure: "2026-10-01T06:30:00.000Z", carrier: "Grandes Tour" } },
+        commission: { from: null, to: { percent: 20, agencyAmount: 3.33, carrierAmount: 13.32 } },
+      })
+    );
+    expect(lines).toEqual([
+      "Пасажир: Олена Коваленко · +380671234567",
+      "Рейс: Kyiv → Lviv · 2026-10-01 06:30 · Grandes Tour",
+      "Комісія: 20% · агенції €3.33 · перевізнику €13.32",
+    ]);
+  });
+
+  it("falls back to JSON for unknown object fields", () => {
+    expect(timelineLines(JSON.stringify({ extra: { from: null, to: { a: 1 } } }))).toEqual([
+      'extra: {"a":1}',
+    ]);
+  });
+});

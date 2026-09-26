@@ -50,6 +50,7 @@ async function toSearchTrip(option: SegmentTripOption): Promise<Trip> {
     carrier: "Asol BUS",
     carrierShort: "AB",
     busType: "Setra S 516 HD",
+    transportType: "BUS",
     from: option.fromCity,
     to: option.toCity,
     departure: hhmm(option.departureTime),
@@ -83,6 +84,7 @@ async function toSearchTrip(option: SegmentTripOption): Promise<Trip> {
 export class AsolCarrierAdapter implements CarrierAdapter {
   readonly id = "asol";
   readonly name = "Asol BUS";
+  readonly transportType = "BUS" as const;
 
   async search(query: SearchQuery): Promise<Trip[]> {
     // Segment search: any stop → any later stop of the same run.

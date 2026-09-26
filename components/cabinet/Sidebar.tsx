@@ -14,6 +14,8 @@ export type CabinetUser = {
   role: Role;
   displayName?: string | null;
   avatarUrl?: string | null;
+  /** Nav-relevant permissions granted to this user (see NAV_PERMISSIONS). */
+  permissions?: string[];
 };
 
 type Props = {
@@ -24,7 +26,7 @@ type Props = {
 
 export default function Sidebar({ user, mobileOpen, onClose }: Props) {
   const pathname = usePathname() ?? "/cabinet";
-  const items = navForRole(user.role);
+  const items = navForRole(user.role, user.permissions);
   const name = user.displayName?.trim() || user.email.split("@")[0];
   const initial = name.slice(0, 1).toUpperCase();
 

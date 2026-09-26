@@ -5,6 +5,7 @@ import { findCarrier } from "@/lib/carriers/registry";
 import { requireAuth } from "@/lib/auth/guard";
 import { computePrice, type AgeCategoryId } from "@/lib/pricing";
 import { PromoError, validatePromo } from "@/lib/promo";
+import { resolveCommission } from "@/lib/commission";
 import { recordTicketHistory, requestMeta } from "@/lib/tickets/history";
 import { parseTripKind } from "@/lib/tickets/kinds";
 import { uniqueReference } from "@/lib/tickets/reference";
@@ -262,6 +263,7 @@ export async function POST(req: NextRequest) {
       carrierId: carrierAdapterId,
       carrier: storedTrip.carrier.name,
       carrierShort: storedTrip.carrier.name.slice(0, 2).toUpperCase(),
+      transportType: storedTrip.transportType,
       busType: storedTrip.departure?.defaultBus ?? "Coach",
       from: storedTrip.fromCity,
       to: storedTrip.toCity,
@@ -459,6 +461,7 @@ export async function POST(req: NextRequest) {
               departureTime: departureAt,
               arrivalTime: arrivalAt,
               price: snapshot.price,
+              transportType: snapshot.transportType ?? adapter.transportType,
               carrierId: carrier.id,
             },
           });
@@ -508,6 +511,20 @@ export async function POST(req: NextRequest) {
           );
         }
 
+        // Agency commission snapshot (route rule first, carrier default
+        // otherwise), frozen on the ticket so monthly settlements never move
+        // when rules change later. A sold segment is matched by its own
+        // cities. Own-fleet sales have no third party, hence no split.
+        const commission = carrier.isOwnFleet
+          ? null
+          : await resolveCommission(
+              tx,
+              carrier.id,
+              segmentCities?.fromCity ?? trip.fromCity,
+              segmentCities?.toCity ?? trip.toCity,
+              finalPrice
+            );
+
         const ticket = await tx.ticket.create({
           data: {
             userId: session.sub,
@@ -515,6 +532,9 @@ export async function POST(req: NextRequest) {
             status: ticketStatus,
             basePrice: pricing.basePrice,
             finalPrice,
+            commissionPercent: commission?.percent ?? null,
+            commissionAmount: commission?.commissionAmount ?? null,
+            carrierAmount: commission?.carrierAmount ?? null,
             seatNumber: outboundSeat,
             fromStopIndex: segmentCities ? segment.fromIndex : null,
             toStopIndex: segmentCities ? segment.toIndex : null,
@@ -665,6 +685,18 @@ export async function POST(req: NextRequest) {
             },
             promoCode: { from: null, to: booking.promoCode },
             paymentMethod: { from: null, to: paymentMethod },
+            ...(commission
+              ? {
+                  commission: {
+                    from: null,
+                    to: {
+                      percent: commission.percent,
+                      agencyAmount: commission.commissionAmount,
+                      carrierAmount: commission.carrierAmount,
+                    },
+                  },
+                }
+              : {}),
             trip: {
               from: null,
               to: {

@@ -1,12 +1,17 @@
-import type { Trip } from "@/lib/mockTrips";
+import type { Trip, TransportType } from "@/lib/mockTrips";
 
-export type { Trip };
+export type { Trip, TransportType };
 
 export type SearchQuery = {
   from: string;
   to: string;
   date?: string;
   passengers?: number;
+  /**
+   * When set, only carriers serving this transport type are queried.
+   * Omit to fan out across every registered carrier (all transport types).
+   */
+  transport?: TransportType;
 };
 
 export type SearchResult = {
@@ -63,16 +68,18 @@ export type BookingRecord = {
  * Adapter every carrier integration must implement.
  *
  * Current implementations:
- *   - MockCarrierAdapter (lib/carriers/mock)
+ *   - MockCarrierAdapter  (lib/carriers/mock)        — buses
+ *   - MockFlightAdapter   (lib/carriers/mock-flights) — flights
+ *   - MockTrainAdapter    (lib/carriers/mock-trains)  — trains
  *
- * Planned implementations (see docs/future-integrations):
- *   - FlixBusAdapter
- *   - GunselAdapter
- *   - EuroLinesAdapter
+ * Real integrations (airline GDS, rail APIs, bus networks) plug in here:
+ * implement this interface, set `transportType`, register in registry.ts.
  */
 export interface CarrierAdapter {
   readonly id: string;
   readonly name: string;
+  /** Which transport type this carrier sells. */
+  readonly transportType: TransportType;
 
   search(query: SearchQuery): Promise<Trip[]>;
 

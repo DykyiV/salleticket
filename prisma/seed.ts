@@ -13,6 +13,7 @@ import { DEFAULT_SITE_SETTINGS } from "../lib/settings";
 import { seedRolePermissions } from "../lib/auth/permissions";
 import { migrateToOperationalModel } from "../lib/ops/migrate";
 import { recordTicketHistory } from "../lib/tickets/history";
+import { resolveCommission } from "../lib/commission";
 
 const prisma = new PrismaClient();
 
@@ -26,6 +27,36 @@ type PromoSeed = {
 const PROMOS: PromoSeed[] = [
   { code: "DISCOUNT10", percent: 0.1, label: "10% off" },
   { code: "VIP20", percent: 0.2, label: "VIP · 20% off" },
+];
+
+/**
+ * Third-party carriers sold through the platform (mock bus / flight / train
+ * adapters). Their sales are split into agency commission vs carrier share and
+ * settled monthly. The platform's own fleet ("Asol BUS") is seeded further
+ * down with isOwnFleet = true and is excluded from settlements.
+ */
+type CarrierSeed = {
+  name: string;
+  rating: number;
+  /** Default agency commission, percent 0..100. */
+  commissionPercent: number;
+  /** Route-specific overrides. */
+  rules?: { fromCity: string; toCity: string; percent: number }[];
+};
+
+const CARRIERS: CarrierSeed[] = [
+  {
+    name: "Grandes Tour",
+    rating: 4.7,
+    commissionPercent: 12,
+    rules: [{ fromCity: "Kyiv", toCity: "Lviv", percent: 20 }],
+  },
+  { name: "Asol Express", rating: 4.5, commissionPercent: 15 },
+  { name: "EuroLines Plus", rating: 4.2, commissionPercent: 10 },
+  { name: "SkyLine Airlines", rating: 4.6, commissionPercent: 8 },
+  { name: "AirUkraine", rating: 4.8, commissionPercent: 9 },
+  { name: "UkrRail Express", rating: 4.5, commissionPercent: 10 },
+  { name: "EuroRail", rating: 4.6, commissionPercent: 11 },
 ];
 
 async function upsertUser(email: string, password: string, role: Role, flags = {}) {
@@ -56,6 +87,29 @@ async function main() {
     console.log(`  upserted promo ${p.code}`);
   }
 
+  for (const c of CARRIERS) {
+    const carrier = await prisma.carrier.upsert({
+      where: { name: c.name },
+      create: { name: c.name, rating: c.rating, commissionPercent: c.commissionPercent },
+      update: { commissionPercent: c.commissionPercent },
+    });
+    console.log(`  upserted carrier ${c.name} (${c.commissionPercent}% default)`);
+    for (const rule of c.rules ?? []) {
+      await prisma.commissionRule.upsert({
+        where: {
+          carrierId_fromCity_toCity: {
+            carrierId: carrier.id,
+            fromCity: rule.fromCity,
+            toCity: rule.toCity,
+          },
+        },
+        create: { carrierId: carrier.id, ...rule },
+        update: { percent: rule.percent },
+      });
+      console.log(`    rule ${rule.fromCity} → ${rule.toCity}: ${rule.percent}%`);
+    }
+  }
+
   await upsertUser("admin@asolbus.local", "Admin12345", "ADMIN", {
     displayName: "Адміністратор",
   });
@@ -68,7 +122,12 @@ async function main() {
   await upsertUser("manager@asolbus.local", "Manager12345", "MANAGER", {
     displayName: "Менеджер Іван",
   });
-  console.log("  upserted admin@asolbus.local / agent@asolbus.local / manager@asolbus.local");
+  await upsertUser("accountant@asolbus.local", "Accountant12345", "ACCOUNTANT", {
+    displayName: "Бухгалтер",
+  });
+  console.log(
+    "  upserted admin@ / agent@ / manager@ / accountant@asolbus.local"
+  );
 
   // Migrate legacy USER accounts to CUSTOMER and seed role permissions.
   await prisma.$executeRawUnsafe(
@@ -541,6 +600,7 @@ async function main() {
   void lvivTransfer;
 
   await seedDemoTickets();
+  await seedPartnerSales();
 
   void poland;
 }
@@ -697,8 +757,8 @@ async function findOrCreateTripForRoute(routeName: string) {
   }
   const carrier = await prisma.carrier.upsert({
     where: { name: "Asol BUS" },
-    create: { name: "Asol BUS", rating: 4.8 },
-    update: {},
+    create: { name: "Asol BUS", rating: 4.8, isOwnFleet: true },
+    update: { isOwnFleet: true },
   });
   return prisma.trip.create({
     data: {
@@ -921,6 +981,84 @@ async function seedDemoTickets() {
       continue;
     }
     console.log(`  created demo ticket ${demo.reference} on ${demo.routeName}`);
+  }
+}
+
+/**
+ * Demo sales on third-party carriers, so Finance (settlements, commissions,
+ * carrier report) has numbers on a fresh install. Dated in the previous
+ * month — the period the settlements page opens on — plus one sale this
+ * month for the carrier report. Idempotent by reference.
+ */
+async function seedPartnerSales() {
+  const [admin, agent] = await Promise.all([
+    prisma.user.findUniqueOrThrow({ where: { email: "admin@asolbus.local" } }),
+    prisma.user.findUniqueOrThrow({ where: { email: "agent@asolbus.local" } }),
+  ]);
+  const now = new Date();
+  const prevMonth = (day: number) =>
+    new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, day, 10));
+  const thisMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1, 10));
+
+  const sales = [
+    { reference: "AB-20001", carrier: "Grandes Tour", from: "Kyiv", to: "Lviv", price: 40, status: TicketStatus.PAID_ONLINE, seller: agent, createdAt: prevMonth(5), firstName: "Оксана", lastName: "Литвин", phone: "+380671230001" },
+    { reference: "AB-20002", carrier: "Grandes Tour", from: "Kyiv", to: "Warsaw", price: 55, status: TicketStatus.PAID_CASH, seller: agent, createdAt: prevMonth(12), firstName: "Андрій", lastName: "Коваль", phone: "+380671230002" },
+    { reference: "AB-20003", carrier: "EuroLines Plus", from: "Lviv", to: "Prague", price: 62, status: TicketStatus.PAID_ONLINE, seller: admin, createdAt: prevMonth(18), firstName: "Ірина", lastName: "Савчук", phone: "+380671230003" },
+    { reference: "AB-20004", carrier: "EuroLines Plus", from: "Lviv", to: "Prague", price: 62, status: TicketStatus.RESERVED, seller: agent, createdAt: prevMonth(20), firstName: "Богдан", lastName: "Гнатюк", phone: "+380671230004" },
+    { reference: "AB-20005", carrier: "Grandes Tour", from: "Kyiv", to: "Lviv", price: 40, status: TicketStatus.PAID_ONLINE, seller: agent, createdAt: thisMonth, firstName: "Софія", lastName: "Кравець", phone: "+380671230005" },
+  ];
+
+  for (const sale of sales) {
+    if (await prisma.booking.findUnique({ where: { reference: sale.reference } })) continue;
+    const carrier = await prisma.carrier.findUniqueOrThrow({ where: { name: sale.carrier } });
+    const departure = new Date(sale.createdAt.getTime() + 7 * 86_400_000);
+    const trip = await prisma.trip.create({
+      data: {
+        fromCity: sale.from,
+        toCity: sale.to,
+        departureTime: departure,
+        arrivalTime: new Date(departure.getTime() + 9 * 3_600_000),
+        price: sale.price,
+        carrierId: carrier.id,
+      },
+    });
+    const split = await resolveCommission(prisma, carrier.id, sale.from, sale.to, sale.price);
+    const ticket = await prisma.ticket.create({
+      data: {
+        userId: sale.seller.id,
+        tripId: trip.id,
+        status: sale.status,
+        basePrice: sale.price,
+        finalPrice: sale.price,
+        commissionPercent: split.percent,
+        commissionAmount: split.commissionAmount,
+        carrierAmount: split.carrierAmount,
+        createdAt: sale.createdAt,
+        booking: {
+          create: {
+            reference: sale.reference,
+            firstName: sale.firstName,
+            lastName: sale.lastName,
+            ageCategory: AgeCategory.ADULT,
+            phone: sale.phone,
+            finalPrice: sale.price,
+          },
+        },
+      },
+    });
+    await recordTicketHistory(prisma, {
+      ticketId: ticket.id,
+      action: "CREATED",
+      oldStatus: null,
+      newStatus: sale.status,
+      source: "SYSTEM",
+      changedBy: sale.seller.id,
+      changes: {
+        reference: { from: null, to: sale.reference },
+        commission: { from: null, to: `${split.percent}%` },
+      },
+    });
+    console.log(`  created partner sale ${sale.reference} (${sale.carrier}, ${split.percent}%)`);
   }
 }
 

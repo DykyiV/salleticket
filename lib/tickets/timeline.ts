@@ -46,7 +46,39 @@ const FIELD_LABEL: Record<string, string> = {
   email: "Email",
   ageCategory: "Вікова категорія",
   tariff: "Тариф",
+  commission: "Комісія",
 };
+
+type Obj = Record<string, unknown>;
+const str = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : null);
+const num = (v: unknown) => (typeof v === "number" ? v : null);
+
+/** Readable one-liners for the structured snapshots written at booking time. */
+function formatObject(field: string, o: Obj): string | null {
+  if (field === "passenger") {
+    const name = [str(o.firstName), str(o.lastName)].filter(Boolean).join(" ");
+    return [name || null, str(o.phone), str(o.email)].filter(Boolean).join(" · ") || null;
+  }
+  if (field === "trip") {
+    const route = str(o.from) && str(o.to) ? `${o.from} → ${o.to}` : null;
+    const when = str(o.departure);
+    const date = when && !Number.isNaN(Date.parse(when))
+      ? new Date(when).toISOString().slice(0, 16).replace("T", " ")
+      : when;
+    return [route, date, str(o.carrier)].filter(Boolean).join(" · ") || null;
+  }
+  if (field === "commission") {
+    const pct = num(o.percent);
+    const agency = num(o.agencyAmount) ?? num(o.commissionAmount);
+    const carrier = num(o.carrierAmount);
+    if (pct == null) return null;
+    const parts = [`${pct}%`];
+    if (agency != null) parts.push(`агенції ${eur(agency)}`);
+    if (carrier != null) parts.push(`перевізнику ${eur(carrier)}`);
+    return parts.join(" · ");
+  }
+  return null;
+}
 
 const PRICE_FIELDS = new Set(["finalPrice", "basePrice", "amount"]);
 
@@ -62,7 +94,9 @@ function formatValue(field: string, value: unknown): string {
   if (field === "paymentMethod") {
     return value === "ONLINE" ? "Онлайн" : "В автобусі";
   }
-  if (typeof value === "object") return JSON.stringify(value);
+  if (typeof value === "object") {
+    return formatObject(field, value as Obj) ?? JSON.stringify(value);
+  }
   return String(value);
 }
 

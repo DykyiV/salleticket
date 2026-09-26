@@ -66,6 +66,14 @@ export default function NavIcon({
           <path d="M16 16v-3" />
         </svg>
       );
+    case "finance":
+      return (
+        <svg className={cls} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <rect x="2" y="6" width="20" height="12" rx="2" />
+          <circle cx="12" cy="12" r="2.5" />
+          <path d="M6 10v4M18 10v4" />
+        </svg>
+      );
     case "api":
       return (
         <svg className={cls} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Prisma, TicketStatus } from "@prisma/client";
 import PageHeader from "@/components/cabinet/PageHeader";
+import TicketBulkActions from "@/components/ticket/TicketBulkActions";
 import { inputClass, btnGhost } from "@/components/admin/Field";
 import { getCurrentUser } from "@/lib/auth/session";
 import { hasRoleAtLeast } from "@/lib/auth/constants";
@@ -33,6 +34,7 @@ export default async function CabinetTicketsPage(
   const searchParams = await props.searchParams;
   const user = await getCurrentUser();
   const staff = user ? hasRoleAtLeast(user.role, "AGENT") : false;
+  const admin = user ? hasRoleAtLeast(user.role, "ADMIN") : false;
   await reconcileDuePayments();
   const q = (searchParams.q ?? "").trim();
   const statusFilter =
@@ -133,10 +135,17 @@ export default async function CabinetTicketsPage(
           </Link>
         </p>
       ) : (
+        <>
+        {staff ? <TicketBulkActions canSms={admin} /> : null}
         <div className="overflow-x-auto rounded-2xl bg-white ring-1 ring-slate-200">
           <table className="w-full min-w-[56rem] text-left text-sm">
             <thead className="border-b border-slate-100 bg-slate-50 text-xs font-medium uppercase tracking-wide text-slate-500">
               <tr>
+                {staff ? (
+                  <th className="w-10 px-4 py-2.5">
+                    <span className="sr-only">Вибір</span>
+                  </th>
+                ) : null}
                 <th className="whitespace-nowrap px-4 py-2.5">ПІБ</th>
                 <th className="whitespace-nowrap px-4 py-2.5">Звідки — куди</th>
                 <th className="whitespace-nowrap px-4 py-2.5">Місце</th>
@@ -159,6 +168,16 @@ export default async function CabinetTicketsPage(
                     key={booking.id}
                     className="border-t border-slate-100 hover:bg-slate-50"
                   >
+                    {staff ? (
+                      <td className="px-4 py-2.5">
+                        <input
+                          type="checkbox"
+                          data-bulk-ticket={booking.ticket.id}
+                          aria-label={`Вибрати квиток ${booking.reference}`}
+                          className="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+                        />
+                      </td>
+                    ) : null}
                     <td className="whitespace-nowrap px-4 py-2.5">
                       <Link
                         href={`/cabinet/tickets/${booking.reference}`}
@@ -212,6 +231,7 @@ export default async function CabinetTicketsPage(
             </tbody>
           </table>
         </div>
+        </>
       )}
     </div>
   );

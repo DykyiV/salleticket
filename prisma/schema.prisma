@@ -50,21 +50,33 @@ enum TripKind {
   OPEN_RETURN
 }
 
+enum TransportType {
+  BUS
+  FLIGHT
+  TRAIN
+}
+
+enum SettlementStatus {
+  GENERATED
+  SENT
+  PAID
+}
+
 model User {
-  id        String   @id @default(cuid())
-  email     String   @unique
-  password  String
-  displayName String?
-  avatarUrl   String?
-  role      Role     @default(CUSTOMER)
+  id                String   @id @default(cuid())
+  email             String   @unique
+  password          String
+  displayName       String?
+  avatarUrl         String?
+  role              Role     @default(CUSTOMER)
   /// Agent-only operational grants. Admins always have these capabilities.
-  canEditDepartures Boolean @default(false)
-  canHideStops      Boolean @default(false)
-  canHideSeats      Boolean @default(false)
+  canEditDepartures Boolean  @default(false)
+  canHideStops      Boolean  @default(false)
+  canHideSeats      Boolean  @default(false)
   /// JSON array of preferred notification channels: email, sms, viber, telegram, push.
-  notifyChannels String @default("[\"email\",\"push\"]")
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  notifyChannels    String   @default("[\"email\",\"push\"]")
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
   tickets Ticket[]
   promos  Promo[]
@@ -104,26 +116,36 @@ model Promo {
 }
 
 model Carrier {
-  id        String   @id @default(cuid())
-  name      String   @unique
-  rating    Float    @default(0)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id                String   @id @default(cuid())
+  name              String   @unique
+  rating            Float    @default(0)
+  /// Default agency commission, percent 0..100, applied to ticket sales when
+  /// no route-specific CommissionRule matches.
+  commissionPercent Float    @default(10)
+  /// The platform's own fleet (e.g. "Asol BUS" route-template departures).
+  /// Own-fleet sales carry no agency/carrier commission split and are never
+  /// part of carrier settlements — there is no third party to settle with.
+  isOwnFleet        Boolean  @default(false)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
-  trips Trip[]
+  trips           Trip[]
+  commissionRules CommissionRule[]
+  settlements     Settlement[]
 
   @@map("carriers")
 }
 
 model Trip {
-  id            String   @id @default(cuid())
+  id            String        @id @default(cuid())
   fromCity      String
   toCity        String
   departureTime DateTime
   arrivalTime   DateTime
   price         Float
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  transportType TransportType @default(BUS)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
 
   carrierId String
   carrier   Carrier @relation(fields: [carrierId], references: [id], onDelete: Restrict)
@@ -133,7 +155,7 @@ model Trip {
   leg   Leg?    @relation(fields: [legId], references: [id], onDelete: SetNull)
 
   tickets       Ticket[]
-  returnTickets Ticket[] @relation("ReturnTrip")
+  returnTickets Ticket[]    @relation("ReturnTrip")
   seatHolds     SeatHold[]
   ticketLegs    TicketLeg[]
 
@@ -147,14 +169,21 @@ model Trip {
 }
 
 model Ticket {
-  id         String       @id @default(cuid())
-  status     TicketStatus @default(RESERVED)
-  basePrice  Float
+  id                String       @id @default(cuid())
+  status            TicketStatus @default(RESERVED)
+  basePrice         Float
   /// The charged price after age + promo discounts. Stored under the existing
   /// `price` column so older rows keep working after the rename.
-  finalPrice Float        @map("price")
-  createdAt  DateTime     @default(now())
-  updatedAt  DateTime     @updatedAt
+  finalPrice        Float        @map("price")
+  /// Commission snapshot captured at booking time (never recomputed later, so
+  /// changing commission rules does not rewrite history):
+  ///   commissionAmount = finalPrice * commissionPercent / 100  (agency keeps)
+  ///   carrierAmount    = finalPrice - commissionAmount         (owed to carrier)
+  commissionPercent Float?
+  commissionAmount  Float?
+  carrierAmount     Float?
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
 
   userId String
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -162,37 +191,43 @@ model Ticket {
   tripId String?
   trip   Trip?   @relation(fields: [tripId], references: [id], onDelete: SetNull)
 
+  /// Set once the ticket is included in a monthly settlement invoice.
+  settlementId String?
+  settlement   Settlement? @relation(fields: [settlementId], references: [id], onDelete: SetNull)
+
   /// Coach seat number (1…) when the departure assigns seats.
-  seatNumber Int?
+  seatNumber       Int?
   /// Segment of the route (stop indices within the departure); null = full route.
-  fromStopIndex Int?
-  toStopIndex   Int?
+  fromStopIndex    Int?
+  toStopIndex      Int?
   /// Segment cities as sold (fallback to the trip's endpoints).
-  fromCity String?
-  toCity   String?
-  tripKind   TripKind @default(ONE_WAY)
-  returnTripId String?
-  returnTrip   Trip?   @relation("ReturnTrip", fields: [returnTripId], references: [id], onDelete: SetNull)
+  fromCity         String?
+  toCity           String?
+  tripKind         TripKind @default(ONE_WAY)
+  returnTripId     String?
+  returnTrip       Trip?    @relation("ReturnTrip", fields: [returnTripId], references: [id], onDelete: SetNull)
   returnSeatNumber Int?
 
   /// Optimistic concurrency control: increments on every mutation. Writers
   /// must match the version they read, otherwise the update fails (P2025)
   /// and the caller retries with fresh state.
-  version    Int          @default(0)
+  version Int @default(0)
 
   /// Operational leg this ticket rides on (denormalized from trip).
   assignmentId String?
   assignment   VehicleAssignment? @relation(fields: [assignmentId], references: [id], onDelete: SetNull)
 
-  booking Booking?
-  history TicketHistory[]
+  booking  Booking?
+  history  TicketHistory[]
+  comments TicketComment[]
   payments Payment[]
-  legs    TicketLeg[]
+  legs     TicketLeg[]
 
   @@index([userId])
   @@index([status])
   @@index([tripId])
   @@index([returnTripId])
+  @@index([settlementId])
   @@map("tickets")
 }
 
@@ -233,17 +268,17 @@ model TicketHistory {
 /// so two passengers cannot book the same seat at the same time.
 /// Expires automatically; the booking API consumes it on success.
 model SeatHold {
-  id         String   @id @default(cuid())
-  tripId     String
-  trip       Trip     @relation(fields: [tripId], references: [id], onDelete: Cascade)
-  seatNumber Int
+  id            String   @id @default(cuid())
+  tripId        String
+  trip          Trip     @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  seatNumber    Int
   /// Segment the hold covers; null = full route.
   fromStopIndex Int?
   toStopIndex   Int?
   /// Anonymous browser-session id generated by the booking form.
-  sessionId  String
-  expiresAt  DateTime
-  createdAt  DateTime @default(now())
+  sessionId     String
+  expiresAt     DateTime
+  createdAt     DateTime @default(now())
 
   @@unique([tripId, seatNumber])
   @@index([expiresAt])
@@ -299,7 +334,7 @@ model SiteSetting {
 
 /// Editable per-role permission grant (booking.read, payment.refund, …).
 model RolePermission {
-  id         String @id @default(cuid())
+  id         String  @id @default(cuid())
   role       Role
   permission String
   allowed    Boolean @default(true)
@@ -329,16 +364,16 @@ model Bus {
 
 /// Transfer point between legs (e.g. Львів). Names are data, not code.
 model TransferPoint {
-  id                   String   @id @default(cuid())
-  name                 String
-  city                 String
-  location             String?
-  description          String?
+  id                  String   @id @default(cuid())
+  name                String
+  city                String
+  location            String?
+  description         String?
   /// Minutes between legs by default.
-  defaultTransferTime  Int      @default(45)
-  active               Boolean  @default(true)
-  createdAt            DateTime @default(now())
-  updatedAt            DateTime @updatedAt
+  defaultTransferTime Int      @default(45)
+  active              Boolean  @default(true)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
 
   @@map("transfer_points")
 }
@@ -367,17 +402,17 @@ model Leg {
 /// How a physical bus is used on a specific leg of a specific departure.
 /// `isDirect` + `directDestinationCity` live here — never on the bus itself.
 model VehicleAssignment {
-  id                   String   @id @default(cuid())
-  legId                String
-  leg                  Leg      @relation(fields: [legId], references: [id], onDelete: Cascade)
-  busId                String
-  bus                  Bus      @relation(fields: [busId], references: [id], onDelete: Restrict)
-  isDirect             Boolean  @default(false)
+  id                    String   @id @default(cuid())
+  legId                 String
+  leg                   Leg      @relation(fields: [legId], references: [id], onDelete: Cascade)
+  busId                 String
+  bus                   Bus      @relation(fields: [busId], references: [id], onDelete: Restrict)
+  isDirect              Boolean  @default(false)
   directDestinationCity String?
-  allowCrossZoneSales  Boolean  @default(false)
-  active               Boolean  @default(true)
-  createdAt            DateTime @default(now())
-  updatedAt            DateTime  @updatedAt
+  allowCrossZoneSales   Boolean  @default(false)
+  active                Boolean  @default(true)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
 
   zones      SeatZone[]
   tickets    Ticket[]
@@ -426,10 +461,10 @@ model TicketLeg {
 /// Per-event notification rule: which roles get which alert, and the
 /// threshold (e.g. minutes unpaid) where relevant.
 model NotificationRule {
-  kind         String  @id
-  enabled      Boolean @default(true)
+  kind         String   @id
+  enabled      Boolean  @default(true)
   /// JSON array of Role values.
-  roles        String  @default("[]")
+  roles        String   @default("[]")
   thresholdMin Int?
   updatedAt    DateTime @updatedAt
 
@@ -461,26 +496,26 @@ model Notification {
 /// share) × month multiplier × time phase (early-bird / last-minute),
 /// clamped to [minPrice, maxPrice].
 model TariffGrid {
-  id          String  @id @default(cuid())
-  countryId   String  @unique
-  country     Country @relation(fields: [countryId], references: [id], onDelete: Cascade)
+  id                String   @id @default(cuid())
+  countryId         String   @unique
+  country           Country  @relation(fields: [countryId], references: [id], onDelete: Cascade)
   /// Coach capacity the shares are computed against.
-  capacity    Int     @default(46)
+  capacity          Int      @default(46)
   /// JSON array: [{ "share": 0.5, "price": 40 }, ...] — shares sum to 1.
-  tiers       String  @default("[]")
+  tiers             String   @default("[]")
   /// JSON object: { "1": 1.2, "10": 0.85 } — month number (1–12) → multiplier.
-  monthMultipliers String @default("{}")
+  monthMultipliers  String   @default("{}")
   /// Days before departure from which the early-bird discount applies.
-  earlyBirdDays    Int?
-  earlyBirdPercent Float?
+  earlyBirdDays     Int?
+  earlyBirdPercent  Float?
   /// Days before departure from which the last-minute surcharge applies.
   lastMinuteDays    Int?
   lastMinutePercent Float?
-  minPrice Float?
-  maxPrice Float?
-  isActive Boolean @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  minPrice          Float?
+  maxPrice          Float?
+  isActive          Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
   @@map("tariff_grids")
 }
@@ -527,31 +562,31 @@ model Country {
 
 /// Reusable schedule template for regular departures ("шаблон маршруту").
 model RouteTemplate {
-  id          String  @id @default(cuid())
-  countryId   String
-  country     Country @relation("RouteDestinationCountry", fields: [countryId], references: [id], onDelete: Restrict)
-  originCountryId String?
-  originCountry   Country? @relation("RouteOriginCountry", fields: [originCountryId], references: [id], onDelete: Restrict)
-  name        String
-  originCity  String
-  destinationCity String
+  id                      String   @id @default(cuid())
+  countryId               String
+  country                 Country  @relation("RouteDestinationCountry", fields: [countryId], references: [id], onDelete: Restrict)
+  originCountryId         String?
+  originCountry           Country? @relation("RouteOriginCountry", fields: [originCountryId], references: [id], onDelete: Restrict)
+  name                    String
+  originCity              String
+  destinationCity         String
   /// JSON array of ISO weekdays 1=Mon … 7=Sun, e.g. "[2,4]" for Tue+Thu.
-  departureWeekdays String @default("[]")
-  busPhone          String?
-  dispatcherPhone   String?
+  departureWeekdays       String   @default("[]")
+  busPhone                String?
+  dispatcherPhone         String?
   /// Weekday the outbound leaves Ukraine (1–7).
   ukraineDepartureWeekday Int?
   /// Weekday the return arrives back in Ukraine (1–7).
   ukraineReturnWeekday    Int?
-  defaultBus String?
-  comment    String?
+  defaultBus              String?
+  comment                 String?
   /// When false, generated departures sell tickets without a seat number.
-  hasAssignedSeats Boolean @default(true)
+  hasAssignedSeats        Boolean  @default(true)
   /// When false, generated departures sell only endpoint-to-endpoint.
-  allowSegmentSales Boolean @default(true)
-  isActive   Boolean  @default(true)
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  allowSegmentSales       Boolean  @default(true)
+  isActive                Boolean  @default(true)
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
 
   stops      RouteTemplateStop[]
   departures Departure[]
@@ -601,7 +636,7 @@ model Departure {
   defaultBus              String?
   /// Assigned bus from the fleet (drives the seat layout).
   busId                   String?
-  bus                     Bus?            @relation(fields: [busId], references: [id], onDelete: SetNull)
+  bus                     Bus?          @relation(fields: [busId], references: [id], onDelete: SetNull)
   comment                 String?
   ukraineDepartureWeekday Int?
   ukraineReturnWeekday    Int?
@@ -649,4 +684,115 @@ model DepartureStop {
   @@index([departureId])
   @@index([templateStopId])
   @@map("departure_stops")
+}
+
+/// Route-specific commission override: what percentage of each sold ticket
+/// the agency keeps for this carrier on this exact route (fromCity → toCity).
+/// The remainder is payable to the carrier in the monthly settlement.
+model CommissionRule {
+  id       String @id @default(cuid())
+  fromCity String
+  toCity   String
+  /// Agency commission, percent 0..100 (e.g. 20 = agency keeps 20%).
+  percent  Float
+
+  carrierId String
+  carrier   Carrier @relation(fields: [carrierId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([carrierId, fromCity, toCity])
+  @@map("commission_rules")
+}
+
+/// Monthly settlement with a carrier: aggregates all tickets sold in the
+/// period, the agency commission and the net balance direction.
+/// One settlement per carrier per period (YYYY-MM).
+///
+/// Payment point matters: for tickets paid ONLINE the money sits with the
+/// agency (we owe the carrier its share); for tickets paid CASH to the
+/// carrier the money sits with the carrier (it owes us the commission).
+/// The net balance is stored as balanceAmount + balanceDirection.
+model Settlement {
+  id                 String           @id @default(cuid())
+  /// Period in YYYY-MM format (calendar month the sales belong to).
+  period             String
+  ticketCount        Int
+  /// Sum of ticket finalPrice (what passengers paid, before our service fee).
+  grossAmount        Float
+  /// Agency earnings: sum of ticket commissionAmount.
+  commissionAmount   Float
+  /// Carrier share: sum of ticket carrierAmount.
+  carrierAmount      Float
+  /// Gross collected by the agency (tickets PAID_ONLINE).
+  collectedByAgent   Float            @default(0)
+  /// Gross collected by the carrier (tickets PAID_CASH).
+  collectedByCarrier Float            @default(0)
+  /// Gross not yet paid by passengers (tickets RESERVED).
+  unpaidAmount       Float            @default(0)
+  /// Net balance, absolute value. Direction in balanceDirection:
+  ///   TO_CARRIER — agency must pay the carrier this amount
+  ///   TO_AGENT   — carrier must pay the agency this amount
+  ///   ZERO       — nothing owed
+  balanceAmount      Float            @default(0)
+  balanceDirection   String           @default("TO_CARRIER")
+  status             SettlementStatus @default(GENERATED)
+  /// Sequential invoice number, e.g. INV-2026-08-0001.
+  invoiceNumber      String           @unique
+  actNumber          String?
+  sentAt             DateTime?
+  paidAt             DateTime?
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+
+  carrierId String
+  carrier   Carrier @relation(fields: [carrierId], references: [id], onDelete: Restrict)
+
+  tickets Ticket[]
+  events  SettlementEvent[]
+
+  @@unique([carrierId, period])
+  @@index([period])
+  @@map("settlements")
+}
+
+/// Audit trail of everything that happened to a settlement: generation,
+/// sending, payment. Answers "was this report calculated/sent/paid, by whom
+/// and when" without parsing logs.
+model SettlementEvent {
+  id        String   @id @default(cuid())
+  /// GENERATED | SENT | PAID
+  action    String
+  /// Who did it: user email, or "cron" for the monthly job.
+  actor     String?
+  /// Optional JSON details (amounts at the time, etc.).
+  details   String?
+  createdAt DateTime @default(now())
+
+  settlementId String
+  settlement   Settlement @relation(fields: [settlementId], references: [id], onDelete: Cascade)
+
+  @@index([settlementId])
+  @@index([createdAt])
+  @@map("settlement_events")
+}
+
+/// Free-text comments on a ticket ("коментар щоб фіксувати різні
+/// коментарі"). Separate from TicketHistory: history is the audit trail of
+/// changes, comments are human notes. Keeps an email snapshot so the note
+/// stays readable even if the author's account changes.
+model TicketComment {
+  id          String   @id @default(cuid())
+  text        String
+  authorId    String?
+  authorEmail String
+  createdAt   DateTime @default(now())
+
+  ticketId String
+  ticket   Ticket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  @@index([ticketId])
+  @@index([createdAt])
+  @@map("ticket_comments")
 }
