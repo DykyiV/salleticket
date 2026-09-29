@@ -48,7 +48,7 @@ export async function POST(req: NextRequest) {
   // Self-registration always creates a USER. Elevated roles are assigned
   // separately (e.g. by an ADMIN via /api/admin/users) to prevent privilege
   // escalation by anonymous callers.
-  const role: Role = "USER";
+  const role: Role = "CUSTOMER";
 
   const passwordHash = await hashPassword(password);
 

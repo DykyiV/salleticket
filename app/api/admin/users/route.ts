@@ -7,12 +7,13 @@ import { ROLE_RANK } from "@/lib/auth/constants";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const USER_SELECT = {
+const userSelect = {
   id: true,
   email: true,
   role: true,
-  canViewAllTickets: true,
-  canEditAllTickets: true,
+  canEditDepartures: true,
+  canHideStops: true,
+  canHideSeats: true,
   createdAt: true,
 } as const;
 
@@ -21,7 +22,7 @@ export async function GET() {
   if (!guard.ok) return guard.response;
 
   const users = await prisma.user.findMany({
-    select: USER_SELECT,
+    select: userSelect,
     orderBy: { createdAt: "desc" },
   });
   return NextResponse.json({ users });
@@ -30,8 +31,9 @@ export async function GET() {
 type PatchBody = {
   userId?: string;
   role?: Role;
-  canViewAllTickets?: boolean;
-  canEditAllTickets?: boolean;
+  canEditDepartures?: boolean;
+  canHideStops?: boolean;
+  canHideSeats?: boolean;
 };
 
 export async function PATCH(req: NextRequest) {
@@ -46,33 +48,20 @@ export async function PATCH(req: NextRequest) {
   }
 
   if (!body.userId) {
-    return NextResponse.json(
-      { error: "`userId` is required" },
-      { status: 400 }
-    );
-  }
-  if (
-    body.role === undefined &&
-    body.canViewAllTickets === undefined &&
-    body.canEditAllTickets === undefined
-  ) {
-    return NextResponse.json(
-      { error: "Provide `role`, `canViewAllTickets` and/or `canEditAllTickets`" },
-      { status: 400 }
-    );
+    return NextResponse.json({ error: "`userId` is required" }, { status: 400 });
   }
 
   const data: {
     role?: Role;
-    canViewAllTickets?: boolean;
-    canEditAllTickets?: boolean;
+    canEditDepartures?: boolean;
+    canHideStops?: boolean;
+    canHideSeats?: boolean;
   } = {};
 
-  if (body.role !== undefined) {
+  if (body.role) {
     if (!(body.role in ROLE_RANK)) {
       return NextResponse.json({ error: "Unknown role" }, { status: 400 });
     }
-    // Only SUPER_ADMIN may assign ADMIN or SUPER_ADMIN roles.
     if (
       (body.role === "ADMIN" || body.role === "SUPER_ADMIN") &&
       guard.session.role !== "SUPER_ADMIN"
@@ -85,26 +74,24 @@ export async function PATCH(req: NextRequest) {
     data.role = body.role;
   }
 
-  // The "view all passengers' tickets" permission is meaningful for agents;
-  // any ADMIN may grant or revoke it.
-  if (body.canViewAllTickets !== undefined) {
-    data.canViewAllTickets = Boolean(body.canViewAllTickets);
+  if (typeof body.canEditDepartures === "boolean") {
+    data.canEditDepartures = body.canEditDepartures;
+  }
+  if (typeof body.canHideStops === "boolean") {
+    data.canHideStops = body.canHideStops;
+  }
+  if (typeof body.canHideSeats === "boolean") {
+    data.canHideSeats = body.canHideSeats;
   }
 
-  // The "edit any ticket's passenger details" permission; any ADMIN may
-  // grant or revoke it. Owners can always edit their own passenger data.
-  if (body.canEditAllTickets !== undefined) {
-    data.canEditAllTickets = Boolean(body.canEditAllTickets);
+  if (Object.keys(data).length === 0) {
+    return NextResponse.json({ error: "No fields to update" }, { status: 400 });
   }
 
-  try {
-    const updated = await prisma.user.update({
-      where: { id: body.userId },
-      data,
-      select: USER_SELECT,
-    });
-    return NextResponse.json({ user: updated });
-  } catch {
-    return NextResponse.json({ error: "User not found" }, { status: 404 });
-  }
+  const updated = await prisma.user.update({
+    where: { id: body.userId },
+    data,
+    select: userSelect,
+  });
+  return NextResponse.json({ user: updated });
 }

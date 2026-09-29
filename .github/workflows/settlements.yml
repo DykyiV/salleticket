@@ -18,8 +18,9 @@ jobs:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: |
           if [ -z "$APP_URL" ] || [ -z "$CRON_SECRET" ]; then
-            echo "Set the APP_URL repository variable and CRON_SECRET repository secret first."
-            exit 1
+            # Not deployed yet: skip instead of failing (and e-mailing) every month.
+            echo "::warning::Skipped — set the APP_URL repository variable and CRON_SECRET secret to enable monthly settlements."
+            exit 0
           fi
           response=$(curl -sS -w "\n%{http_code}" -X POST "$APP_URL/api/cron/settlements" \
             -H "Authorization: Bearer $CRON_SECRET")

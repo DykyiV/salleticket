@@ -120,7 +120,18 @@ async function main() {
   check("GET /api/promo/check validates DISCOUNT10", promoBody.ok === true);
 
   // --- Booking --------------------------------------------------------------
+  // Coaches assign seats: take the first free standard-price seat (mult 1) so
+  // the price assertions below stay exact, even when the DB is reused.
+  const seatsRes = await fetch(`${BASE_URL}/api/trips/${encodeURIComponent(trip.id)}/seats`);
+  const seatsBody = await seatsRes.json();
+  const freeSeat = (seatsBody.layout?.decks ?? [])
+    .flatMap((d) => d.rows.flat())
+    .map((cell) => cell.seat)
+    .find((seat) => seat && seat.status === "AVAILABLE" && seat.mult === 1);
+  check("GET /api/trips/[id]/seats offers a free seat", seatsRes.ok && Boolean(freeSeat), `got ${seatsRes.status}`);
+
   const bookingPayload = {
+    seatNumber: freeSeat?.number ?? null,
     tripId: trip.id,
     carrierId: trip.carrierId,
     promoCode: "DISCOUNT10",
@@ -149,7 +160,7 @@ async function main() {
   const bookingBody = await booking.json();
   check("POST /api/booking creates a booking", booking.status === 201, `got ${booking.status}: ${JSON.stringify(bookingBody).slice(0, 200)}`);
 
-  const expectedFinal = Math.round(trip.price * 0.9 * 100) / 100; // DISCOUNT10 = 10%
+  const expectedFinal = Math.round(trip.price * 0.9 * 100) / 100; // DISCOUNT10 = 10%, cash on bus
   check(
     "server-side price ignores client tampering (base price kept)",
     bookingBody.booking?.basePrice === trip.price,
@@ -168,51 +179,35 @@ async function main() {
     listBody.bookings?.some((b) => b.reference === bookingBody.booking?.reference)
   );
 
-  // --- Passenger editing (shared /api/tickets/[id]/passenger) ----------------
+  // --- Passenger editing (/api/account/tickets/[id]/passenger) -------------
   const detail = await fetch(
     `${BASE_URL}/api/booking?reference=${bookingBody.booking?.reference}`,
     { headers: { Cookie: cookie } }
   );
   const detailBody = await detail.json();
   const ownTicketId = detailBody.booking?.ticket?.id;
+  const reference = bookingBody.booking?.reference;
   check("GET /api/booking?reference= returns the ticket id", Boolean(ownTicketId));
 
-  const passNoAuth = await fetch(`${BASE_URL}/api/tickets/${ownTicketId}/passenger`, {
+  const ticketApi = (id, sub) => `${BASE_URL}/api/account/tickets/${id}/${sub}`;
+
+  const passNoAuth = await fetch(ticketApi(ownTicketId, "passenger"), {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ firstName: "Hacked" }),
   });
-  check(
-    "PATCH /api/tickets/[id]/passenger without auth returns 401",
-    passNoAuth.status === 401,
-    `got ${passNoAuth.status}`
-  );
+  check("PATCH passenger without auth returns 401", passNoAuth.status === 401, `got ${passNoAuth.status}`);
 
-  const passNotFound = await fetch(`${BASE_URL}/api/tickets/nonexistent-id/passenger`, {
+  const passNotFound = await fetch(ticketApi("nonexistent-id", "passenger"), {
     method: "PATCH",
-    headers: { "Content-Type": "application/json", Cookie: cookie },
+    headers: authHeaders,
     body: JSON.stringify({ firstName: "Hacked" }),
   });
-  check(
-    "PATCH /api/tickets/[id]/passenger on missing ticket returns 404",
-    passNotFound.status === 404,
-    `got ${passNotFound.status}`
-  );
+  check("PATCH passenger on missing ticket returns 404", passNotFound.status === 404, `got ${passNotFound.status}`);
 
-  const passNoFields = await fetch(`${BASE_URL}/api/tickets/${ownTicketId}/passenger`, {
+  const ownEdit = await fetch(ticketApi(ownTicketId, "passenger"), {
     method: "PATCH",
-    headers: { "Content-Type": "application/json", Cookie: cookie },
-    body: JSON.stringify({}),
-  });
-  check(
-    "PATCH /api/tickets/[id]/passenger without fields returns 400",
-    passNoFields.status === 400,
-    `got ${passNoFields.status}`
-  );
-
-  const ownEdit = await fetch(`${BASE_URL}/api/tickets/${ownTicketId}/passenger`, {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json", Cookie: cookie },
+    headers: authHeaders,
     body: JSON.stringify({ firstName: "Edited", phone: "+380501112233" }),
   });
   const ownEditBody = await ownEdit.json();
@@ -226,61 +221,40 @@ async function main() {
   );
 
   // --- Ticket comments ---------------------------------------------------------
-  const commentNoAuth = await fetch(`${BASE_URL}/api/tickets/${ownTicketId}/comments`, {
+  const commentNoAuth = await fetch(ticketApi(ownTicketId, "comments"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ text: "hi" }),
   });
-  check(
-    "POST /api/tickets/[id]/comments without auth returns 401",
-    commentNoAuth.status === 401,
-    `got ${commentNoAuth.status}`
-  );
+  check("POST comments without auth returns 401", commentNoAuth.status === 401, `got ${commentNoAuth.status}`);
 
-  const commentEmpty = await fetch(`${BASE_URL}/api/tickets/${ownTicketId}/comments`, {
+  const commentEmpty = await fetch(ticketApi(ownTicketId, "comments"), {
     method: "POST",
-    headers: { "Content-Type": "application/json", Cookie: cookie },
+    headers: authHeaders,
     body: JSON.stringify({ text: "  " }),
   });
-  check(
-    "POST /api/tickets/[id]/comments with empty text returns 400",
-    commentEmpty.status === 400,
-    `got ${commentEmpty.status}`
-  );
+  check("POST comments with empty text returns 400", commentEmpty.status === 400, `got ${commentEmpty.status}`);
 
-  const commentAdd = await fetch(`${BASE_URL}/api/tickets/${ownTicketId}/comments`, {
+  const commentAdd = await fetch(ticketApi(ownTicketId, "comments"), {
     method: "POST",
-    headers: { "Content-Type": "application/json", Cookie: cookie },
+    headers: authHeaders,
     body: JSON.stringify({ text: "Smoke comment" }),
   });
-  check(
-    "owner can add a comment to own ticket",
-    commentAdd.status === 201,
-    `got ${commentAdd.status}`
-  );
+  check("owner can add a comment to own ticket", commentAdd.status === 201, `got ${commentAdd.status}`);
 
-  const commentList = await fetch(`${BASE_URL}/api/tickets/${ownTicketId}/comments`, {
-    headers: { Cookie: cookie },
-  });
+  const commentList = await fetch(ticketApi(ownTicketId, "comments"), { headers: { Cookie: cookie } });
   const commentListBody = await commentList.json();
   check(
-    "GET /api/tickets/[id]/comments lists the new comment",
-    commentList.status === 200 &&
-      commentListBody.comments?.some((c) => c.text === "Smoke comment"),
+    "GET comments lists the new comment",
+    commentList.status === 200 && commentListBody.comments?.some((c) => c.text === "Smoke comment"),
     `got ${commentList.status}`
   );
 
   // --- PDF tickets -----------------------------------------------------------
-  const pdfNoAuth = await fetch(`${BASE_URL}/api/tickets/${ownTicketId}/pdf`);
-  check(
-    "GET /api/tickets/[id]/pdf without auth returns 401",
-    pdfNoAuth.status === 401,
-    `got ${pdfNoAuth.status}`
-  );
+  const pdfNoAuth = await fetch(`${BASE_URL}/api/tickets/${reference}/pdf`);
+  check("GET /api/tickets/[reference]/pdf without auth returns 401", pdfNoAuth.status === 401, `got ${pdfNoAuth.status}`);
 
-  const ownPdf = await fetch(`${BASE_URL}/api/tickets/${ownTicketId}/pdf`, {
-    headers: { Cookie: cookie },
-  });
+  const ownPdf = await fetch(`${BASE_URL}/api/tickets/${reference}/pdf`, { headers: { Cookie: cookie } });
   const pdfBytes = Buffer.from(await ownPdf.arrayBuffer());
   check(
     "owner can download own ticket PDF",
@@ -290,14 +264,10 @@ async function main() {
     `got ${ownPdf.status} ${ownPdf.headers.get("content-type")}`
   );
 
-  const bulkPdfAsUser = await fetch(`${BASE_URL}/api/admin/tickets/pdf?ids=${ownTicketId}`, {
+  const bulkPdfAsCustomer = await fetch(`${BASE_URL}/api/tickets/bulk-pdf?ids=${ownTicketId}`, {
     headers: { Cookie: cookie },
   });
-  check(
-    "GET /api/admin/tickets/pdf as USER returns 403",
-    bulkPdfAsUser.status === 403,
-    `got ${bulkPdfAsUser.status}`
-  );
+  check("GET /api/tickets/bulk-pdf as CUSTOMER returns 403", bulkPdfAsCustomer.status === 403, `got ${bulkPdfAsCustomer.status}`);
 
   // --- Bulk SMS ---------------------------------------------------------------
   const smsNoAuth = await fetch(`${BASE_URL}/api/admin/sms`, {
@@ -305,93 +275,99 @@ async function main() {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ ticketIds: [ownTicketId], message: "test" }),
   });
-  check(
-    "POST /api/admin/sms without auth returns 401",
-    smsNoAuth.status === 401,
-    `got ${smsNoAuth.status}`
-  );
+  check("POST /api/admin/sms without auth returns 401", smsNoAuth.status === 401, `got ${smsNoAuth.status}`);
 
-  const smsAsUser = await fetch(`${BASE_URL}/api/admin/sms`, {
+  const smsAsCustomer = await fetch(`${BASE_URL}/api/admin/sms`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", Cookie: cookie },
+    headers: authHeaders,
     body: JSON.stringify({ ticketIds: [ownTicketId], message: "test" }),
   });
-  check(
-    "POST /api/admin/sms as USER returns 403",
-    smsAsUser.status === 403,
-    `got ${smsAsUser.status}`
-  );
+  check("POST /api/admin/sms as CUSTOMER returns 403", smsAsCustomer.status === 403, `got ${smsAsCustomer.status}`);
 
   // --- Route protection ------------------------------------------------------
-  const account = await fetch(`${BASE_URL}/account`, { redirect: "manual" });
-  const accountLocation = account.headers.get("location") ?? "";
+  const cabinet = await fetch(`${BASE_URL}/cabinet`, { redirect: "manual" });
+  const cabinetLocation = cabinet.headers.get("location") ?? "";
   check(
-    "GET /account without auth redirects to /login",
-    [301, 302, 307, 308].includes(account.status) && accountLocation.includes("/login"),
-    `got ${account.status} -> ${accountLocation}`
+    "GET /cabinet without auth redirects to /login",
+    [301, 302, 307, 308].includes(cabinet.status) && cabinetLocation.includes("/login"),
+    `got ${cabinet.status} -> ${cabinetLocation}`
   );
 
   const adminApi = await fetch(`${BASE_URL}/api/admin/users`, { headers: { Cookie: cookie } });
-  check("GET /api/admin/users as USER returns 403", adminApi.status === 403, `got ${adminApi.status}`);
-
-  const settlementsApi = await fetch(`${BASE_URL}/api/admin/settlements`, { headers: { Cookie: cookie } });
-  check("GET /api/admin/settlements as USER returns 403", settlementsApi.status === 403, `got ${settlementsApi.status}`);
-
-  const commissionsApi = await fetch(`${BASE_URL}/api/admin/commissions`, { headers: { Cookie: cookie } });
-  check("GET /api/admin/commissions as USER returns 403", commissionsApi.status === 403, `got ${commissionsApi.status}`);
-
-  const ticketPatch = await fetch(`${BASE_URL}/api/admin/tickets/any-id`, {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json", Cookie: cookie },
-    body: JSON.stringify({ status: "PAID_ONLINE" }),
-  });
-  check("PATCH /api/admin/tickets/[id] as USER returns 403", ticketPatch.status === 403, `got ${ticketPatch.status}`);
-
-  const passengerNoAuth = await fetch(`${BASE_URL}/api/admin/tickets/any-id/passenger`, {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ firstName: "Hacked" }),
-  });
-  check(
-    "PATCH /api/admin/tickets/[id]/passenger without auth returns 401",
-    passengerNoAuth.status === 401,
-    `got ${passengerNoAuth.status}`
-  );
-
-  const passengerAsUser = await fetch(`${BASE_URL}/api/admin/tickets/any-id/passenger`, {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json", Cookie: cookie },
-    body: JSON.stringify({ firstName: "Hacked" }),
-  });
-  check(
-    "PATCH /api/admin/tickets/[id]/passenger as USER returns 403",
-    passengerAsUser.status === 403,
-    `got ${passengerAsUser.status}`
-  );
+  check("GET /api/admin/users as CUSTOMER returns 403", adminApi.status === 403, `got ${adminApi.status}`);
 
   const cronNoAuth = await fetch(`${BASE_URL}/api/cron/settlements`, { method: "POST" });
-  check(
-    "POST /api/cron/settlements without secret returns 401/503",
-    [401, 503].includes(cronNoAuth.status),
-    `got ${cronNoAuth.status}`
-  );
+  check("POST /api/cron/settlements without secret returns 401/503", [401, 503].includes(cronNoAuth.status), `got ${cronNoAuth.status}`);
 
-  const cancelNoAuth = await fetch(`${BASE_URL}/api/account/tickets/any-id/cancel`, { method: "POST" });
-  check(
-    "POST /api/account/tickets/[id]/cancel without auth returns 401",
-    cancelNoAuth.status === 401,
-    `got ${cancelNoAuth.status}`
-  );
+  // --- Finance: permission-gated (finance.read / finance.edit) ---------------
+  const financeUrls = [
+    "/api/finance/settlements",
+    "/api/finance/commissions",
+    "/api/finance/carrier-report/csv",
+  ];
+  for (const url of financeUrls) {
+    const res = await fetch(`${BASE_URL}${url}`, { headers: { Cookie: cookie } });
+    check(`GET ${url} as CUSTOMER returns 403`, res.status === 403, `got ${res.status}`);
+  }
 
-  const cancelForeign = await fetch(`${BASE_URL}/api/account/tickets/nonexistent-id/cancel`, {
-    method: "POST",
-    headers: { Cookie: cookie },
+  const login = async (loginEmail, loginPassword) => {
+    const res = await fetch(`${BASE_URL}/api/auth/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: loginEmail, password: loginPassword }),
+    });
+    return res.ok ? sessionCookie(res) : null;
+  };
+
+  const agentCookie = await login("agent@asolbus.local", "Agent12345");
+  check("seeded agent can log in", Boolean(agentCookie));
+  if (agentCookie) {
+    const agentFinance = await fetch(`${BASE_URL}/api/finance/settlements`, { headers: { Cookie: agentCookie } });
+    check("GET /api/finance/settlements as AGENT returns 403", agentFinance.status === 403, `got ${agentFinance.status}`);
+    const agentBulk = await fetch(`${BASE_URL}/api/tickets/bulk-pdf?ids=${ownTicketId}`, { headers: { Cookie: agentCookie } });
+    check("GET /api/tickets/bulk-pdf as AGENT returns a PDF", agentBulk.status === 200 && agentBulk.headers.get("content-type") === "application/pdf", `got ${agentBulk.status}`);
+  }
+
+  const accountantCookie = await login("accountant@asolbus.local", "Accountant12345");
+  check("seeded accountant can log in", Boolean(accountantCookie));
+  if (accountantCookie) {
+    const accSettlements = await fetch(`${BASE_URL}/api/finance/settlements`, { headers: { Cookie: accountantCookie } });
+    check("GET /api/finance/settlements as ACCOUNTANT returns 200", accSettlements.status === 200, `got ${accSettlements.status}`);
+    const accCsv = await fetch(`${BASE_URL}/api/finance/carrier-report/csv`, { headers: { Cookie: accountantCookie } });
+    // Read raw bytes: Response.text() silently strips a UTF-8 BOM.
+    const csvBytes = Buffer.from(await accCsv.arrayBuffer());
+    check(
+      "carrier report CSV downloads for ACCOUNTANT (BOM + ; header)",
+      accCsv.status === 200 &&
+        csvBytes.subarray(0, 3).equals(Buffer.from([0xef, 0xbb, 0xbf])) &&
+        csvBytes.toString("utf8").includes("Номер;Пасажир"),
+      `got ${accCsv.status}`
+    );
+    const accPage = await fetch(`${BASE_URL}/cabinet/finance`, { headers: { Cookie: accountantCookie }, redirect: "manual" });
+    check("GET /cabinet/finance as ACCOUNTANT returns 200", accPage.status === 200, `got ${accPage.status}`);
+  }
+
+  // --- Cancellation (owner may cancel a RESERVED ticket) ----------------------
+  const cancelNoAuth = await fetch(ticketApi(ownTicketId, "status"), {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ status: "CANCELLED" }),
   });
-  check(
-    "cancelling a non-existent/foreign ticket returns 404",
-    cancelForeign.status === 404,
-    `got ${cancelForeign.status}`
-  );
+  check("PATCH status without auth returns 401", cancelNoAuth.status === 401, `got ${cancelNoAuth.status}`);
+
+  const cancelMissing = await fetch(ticketApi("nonexistent-id", "status"), {
+    method: "PATCH",
+    headers: authHeaders,
+    body: JSON.stringify({ status: "CANCELLED" }),
+  });
+  check("cancelling a non-existent ticket returns 404", cancelMissing.status === 404, `got ${cancelMissing.status}`);
+
+  const cancelOwn = await fetch(ticketApi(ownTicketId, "status"), {
+    method: "PATCH",
+    headers: authHeaders,
+    body: JSON.stringify({ status: "CANCELLED" }),
+  });
+  check("owner can cancel own reserved ticket", cancelOwn.status === 200, `got ${cancelOwn.status}`);
 
   // --- Logout -----------------------------------------------------------------
   const logout = await fetch(`${BASE_URL}/api/auth/logout`, {

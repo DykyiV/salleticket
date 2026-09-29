@@ -3,18 +3,23 @@ import Link from "next/link";
 import Header from "@/components/Header";
 import TripCard from "@/components/TripCard";
 import type { Trip } from "@/lib/carriers/types";
+import { parseTripKind } from "@/lib/tickets/kinds";
+import { TRIP_KIND_LABEL } from "@/lib/tickets/labels";
+import { getSiteSettings } from "@/lib/settings";
 
 type SearchParams = {
   from?: string;
   to?: string;
   date?: string;
+  tripKind?: string;
+  returnDate?: string;
   transport?: string;
 };
 
 const TRANSPORT_LABELS: Record<string, string> = {
-  BUS: "Bus",
-  FLIGHT: "Flight",
-  TRAIN: "Train",
+  BUS: "Автобус",
+  FLIGHT: "Літак",
+  TRAIN: "Потяг",
 };
 
 type SearchApiResponse = {
@@ -61,10 +66,12 @@ export default async function ResultsPage(
   const from = searchParams.from || "Kyiv";
   const to = searchParams.to || "Lviv";
   const date = searchParams.date;
+  const tripKind = parseTripKind(searchParams.tripKind);
+  const returnDate = searchParams.returnDate;
+  const siteSettings = await getSiteSettings();
+
   const transport = searchParams.transport?.toUpperCase();
-  const transportLabel = transport
-    ? TRANSPORT_LABELS[transport] ?? null
-    : null;
+  const transportLabel = transport ? TRANSPORT_LABELS[transport] ?? null : null;
 
   const params = new URLSearchParams({ from, to });
   if (date) params.set("date", date);
@@ -149,7 +156,11 @@ export default async function ResultsPage(
               </h1>
               <p className="mt-0.5 text-sm text-slate-500">
                 {transportLabel ? `${transportLabel} · ` : ""}
-                {formatDate(date)} · {trips.length} trips found
+                {formatDate(date)} · {TRIP_KIND_LABEL[tripKind]}
+                {tripKind === "ROUND_TRIP" && returnDate
+                  ? ` · назад ${formatDate(returnDate)}`
+                  : ""}{" "}
+                · {trips.length} trips found
                 {trips.length > 0 ? (
                   <>
                     {" "}
@@ -257,7 +268,14 @@ export default async function ResultsPage(
               </div>
             ) : (
               trips.map((trip) => (
-                <TripCard key={trip.id} trip={trip} date={date} />
+                <TripCard
+                  key={trip.id}
+                  trip={trip}
+                  date={date}
+                  tripKind={tripKind}
+                  returnDate={returnDate}
+                  onlineDiscountPercent={siteSettings.onlineDiscountPercent}
+                />
               ))
             )}
           </div>

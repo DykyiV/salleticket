@@ -32,7 +32,7 @@ export default function LogoutButton({
         "ml-auto rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:opacity-60"
       }
     >
-      {loading ? "Signing out…" : "Sign out"}
+        {loading ? "Вихід…" : "Вийти"}
     </button>
   );
 }

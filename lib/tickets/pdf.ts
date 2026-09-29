@@ -1,276 +1,145 @@
-import { readFileSync } from "node:fs";
-import path from "node:path";
+import { readFile } from "fs/promises";
+import path from "path";
+import { PDFDocument, rgb, type PDFFont } from "pdf-lib";
 import fontkit from "@pdf-lib/fontkit";
-import { PDFDocument, rgb, type PDFFont, type PDFPage } from "pdf-lib";
-import QRCode from "qrcode";
+import type { Prisma } from "@prisma/client";
+import { qrCodePngBuffer } from "@/lib/tickets/qrcode";
+import { formatUkDate } from "@/lib/routes/dates";
+import {
+  AGE_LABEL,
+  TICKET_STATUS_LABEL,
+  TRIP_KIND_LABEL,
+} from "@/lib/tickets/labels";
 
 /**
- * PDF e-ticket generator. Renders one A5-landscape page per ticket with the
- * passenger, trip, price and a QR code of the booking reference. DejaVu Sans
- * is embedded so Ukrainian passenger names render correctly.
+ * Ticket PDF rendering shared by the single-ticket download
+ * (GET /api/tickets/[reference]/pdf) and the staff bulk print
+ * (GET /api/tickets/bulk-pdf?ids=…), so both produce identical pages:
+ * booking number, status, route, seat, passenger, price and a boarding QR
+ * that opens /check/<reference>.
  */
 
-export type TicketPdfData = {
-  reference: string;
-  status: string;
-  passengerName: string;
-  passengerPhone: string;
-  passengerEmail: string | null;
-  ticketType: string;
-  promoCode: string | null;
-  route: string;
-  departure: string;
-  arrival: string;
-  carrier: string;
-  transportType: string;
-  finalPrice: number;
-  bookedBy: string;
-  createdAt: string;
-};
+/** Prisma include that loads everything a ticket page needs. */
+export const TICKET_PDF_INCLUDE = {
+  ticket: {
+    include: {
+      trip: { include: { carrier: true } },
+      returnTrip: true,
+    },
+  },
+} satisfies Prisma.BookingInclude;
 
-const AGE_LABELS: Record<string, string> = {
-  CHILD_0_4: "Дитячий 0–4",
-  CHILD_5_12: "Дитячий 5–12",
-  ADULT: "Дорослий",
-  SENIOR_60: "Пільговий 60+",
-};
+export type TicketPdfBooking = Prisma.BookingGetPayload<{
+  include: typeof TICKET_PDF_INCLUDE;
+}>;
 
-export function ageLabel(ageCategory: string): string {
-  return AGE_LABELS[ageCategory] ?? ageCategory;
-}
+const INK = rgb(0.12, 0.16, 0.23);
+const MUTE = rgb(0.42, 0.46, 0.52);
+const BRAND = rgb(0.02, 0.44, 0.67);
 
-const STATUS_LABELS: Record<string, string> = {
-  RESERVED: "Заброньовано",
-  PAID_ONLINE: "Оплачено онлайн",
-  PAID_CASH: "Оплачено готівкою",
-  CANCELLED: "Скасовано",
-  REFUNDED: "Повернено",
-};
-
-const TRANSPORT_LABELS: Record<string, string> = {
-  BUS: "Автобус",
-  FLIGHT: "Літак",
-  TRAIN: "Потяг",
-};
-
-// A5 landscape, points.
-const PAGE_W = 595;
-const PAGE_H = 420;
-
-const BRAND = rgb(0.16, 0.36, 0.66);
-const DARK = rgb(0.12, 0.16, 0.22);
-const GREY = rgb(0.42, 0.47, 0.53);
-const LINE = rgb(0.85, 0.87, 0.9);
-
-let fontCache: { regular: Buffer; bold: Buffer } | null = null;
-
-function loadFontFiles() {
-  if (!fontCache) {
-    const dir = path.join(process.cwd(), "lib", "tickets", "fonts");
-    fontCache = {
-      regular: readFileSync(path.join(dir, "DejaVuSans.ttf")),
-      bold: readFileSync(path.join(dir, "DejaVuSans-Bold.ttf")),
-    };
-  }
-  return fontCache;
-}
-
-function drawField(
-  page: PDFPage,
-  fonts: { regular: PDFFont; bold: PDFFont },
-  x: number,
-  y: number,
-  label: string,
-  value: string
-) {
-  page.drawText(label, { x, y, size: 7, font: fonts.regular, color: GREY });
-  page.drawText(value, { x, y: y - 13, size: 10.5, font: fonts.bold, color: DARK });
-}
+type Fonts = { font: PDFFont; bold: PDFFont };
 
 async function drawTicketPage(
-  doc: PDFDocument,
-  fonts: { regular: PDFFont; bold: PDFFont },
-  t: TicketPdfData
-) {
-  const page = doc.addPage([PAGE_W, PAGE_H]);
-  const M = 32; // margin
+  pdf: PDFDocument,
+  booking: TicketPdfBooking,
+  { font, bold }: Fonts,
+  checkUrl: string
+): Promise<void> {
+  const page = pdf.addPage([420, 300]);
+  const { ticket } = booking;
 
-  // Header band
-  page.drawRectangle({ x: 0, y: PAGE_H - 54, width: PAGE_W, height: 54, color: BRAND });
-  page.drawText("ASOL BUS", { x: M, y: PAGE_H - 36, size: 18, font: fonts.bold, color: rgb(1, 1, 1) });
-  page.drawText("Електронний квиток / E-ticket", {
-    x: M + 130,
-    y: PAGE_H - 34,
+  page.drawText("Asol BUS — квиток", { x: 24, y: 268, size: 10, font, color: MUTE });
+  page.drawText(booking.reference, { x: 24, y: 240, size: 22, font: bold, color: INK });
+  page.drawText(TICKET_STATUS_LABEL[ticket.status] ?? ticket.status, {
+    x: 24,
+    y: 224,
+    size: 9,
+    font,
+    color: BRAND,
+  });
+
+  const trip = ticket.trip;
+  if (trip) {
+    page.drawText(`${trip.fromCity} → ${trip.toCity}`, {
+      x: 24,
+      y: 198,
+      size: 13,
+      font,
+      color: INK,
+    });
+    page.drawText(
+      `${formatUkDate(trip.departureTime)} · ${trip.departureTime.toISOString().slice(11, 16)} · ${trip.carrier.name}`,
+      { x: 24, y: 182, size: 9, font, color: MUTE }
+    );
+  }
+
+  const kindLine =
+    ticket.tripKind !== "ONE_WAY" ? TRIP_KIND_LABEL[ticket.tripKind] ?? "" : "";
+  page.drawText(
+    `Місце: ${ticket.seatNumber != null ? ticket.seatNumber : "без місць"}${kindLine ? ` · ${kindLine}` : ""}`,
+    { x: 24, y: 164, size: 10, font, color: INK }
+  );
+  if (ticket.returnTrip) {
+    page.drawText(
+      `Назад: ${ticket.returnTrip.fromCity} → ${ticket.returnTrip.toCity} · ${formatUkDate(ticket.returnTrip.departureTime)}${ticket.returnSeatNumber != null ? ` · місце ${ticket.returnSeatNumber}` : ""}`,
+      { x: 24, y: 150, size: 9, font, color: MUTE }
+    );
+  }
+
+  page.drawText(`${booking.firstName} ${booking.lastName}`, {
+    x: 24,
+    y: 126,
     size: 11,
-    font: fonts.regular,
-    color: rgb(0.88, 0.92, 0.98),
+    font,
+    color: INK,
   });
-  page.drawText(t.reference, {
-    x: PAGE_W - M - fonts.bold.widthOfTextAtSize(t.reference, 16),
-    y: PAGE_H - 36,
-    size: 16,
-    font: fonts.bold,
-    color: rgb(1, 1, 1),
+  page.drawText(
+    `${AGE_LABEL[booking.ageCategory] ?? booking.ageCategory} · ${booking.phone}`,
+    { x: 24, y: 112, size: 9, font, color: MUTE }
+  );
+  page.drawText(`До сплати: €${booking.finalPrice.toFixed(2)}`, {
+    x: 24,
+    y: 94,
+    size: 11,
+    font: bold,
+    color: INK,
   });
 
-  // QR code of the booking reference
-  const qrPng = await QRCode.toBuffer(t.reference, {
-    type: "png",
-    width: 220,
-    margin: 1,
-    errorCorrectionLevel: "M",
-  });
-  const qrImage = await doc.embedPng(qrPng);
-  const qrSize = 96;
-  page.drawImage(qrImage, {
-    x: PAGE_W - M - qrSize,
-    y: PAGE_H - 54 - 24 - qrSize,
-    width: qrSize,
-    height: qrSize,
-  });
-  page.drawText("Пред'явіть при посадці", {
-    x: PAGE_W - M - qrSize,
-    y: PAGE_H - 54 - 34 - qrSize,
+  const qrImage = await pdf.embedPng(await qrCodePngBuffer(checkUrl));
+  page.drawImage(qrImage, { x: 296, y: 156, width: 100, height: 100 });
+  page.drawText("QR для посадки", { x: 306, y: 144, size: 8, font, color: MUTE });
+
+  page.drawText("Демо — реальна оплата не проводиться.", {
+    x: 24,
+    y: 24,
     size: 7,
-    font: fonts.regular,
-    color: GREY,
+    font,
+    color: MUTE,
   });
-
-  // Route block
-  let y = PAGE_H - 92;
-  page.drawText(t.route, { x: M, y, size: 20, font: fonts.bold, color: DARK });
-  y -= 20;
-  page.drawText(
-    `${TRANSPORT_LABELS[t.transportType] ?? t.transportType} · ${t.carrier}`,
-    { x: M, y, size: 10, font: fonts.regular, color: GREY }
-  );
-
-  // Divider
-  y -= 14;
-  page.drawLine({ start: { x: M, y }, end: { x: PAGE_W - M, y }, thickness: 1, color: LINE });
-
-  // Two-column field grid
-  y -= 28;
-  const col2 = M + 240;
-  drawField(page, fonts, M, y, "ПАСАЖИР", t.passengerName);
-  drawField(page, fonts, col2, y, "ВИЇЗД", t.departure);
-  y -= 42;
-  drawField(page, fonts, M, y, "ТЕЛЕФОН", t.passengerPhone);
-  drawField(page, fonts, col2, y, "ПРИБУТТЯ", t.arrival);
-  y -= 42;
-  drawField(page, fonts, M, y, "EMAIL", t.passengerEmail ?? "—");
-  drawField(
-    page,
-    fonts,
-    col2,
-    y,
-    "ТИП КВИТКА",
-    `${ageLabel(t.ticketType)}${t.promoCode ? ` · промо ${t.promoCode}` : ""}`
-  );
-
-  // Price / status band
-  const bandY = 58;
-  page.drawRectangle({ x: M, y: bandY, width: PAGE_W - 2 * M, height: 44, color: rgb(0.96, 0.97, 0.98) });
-  page.drawText("ВАРТІСТЬ", { x: M + 14, y: bandY + 28, size: 7, font: fonts.regular, color: GREY });
-  page.drawText(`€${t.finalPrice.toFixed(2)}`, {
-    x: M + 14,
-    y: bandY + 12,
-    size: 14,
-    font: fonts.bold,
-    color: DARK,
-  });
-  page.drawText("СТАТУС", { x: M + 120, y: bandY + 28, size: 7, font: fonts.regular, color: GREY });
-  page.drawText(STATUS_LABELS[t.status] ?? t.status, {
-    x: M + 120,
-    y: bandY + 13,
-    size: 10.5,
-    font: fonts.bold,
-    color: DARK,
-  });
-  page.drawText("ОФОРМИВ", { x: M + 320, y: bandY + 28, size: 7, font: fonts.regular, color: GREY });
-  page.drawText(t.bookedBy, {
-    x: M + 320,
-    y: bandY + 13,
-    size: 10.5,
-    font: fonts.bold,
-    color: DARK,
-  });
-
-  // Footer
-  page.drawText(
-    `Видано ${t.createdAt} · asol-bus · Цей квиток є підтвердженням бронювання.`,
-    { x: M, y: 30, size: 7.5, font: fonts.regular, color: GREY }
-  );
-}
-
-const fmtDt = (d: Date) => d.toISOString().slice(0, 16).replace("T", " ");
-
-/** Shape of the Prisma ticket graph the mapper expects. */
-export type TicketWithDetails = {
-  id: string;
-  status: string;
-  finalPrice: number;
-  createdAt: Date;
-  booking: {
-    reference: string;
-    firstName: string;
-    lastName: string;
-    phone: string;
-    email: string | null;
-    ageCategory: string;
-    promoCode: string | null;
-  } | null;
-  user: { email: string };
-  trip: {
-    fromCity: string;
-    toCity: string;
-    departureTime: Date;
-    arrivalTime: Date;
-    transportType: string;
-    carrier: { name: string };
-  } | null;
-};
-
-/** Map a Prisma ticket (with booking, user, trip.carrier) to PDF data. */
-export function toTicketPdfData(t: TicketWithDetails): TicketPdfData {
-  return {
-    reference: t.booking?.reference ?? t.id.slice(-8).toUpperCase(),
-    status: t.status,
-    passengerName: t.booking
-      ? `${t.booking.firstName} ${t.booking.lastName}`
-      : "—",
-    passengerPhone: t.booking?.phone ?? "—",
-    passengerEmail: t.booking?.email ?? null,
-    ticketType: t.booking?.ageCategory ?? "ADULT",
-    promoCode: t.booking?.promoCode ?? null,
-    route: t.trip ? `${t.trip.fromCity} → ${t.trip.toCity}` : "—",
-    departure: t.trip ? fmtDt(t.trip.departureTime) : "—",
-    arrival: t.trip ? fmtDt(t.trip.arrivalTime) : "—",
-    carrier: t.trip?.carrier.name ?? "—",
-    transportType: t.trip?.transportType ?? "BUS",
-    finalPrice: t.finalPrice,
-    bookedBy: t.user.email,
-    createdAt: fmtDt(t.createdAt),
-  };
 }
 
 /**
- * Build a single PDF containing one page per ticket, in the given order.
+ * One PDF with one page per booking, in the given order.
+ * `origin` is the site origin (e.g. "https://asolbus.com") used for the QR.
  */
 export async function buildTicketsPdf(
-  tickets: TicketPdfData[]
+  bookings: TicketPdfBooking[],
+  origin: string
 ): Promise<Uint8Array> {
-  const doc = await PDFDocument.create();
-  doc.registerFontkit(fontkit);
-  doc.setTitle("Asol BUS — квитки");
-  doc.setProducer("asol-bus");
-  const files = loadFontFiles();
-  const fonts = {
-    regular: await doc.embedFont(files.regular),
-    bold: await doc.embedFont(files.bold),
+  const pdf = await PDFDocument.create();
+  pdf.registerFontkit(fontkit);
+  const fontsDir = path.join(process.cwd(), "assets", "fonts");
+  const [fontBytes, boldBytes] = await Promise.all([
+    readFile(path.join(fontsDir, "DejaVuSans.ttf")),
+    readFile(path.join(fontsDir, "DejaVuSans-Bold.ttf")),
+  ]);
+  const fonts: Fonts = {
+    font: await pdf.embedFont(fontBytes),
+    bold: await pdf.embedFont(boldBytes),
   };
-  for (const t of tickets) {
-    await drawTicketPage(doc, fonts, t);
+
+  for (const booking of bookings) {
+    await drawTicketPage(pdf, booking, fonts, `${origin}/check/${booking.reference}`);
   }
-  return doc.save();
+  return pdf.save();
 }

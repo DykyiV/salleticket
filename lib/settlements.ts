@@ -17,12 +17,23 @@ import { resolveCommission } from "@/lib/commission";
  * The net balance (balanceAmount + balanceDirection) says who owes whom.
  */
 
-/** Ticket statuses that count as a sale (cancelled/refunded are excluded). */
+/**
+ * Ticket statuses that count as a sale (cancelled/refunded are excluded).
+ * AWAITING_PAYMENT (online payment window still open) is reported like
+ * RESERVED: part of the sale, but "unpaid" and outside the balance.
+ */
 export const SELLABLE_STATUSES: TicketStatus[] = [
   TicketStatus.RESERVED,
+  TicketStatus.AWAITING_PAYMENT,
   TicketStatus.PAID_ONLINE,
   TicketStatus.PAID_CASH,
 ];
+
+/**
+ * Only third-party carriers are settled — the platform's own fleet has no
+ * counterparty (see Carrier.isOwnFleet).
+ */
+const THIRD_PARTY_TRIP = { carrier: { isOwnFleet: false } } as const;
 
 export type BalanceDirection = "TO_CARRIER" | "TO_AGENT" | "ZERO";
 
@@ -126,6 +137,7 @@ export async function getPeriodReport(period: string): Promise<CarrierReportRow[
     where: {
       status: { in: SELLABLE_STATUSES },
       createdAt: { gte: start, lt: end },
+      trip: THIRD_PARTY_TRIP,
     },
     select: {
       status: true,
@@ -224,6 +236,7 @@ export async function generateSettlements(
       createdAt: { gte: start, lt: end },
       settlementId: null,
       tripId: { not: null },
+      trip: THIRD_PARTY_TRIP,
     },
     select: {
       id: true,

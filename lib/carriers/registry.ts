@@ -1,3 +1,4 @@
+import { asolCarrierAdapter } from "@/lib/carriers/asol";
 import { mockCarrierAdapter } from "@/lib/carriers/mock";
 import { mockFlightAdapter } from "@/lib/carriers/mock-flights";
 import { mockTrainAdapter } from "@/lib/carriers/mock-trains";
@@ -20,6 +21,7 @@ import type {
  *   - CARRIER_GUNSEL_API_KEY=...
  */
 const registry: CarrierAdapter[] = [
+  asolCarrierAdapter,
   mockCarrierAdapter,
   mockFlightAdapter,
   mockTrainAdapter,

@@ -30,3 +30,5 @@ tsconfig.tsbuildinfo
 /prisma/dev.db
 /prisma/dev.db-journal
 
+/public/uploads
+

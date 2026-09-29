@@ -47,8 +47,12 @@ export async function getCurrentUser() {
         id: true,
         email: true,
         role: true,
-        canViewAllTickets: true,
-        canEditAllTickets: true,
+        displayName: true,
+        avatarUrl: true,
+        canEditDepartures: true,
+        canHideStops: true,
+        canHideSeats: true,
+        notifyChannels: true,
         createdAt: true,
       },
     });
@@ -60,8 +64,11 @@ export async function getCurrentUser() {
     id: session.sub,
     email: session.email,
     role: session.role,
-    canViewAllTickets: false,
-    canEditAllTickets: false,
+    displayName: null,
+    avatarUrl: null,
+    canEditDepartures: false,
+    canHideStops: false,
+    canHideSeats: false,
     createdAt: new Date(0),
   };
 }

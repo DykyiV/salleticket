@@ -1,49 +1,36 @@
+import type { Role } from "@prisma/client";
 import { hasRoleAtLeast } from "@/lib/auth/constants";
-import type { SessionPayload } from "@/lib/auth/jwt";
-import { prisma } from "@/lib/db";
+import { can } from "@/lib/auth/permissions";
 
-export type TicketPermissions = {
-  isAdmin: boolean;
+export type TicketAccess = {
   isOwner: boolean;
-  canViewAll: boolean;
-  canEditAll: boolean;
-  /** May see the ticket and its details (view rules). */
+  isStaff: boolean;
+  /** May see the ticket and its comments. */
   canView: boolean;
-  /** May edit passenger data / add comments (edit rules). */
+  /** May add comments / edit passenger details. */
   canEdit: boolean;
 };
 
 /**
- * Resolve what the session user may do with a ticket owned by `ticketUserId`.
+ * What the session user may do with a ticket owned by `ticketUserId`.
  *
- * View: owner, users with the admin-granted `canViewAllTickets` flag, admins.
- * Edit: owner, users with the admin-granted `canEditAllTickets` flag, admins.
- * The permission flags are read from the DB (they are not in the JWT).
+ * Same audience as the rest of the cabinet: the passenger who booked it, and
+ * staff (AGENT and above — who can already list every ticket). Editing by
+ * staff additionally needs the `booking.edit` grant from the role/permission
+ * matrix (/cabinet/settings), replacing main's per-user canViewAllTickets /
+ * canEditAllTickets flags with the single permission system.
  */
-export async function getTicketPermissions(
-  session: SessionPayload,
+export async function ticketAccess(
+  session: { sub: string; role: Role },
   ticketUserId: string
-): Promise<TicketPermissions> {
-  const isAdmin = hasRoleAtLeast(session.role, "ADMIN");
+): Promise<TicketAccess> {
   const isOwner = ticketUserId === session.sub;
-
-  let canViewAll = false;
-  let canEditAll = false;
-  if (!isAdmin && !isOwner) {
-    const user = await prisma.user.findUnique({
-      where: { id: session.sub },
-      select: { canViewAllTickets: true, canEditAllTickets: true },
-    });
-    canViewAll = user?.canViewAllTickets ?? false;
-    canEditAll = user?.canEditAllTickets ?? false;
-  }
-
+  const isStaff = hasRoleAtLeast(session.role, "AGENT");
+  const staffCanEdit = isStaff && (await can({ role: session.role }, "booking.edit"));
   return {
-    isAdmin,
     isOwner,
-    canViewAll,
-    canEditAll,
-    canView: isAdmin || isOwner || canViewAll,
-    canEdit: isAdmin || isOwner || canEditAll,
+    isStaff,
+    canView: isOwner || isStaff,
+    canEdit: isOwner || staffCanEdit,
   };
 }

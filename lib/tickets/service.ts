@@ -1,14 +1,9 @@
-import type {
-  Booking,
-  Prisma,
-  PrismaClient,
-  Ticket,
-  TicketStatus,
-} from "@prisma/client";
+import type { Prisma, PrismaClient, Ticket, TicketStatus, Booking } from "@prisma/client";
 import { prisma } from "@/lib/db";
+import { updateTicketVersioned } from "@/lib/tickets/version";
 import {
-  diffChanges,
   recordTicketHistory,
+  diffChanges,
   type RequestMeta,
   type TicketHistorySource,
 } from "@/lib/tickets/history";
@@ -70,9 +65,8 @@ export async function updateTicketStatus(
     const changed = oldStatus !== newStatus;
 
     const updated = changed
-      ? await db.ticket.update({
-          where: { id: ticketId },
-          data: { status: newStatus },
+      ? await updateTicketVersioned(db, ticketId, ticket.version, {
+          status: newStatus,
         })
       : ticket;
 
@@ -97,10 +91,6 @@ export async function updateTicketStatus(
   return prisma.$transaction((t) => run(t));
 }
 
-// ---------------------------------------------------------------------------
-// Passenger details editing
-// ---------------------------------------------------------------------------
-
 export class BookingNotFoundError extends Error {
   constructor(ticketId: string) {
     super(`Ticket has no booking: ${ticketId}`);
@@ -119,7 +109,6 @@ export type PassengerDetailsInput = {
   firstName?: string;
   lastName?: string;
   phone?: string;
-  /** Empty string clears the email (column is nullable). */
   email?: string | null;
 };
 
@@ -139,17 +128,23 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 function cleanName(value: string | undefined, field: string): string | undefined {
   if (value === undefined) return undefined;
   const v = value.trim();
-  if (v.length === 0) throw new PassengerValidationError(`${field} must not be empty`);
-  if (v.length > 100) throw new PassengerValidationError(`${field} is too long (max 100)`);
+  if (v.length === 0) {
+    throw new PassengerValidationError(`${field} не може бути порожнім`);
+  }
+  if (v.length > 100) {
+    throw new PassengerValidationError(`${field} занадто довге`);
+  }
   return v;
 }
 
 function cleanPhone(value: string | undefined): string | undefined {
   if (value === undefined) return undefined;
   const v = value.trim();
-  if (v.length === 0) throw new PassengerValidationError("phone must not be empty");
+  if (v.length === 0) {
+    throw new PassengerValidationError("Вкажіть телефон");
+  }
   if (!/^[+0-9()\-\s]{5,20}$/.test(v)) {
-    throw new PassengerValidationError("phone has an invalid format");
+    throw new PassengerValidationError("Некоректний телефон");
   }
   return v;
 }
@@ -158,18 +153,12 @@ function cleanEmail(value: string | null | undefined): string | null | undefined
   if (value === undefined) return undefined;
   const v = (value ?? "").trim();
   if (v === "") return null;
-  if (!EMAIL_RE.test(v)) throw new PassengerValidationError("email has an invalid format");
+  if (!EMAIL_RE.test(v)) {
+    throw new PassengerValidationError("Некоректний email");
+  }
   return v;
 }
 
-/**
- * Edit passenger details stored on the ticket's Booking (firstName, lastName,
- * phone, email) and append an audit row with the full field diff.
- *
- * Only the provided fields are touched. If nothing actually changed, no
- * history row is written and `changed` is false. Runs in a single
- * transaction; can be re-used inside an existing $transaction via `tx`.
- */
 export async function updatePassengerDetails(
   ticketId: string,
   input: PassengerDetailsInput,
@@ -186,8 +175,8 @@ export async function updatePassengerDetails(
     if (!ticket.booking) throw new BookingNotFoundError(ticketId);
 
     const next: Prisma.BookingUpdateInput = {};
-    const firstName = cleanName(input.firstName, "firstName");
-    const lastName = cleanName(input.lastName, "lastName");
+    const firstName = cleanName(input.firstName, "Імʼя");
+    const lastName = cleanName(input.lastName, "Прізвище");
     const phone = cleanPhone(input.phone);
     const email = cleanEmail(input.email);
     if (firstName !== undefined) next.firstName = firstName;
@@ -205,7 +194,8 @@ export async function updatePassengerDetails(
       firstName: (next.firstName as string | undefined) ?? before.firstName,
       lastName: (next.lastName as string | undefined) ?? before.lastName,
       phone: (next.phone as string | undefined) ?? before.phone,
-      email: next.email !== undefined ? (next.email as string | null) : before.email,
+      email:
+        next.email !== undefined ? (next.email as string | null) : before.email,
     };
     const changes = diffChanges(before, after);
 
@@ -217,12 +207,13 @@ export async function updatePassengerDetails(
       where: { id: ticket.booking.id },
       data: next,
     });
+    await updateTicketVersioned(db, ticketId, ticket.version, {});
 
     await recordTicketHistory(db, {
       ticketId,
       action: "PASSENGER_UPDATED",
       changes,
-      source: options.source ?? "ADMIN_PANEL",
+      source: options.source ?? "ACCOUNT",
       changedBy: userId,
       request: options.request,
     });
