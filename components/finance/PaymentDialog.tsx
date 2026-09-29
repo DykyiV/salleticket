@@ -13,7 +13,7 @@ type Props = {
 
 const LABELS = {
   CARRIER: { OUTGOING: "Ми сплатили перевізнику", INCOMING: "Перевізник сплатив нам" },
-  AGENT: { OUTGOING: "Ми виплатили агенту", INCOMING: "Агент повернув / сплатив нам" },
+  AGENT: { OUTGOING: "Ми виплатили агенту (винагорода)", INCOMING: "Агент здав нам готівку" },
 } as const;
 
 const today = () => new Date().toISOString().slice(0, 10);

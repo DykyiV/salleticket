@@ -47,6 +47,7 @@ const FIELD_LABEL: Record<string, string> = {
   ageCategory: "Вікова категорія",
   tariff: "Тариф",
   commission: "Комісія",
+  cashCollector: "Готівку отримав",
 };
 
 type Obj = Record<string, unknown>;

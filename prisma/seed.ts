@@ -1006,7 +1006,13 @@ async function seedPartnerSales() {
     { reference: "AB-20003", carrier: "EuroLines Plus", from: "Lviv", to: "Prague", price: 62, status: TicketStatus.PAID_ONLINE, seller: admin, createdAt: prevMonth(18), firstName: "Ірина", lastName: "Савчук", phone: "+380671230003" },
     { reference: "AB-20004", carrier: "EuroLines Plus", from: "Lviv", to: "Prague", price: 62, status: TicketStatus.RESERVED, seller: agent, createdAt: prevMonth(20), firstName: "Богдан", lastName: "Гнатюк", phone: "+380671230004" },
     { reference: "AB-20005", carrier: "Grandes Tour", from: "Kyiv", to: "Lviv", price: 40, status: TicketStatus.PAID_ONLINE, seller: agent, createdAt: thisMonth, firstName: "Софія", lastName: "Кравець", phone: "+380671230005" },
-  ];
+    // The agent took this passenger's cash at the desk and still holds it.
+    { reference: "AB-20006", carrier: "EuroLines Plus", from: "Lviv", to: "Prague", price: 60, status: TicketStatus.PAID_CASH, seller: agent, createdAt: thisMonth, firstName: "Марта", lastName: "Олійник", phone: "+380671230006", cashByAgent: true },
+  ] as Array<{
+    reference: string; carrier: string; from: string; to: string; price: number;
+    status: TicketStatus; seller: typeof agent; createdAt: Date;
+    firstName: string; lastName: string; phone: string; cashByAgent?: boolean;
+  }>;
 
   for (const sale of sales) {
     if (await prisma.booking.findUnique({ where: { reference: sale.reference } })) continue;
@@ -1034,6 +1040,9 @@ async function seedPartnerSales() {
         commissionAmount: split.commissionAmount,
         carrierAmount: split.carrierAmount,
         createdAt: sale.createdAt,
+        ...(sale.cashByAgent
+          ? { cashCollectedById: sale.seller.id, cashCollectedAt: sale.createdAt }
+          : {}),
         booking: {
           create: {
             reference: sale.reference,

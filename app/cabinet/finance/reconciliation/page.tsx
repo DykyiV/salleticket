@@ -14,7 +14,7 @@ const signed = (n: number) => (n < -0.004 ? `−${eur(-n)}` : eur(n));
 
 const DIRECTION_TEXT = {
   CARRIER: { OUTGOING: "Ми → перевізнику", INCOMING: "Перевізник → нам" },
-  AGENT: { OUTGOING: "Ми → агенту", INCOMING: "Агент → нам" },
+  AGENT: { OUTGOING: "Ми → агенту", INCOMING: "Агент здав / → нам" },
 } as const;
 
 /**
@@ -74,12 +74,13 @@ export default async function ReconciliationPage() {
       />
       <Section
         title="Агенти"
-        note="Нараховано — винагорода агента: % від оплачених квитків, які він оформив (% фіксується на квитку в момент продажу). Відсоток задається у вкладці «Автозвіти»."
-        docsLabel="Оплачених квитків"
+        note="Взаєморозрахунок: винагорода агента (% від оплачених квитків, які він оформив; % фіксується на квитку в момент продажу) мінус готівка пасажирів, яку агент отримав і тримає в себе. Нараховано = винагорода − готівка: плюс — ми винні агенту, мінус — агент має здати нам. «+ Платіж → Агент здав готівку» зменшує його борг."
+        docsLabel="Квитків"
         rows={agents}
         total={totals.agents}
         canEdit={canEdit}
-        detailLabel="Винагорода"
+        detailLabel="Винагорода, %"
+        agentCols
       />
 
       <section className="mt-10">
@@ -147,7 +148,9 @@ function Section({
   rows,
   total,
   canEdit,
+  agentCols = false,
 }: {
+  agentCols?: boolean;
   title: string;
   note: string;
   docsLabel: string;
@@ -166,7 +169,13 @@ function Section({
             <tr>
               <Th>{title === "Агенти" ? "Агент" : "Перевізник"}</Th>
               <Th className="text-right">{docsLabel}</Th>
-              <Th>{detailLabel}</Th>
+              {agentCols ? null : <Th>{detailLabel}</Th>}
+              {agentCols ? (
+                <>
+                  <Th className="text-right">Винагорода</Th>
+                  <Th className="text-right">Готівка в нього</Th>
+                </>
+              ) : null}
               <Th className="text-right">1. Нараховано</Th>
               <Th className="text-right">2. Виплачено</Th>
               <Th className="text-right">3. Борг</Th>
@@ -177,7 +186,7 @@ function Section({
           <tbody className="divide-y divide-slate-100">
             {rows.length === 0 ? (
               <tr>
-                <td colSpan={canEdit ? 8 : 7} className="px-4 py-8 text-center text-slate-500">
+                <td colSpan={(canEdit ? 8 : 7) + (agentCols ? 1 : 0)} className="px-4 py-8 text-center text-slate-500">
                   Немає контрагентів.
                 </td>
               </tr>
@@ -191,7 +200,20 @@ function Section({
                       <div className="text-[11px] text-slate-400">{eur(r.salesGross)}</div>
                     ) : null}
                   </td>
-                  <td className="whitespace-nowrap px-4 py-3 text-slate-600">{r.detail ?? "—"}</td>
+                  {agentCols ? null : (
+                    <td className="whitespace-nowrap px-4 py-3 text-slate-600">{r.detail ?? "—"}</td>
+                  )}
+                  {agentCols ? (
+                    <>
+                      <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums text-emerald-700">
+                        {eur(r.reward ?? 0)}
+                        <div className="text-[11px] text-slate-400">{r.detail ?? "без %"}</div>
+                      </td>
+                      <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums text-sky-700">
+                        {(r.cashHeld ?? 0) > 0 ? `−${eur(r.cashHeld ?? 0)}` : eur(0)}
+                      </td>
+                    </>
+                  ) : null}
                   <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums text-slate-700">{signed(r.accrued)}</td>
                   <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums text-slate-700">{signed(r.paid)}</td>
                   <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums font-semibold text-slate-900">
@@ -212,9 +234,19 @@ function Section({
           {rows.length > 0 ? (
             <tfoot className="bg-slate-50 font-semibold text-slate-900">
               <tr>
-                <td className="px-4 py-3" colSpan={3}>
+                <td className="px-4 py-3" colSpan={agentCols ? 2 : 3}>
                   Разом (сальдо)
                 </td>
+                {agentCols ? (
+                  <>
+                    <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums text-emerald-700">
+                      {eur(rows.reduce((s, r) => s + (r.reward ?? 0), 0))}
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums text-sky-700">
+                      −{eur(rows.reduce((s, r) => s + (r.cashHeld ?? 0), 0))}
+                    </td>
+                  </>
+                ) : null}
                 <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums">{signed(total.accrued)}</td>
                 <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums">{signed(total.paid)}</td>
                 <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums">{eur(Math.abs(total.debt))}</td>

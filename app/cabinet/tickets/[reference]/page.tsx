@@ -46,6 +46,7 @@ export default async function CabinetTicketEditPage(
         include: {
           history: { orderBy: { timestamp: "desc" } },
           comments: { orderBy: { createdAt: "asc" } },
+          cashCollectedBy: { select: { email: true, displayName: true } },
           legs: {
             orderBy: { order: "asc" },
             include: {
@@ -347,6 +348,16 @@ export default async function CabinetTicketEditPage(
           <dd className="text-right font-semibold tabular-nums">
             {eur(booking.finalPrice)}
           </dd>
+          {booking.ticket.status === "PAID_CASH" ? (
+            <>
+              <dt className="text-slate-500">Готівку отримав</dt>
+              <dd className="text-right">
+                {booking.ticket.cashCollectedBy
+                  ? booking.ticket.cashCollectedBy.displayName ?? booking.ticket.cashCollectedBy.email
+                  : "Водій / перевізник"}
+              </dd>
+            </>
+          ) : null}
         </dl>
         {payment ? (
           <div className="mt-4 rounded-xl border border-violet-200 bg-violet-50 px-4 py-3 text-sm">

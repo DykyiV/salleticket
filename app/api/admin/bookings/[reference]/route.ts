@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { CashCollectorError, resolveCashCollector } from "@/lib/finance/cash";
 import { Prisma, TicketStatus } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { requireRole } from "@/lib/auth/guard";
@@ -52,6 +53,8 @@ export async function GET(_req: NextRequest, props: Params) {
 type PatchBody = {
   status?: string;
   action?: string;
+  /** PAID_CASH only: "ME" (this admin / cash desk holds it) or "CARRIER". */
+  cashCollector?: string;
 };
 
 export async function PATCH(req: NextRequest, props: Params) {
@@ -87,11 +90,24 @@ export async function PATCH(req: NextRequest, props: Params) {
     return NextResponse.json({ error: "Booking not found" }, { status: 404 });
   }
 
+  let cashCollector;
+  if (nextStatus === TicketStatus.PAID_CASH) {
+    try {
+      cashCollector = await resolveCashCollector(session.sub, body.cashCollector);
+    } catch (err) {
+      if (err instanceof CashCollectorError) {
+        return NextResponse.json({ error: err.message }, { status: 400 });
+      }
+      throw err;
+    }
+  }
+
   try {
     await updateTicketStatus(booking.ticket.id, nextStatus, session.sub, {
       source: "ADMIN_PANEL",
       action: body.action,
       request: meta,
+      cashCollector,
     });
   } catch (err) {
     if (err instanceof TicketNotFoundError) {

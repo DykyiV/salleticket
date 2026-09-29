@@ -2,6 +2,8 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { prisma } from "@/lib/db";
 import { generateSettlements, markSettlementPaid } from "@/lib/settlements";
 import { getReconciliation, parsePaymentInput, PaymentInputError, recordPayment } from "@/lib/finance/reconciliation";
+import { resolveCashCollector, CashCollectorError, CARRIER_CASH_LABEL } from "@/lib/finance/cash";
+import { updateTicketStatus } from "@/lib/tickets/service";
 import {
   AutoReportInputError,
   listAutoReportRows,
@@ -50,9 +52,10 @@ async function sale(opts: {
   carrierId: string;
   userId: string;
   price: number;
-  status: "PAID_ONLINE" | "PAID_CASH" | "RESERVED";
+  status: "PAID_ONLINE" | "PAID_CASH" | "RESERVED" | "CANCELLED";
   commissionPercent?: number;
   agentRewardPercent?: number | null;
+  cashCollectedById?: string | null;
 }) {
   const trip = await prisma.trip.create({
     data: {
@@ -77,12 +80,13 @@ async function sale(opts: {
       commissionAmount: commission,
       carrierAmount: Math.round((opts.price - commission) * 100) / 100,
       agentRewardPercent: opts.agentRewardPercent ?? null,
+      cashCollectedById: opts.cashCollectedById ?? null,
       createdAt: IN_PERIOD,
     },
   });
 }
 
-async function user(email: string, role: "CUSTOMER" | "AGENT" = "CUSTOMER", agentRewardPercent: number | null = null) {
+async function user(email: string, role: "CUSTOMER" | "AGENT" | "ADMIN" = "CUSTOMER", agentRewardPercent: number | null = null) {
   return prisma.user.create({ data: { email, password: "x", role, agentRewardPercent } });
 }
 
@@ -202,6 +206,68 @@ describe("agent reconciliation", () => {
     await user("reseller@test.local", "CUSTOMER", 3);
     const names = (await getReconciliation()).agents.map((a) => a.name);
     expect(names).toEqual(["agent@test.local", "reseller@test.local"]);
+  });
+});
+
+describe("cash held by agents until the mutual settlement", () => {
+  it("nets the reward against the cash the agent holds; handing the cash in closes it", async () => {
+    const gt = await carrier("Grandes Tour");
+    const agent = await user("agent@test.local", "AGENT", 5);
+    await sale({ carrierId: gt.id, userId: agent.id, price: 100, status: "PAID_ONLINE" }); // reward 5
+    await sale({ carrierId: gt.id, userId: agent.id, price: 60, status: "PAID_CASH", cashCollectedById: agent.id }); // reward 3, cash 60
+    // Cash taken, then the trip was cancelled and the money went back.
+    await sale({ carrierId: gt.id, userId: agent.id, price: 45, status: "CANCELLED", cashCollectedById: agent.id });
+    // Paid to the driver: not the agent's cash.
+    await sale({ carrierId: gt.id, userId: agent.id, price: 30, status: "PAID_CASH" }); // reward 1.5
+
+    let [row] = (await getReconciliation()).agents;
+    expect(row).toMatchObject({ reward: 9.5, cashHeld: 60, accrued: -50.5, paid: 0, debt: -50.5, side: "THEY_OWE" });
+
+    await recordPayment(parsePaymentInput({ kind: "AGENT", counterpartyId: agent.id, direction: "INCOMING", amount: 50.5, paidAt: "2026-09-02", note: "здав готівку" }), "acc@test");
+    [row] = (await getReconciliation()).agents;
+    expect(row).toMatchObject({ paid: -50.5, debt: 0, side: "SETTLED" });
+  });
+
+  it("a cash desk (any staff member holding cash) is listed as a counterparty", async () => {
+    const gt = await carrier("Grandes Tour");
+    const desk = await user("desk@test.local", "ADMIN");
+    const buyer = await user("buyer@test.local");
+    await sale({ carrierId: gt.id, userId: buyer.id, price: 70, status: "PAID_CASH", cashCollectedById: desk.id });
+    const [row] = (await getReconciliation()).agents;
+    expect(row).toMatchObject({ name: "desk@test.local", reward: 0, cashHeld: 70, debt: -70, side: "THEY_OWE" });
+  });
+
+  it("the carrier is owed its share of cash our agent took", async () => {
+    const gt = await carrier("Grandes Tour", 10);
+    const agent = await user("agent@test.local", "AGENT", 5);
+    await sale({ carrierId: gt.id, userId: agent.id, price: 100, status: "PAID_CASH", cashCollectedById: agent.id });
+    const [s] = await generateSettlements(PERIOD, "test");
+    expect(s).toMatchObject({ balanceAmount: 90, balanceDirection: "TO_CARRIER" });
+  });
+
+  it("marking PAID_CASH records who took the cash; agents default to themselves", async () => {
+    const gt = await carrier("Grandes Tour");
+    const agent = await user("agent@test.local", "AGENT", 5);
+    const admin = await user("admin@test.local", "ADMIN");
+    const t1 = await sale({ carrierId: gt.id, userId: agent.id, price: 40, status: "RESERVED" });
+    const t2 = await sale({ carrierId: gt.id, userId: agent.id, price: 40, status: "RESERVED" });
+
+    const byAgent = await resolveCashCollector(agent.id);
+    expect(byAgent).toEqual({ id: agent.id, label: "agent@test.local", choice: "ME" });
+    expect(await resolveCashCollector(admin.id)).toEqual({ id: null, label: CARRIER_CASH_LABEL, choice: "CARRIER" });
+    expect((await resolveCashCollector(admin.id, "ME")).id).toBe(admin.id);
+    await expect(resolveCashCollector(agent.id, "BANK")).rejects.toThrow(CashCollectorError);
+
+    await updateTicketStatus(t1.id, "PAID_CASH", agent.id, { cashCollector: byAgent });
+    await updateTicketStatus(t2.id, "PAID_CASH", admin.id, { cashCollector: await resolveCashCollector(admin.id) });
+    const [a, b] = await Promise.all([
+      prisma.ticket.findUniqueOrThrow({ where: { id: t1.id }, include: { history: true } }),
+      prisma.ticket.findUniqueOrThrow({ where: { id: t2.id } }),
+    ]);
+    expect(a.cashCollectedById).toBe(agent.id);
+    expect(a.cashCollectedAt).toBeInstanceOf(Date);
+    expect(JSON.parse(a.history[0].changes ?? "{}").cashCollector).toEqual({ from: null, to: "agent@test.local" });
+    expect(b.cashCollectedById).toBeNull();
   });
 });
 

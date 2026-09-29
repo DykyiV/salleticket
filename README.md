@@ -87,10 +87,18 @@ page exposes it as tabs. A new integration implements `CarrierAdapter`
 - **Reconciliation** (`lib/finance/reconciliation.ts`, page
   `/cabinet/finance/reconciliation`): per carrier and per sales agent —
   accrued (carrier settlement balances; agent reward = % of the agent's paid
-  sales, frozen on the ticket as `agentRewardPercent`), paid (recorded
+  sales, frozen on the ticket as `agentRewardPercent`, minus passengers'
+  cash the agent took and still holds), paid (recorded
   `CounterpartyPayment`s, partial allowed) and the open balance. Marking a
   settlement paid records the uncovered remainder, capped by the carrier's
   open balance so nothing is counted twice.
+- **Cash held by agents**: marking a ticket «Оплачено готівкою» asks who
+  took the money — «Готівку отримав я» (agent / cash desk, stored as
+  `Ticket.cashCollectedById`) or «Готівка водію в автобусі». Cash taken by
+  our agent is agency money for the carrier settlement (we owe the carrier
+  its share) and a debt of the agent until it is handed in («+ Платіж →
+  Агент здав нам готівку»). Agents default to «я» when the API gets no
+  choice (`cashCollector: "ME" | "CARRIER"`), other staff to the driver.
 - **Auto-reports** (`lib/finance/autoReports.ts`, page
   `/cabinet/finance/auto-reports`): per carrier / agent — send or not, day of
   month (1–28), e-mail, agent reward %. `.github/workflows/settlements.yml`

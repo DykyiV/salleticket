@@ -15,13 +15,15 @@ export async function GET() {
   const line = (type: string) => (r: ReconciliationRow) => [
     type,
     r.name,
+    r.reward ?? null,
+    r.cashHeld ?? null,
     r.accrued,
     r.paid,
     Math.abs(r.debt),
     SIDE_LABEL[r.side],
   ];
   const csv = toCsv(
-    ["Тип", "Контрагент", "Нараховано, EUR", "Виплачено, EUR", "Борг, EUR", "Хто кому винен"],
+    ["Тип", "Контрагент", "Винагорода агента, EUR", "Готівка в агента, EUR", "Нараховано, EUR", "Виплачено, EUR", "Борг, EUR", "Хто кому винен"],
     [...carriers.map(line("Перевізник")), ...agents.map(line("Агент"))]
   );
   const date = new Date().toISOString().slice(0, 10);
