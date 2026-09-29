@@ -62,6 +62,13 @@ optional `Payment`, per-leg seats (`TicketLeg`) and comments.
 
 `TicketStatus`: `RESERVED` (pay the driver) · `AWAITING_PAYMENT` (online,
 with a deadline) · `PAID_ONLINE` · `PAID_CASH` · `CANCELLED` · `REFUNDED`.
+Staff never pick a status by hand: it follows from the money actions on the
+ticket card (pay online → `AWAITING_PAYMENT`, take cash → `PAID_CASH`,
+cancel an unpaid booking → `CANCELLED`, refund a paid one → `REFUNDED`) and
+from the payment system (`PAID_ONLINE`). A booking not paid online within
+`paymentDeadlineHours` is cancelled automatically and the passenger is told
+by SMS and e-mail (`lib/payments.ts`, swept hourly by
+`POST /api/cron/payments` and whenever tickets are opened).
 
 ### Carriers and transport types
 
@@ -148,12 +155,12 @@ Old `/admin/*`, `/account` and `/agent` links redirect into the cabinet.
 | Search | `GET /api/search?from&to&date&passengers&transport` |
 | Seats | `GET /api/trips/[id]/seats`, `POST/DELETE /api/trips/[id]/holds` |
 | Booking | `POST /api/booking` (auth; `passengers[]` or legacy `passenger`), `GET /api/booking[?reference=]` |
-| Payment | `/api/payments/[reference]/{pay,status}`, page `/pay/[reference]` |
+| Payment | `/api/payments/[reference]/{start,pay,status}`, page `/pay/[reference]` |
 | Own ticket | `/api/account/tickets/[id]/{passenger,status,seat,return,trip,price-recalc,comments}` |
 | Documents | `GET /api/tickets/[reference]/pdf` (owner or AGENT+), `GET /api/tickets/bulk-pdf?ids=` (AGENT+, ≤100), `GET /api/tickets/[reference]/wallet`, public check `/check/[reference]` |
 | Finance | `/api/finance/settlements` (+ `[id]/{invoice,act,send,pay}`), `/api/finance/reconciliation` (+ `/csv`), `/api/finance/payments` (+ `[id]`), `/api/finance/auto-reports`, `/api/finance/commissions`, `/api/finance/carrier-report/csv` — `finance.read` / `finance.edit` |
 | Admin | `/api/admin/*` (users, permissions, routes, departures, buses, tariffs, discounts, settings, `sms`) — ADMIN |
-| Cron | `POST /api/cron/auto-reports` (daily), `POST /api/cron/settlements` (all carriers at once) — Bearer `CRON_SECRET` |
+| Cron | `POST /api/cron/payments` (hourly), `POST /api/cron/auto-reports` (daily), `POST /api/cron/settlements` (all carriers at once) — Bearer `CRON_SECRET` |
 
 CSV exports use a UTF-8 BOM, `;` and CRLF so Excel in Ukrainian/EU locales
 opens Cyrillic correctly, and prefix formula-like cells with `'` (CSV

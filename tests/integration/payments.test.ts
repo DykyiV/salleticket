@@ -1,9 +1,12 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { prisma } from "@/lib/db";
-import { reconcileTicketPayment } from "@/lib/payments";
+import { reconcileTicketPayment, startOnlinePayment, StartPaymentError } from "@/lib/payments";
+import { updateTicketStatus } from "@/lib/tickets/service";
 import { updateTicketVersioned, VersionConflictError } from "@/lib/tickets/version";
 
 async function clean() {
+  await prisma.notification.deleteMany();
+  await prisma.siteSetting.deleteMany();
   await prisma.seatHold.deleteMany();
   await prisma.payment.deleteMany();
   await prisma.ticketHistory.deleteMany();
@@ -90,19 +93,38 @@ describe("reconcileTicketPayment", () => {
     expect(fresh?.status).toBe("AWAITING_PAYMENT");
   });
 
-  it("expires the online discount after the 24h deadline", async () => {
+  it("cancels the booking when the 24h deadline passes unpaid, and tells the passenger", async () => {
     const { ticket, payment } = await makeAwaitingTicket({
       sent: false,
       deadlineInHours: -1,
     });
+    await prisma.booking.create({
+      data: {
+        ticketId: ticket.id,
+        reference: "AB-55555",
+        firstName: "Олена",
+        lastName: "Коваленко",
+        phone: "+380671234567",
+        email: "olena@example.com",
+        finalPrice: 94.05,
+      },
+    });
     await reconcileTicketPayment(ticket.id);
     const fresh = await prisma.ticket.findUnique({ where: { id: ticket.id } });
-    expect(fresh?.status).toBe("RESERVED");
-    expect(fresh?.finalPrice).toBe(99);
-    const expired = await prisma.payment.findUnique({
-      where: { id: payment.id },
-    });
+    expect(fresh?.status).toBe("CANCELLED");
+    const expired = await prisma.payment.findUnique({ where: { id: payment.id } });
     expect(expired?.status).toBe("EXPIRED");
+    const actions = (
+      await prisma.ticketHistory.findMany({ where: { ticketId: ticket.id }, orderBy: { timestamp: "asc" } })
+    ).map((h) => h.action);
+    expect(actions).toEqual(expect.arrayContaining(["PAYMENT_EXPIRED", "SMS_SENT", "EMAIL_SENT"]));
+  });
+
+  it("does not cancel a payment already sent to the payment system — it waits to settle", async () => {
+    const { ticket } = await makeAwaitingTicket({ sent: true, settleInMinutes: 25, deadlineInHours: -1 });
+    await reconcileTicketPayment(ticket.id);
+    const fresh = await prisma.ticket.findUnique({ where: { id: ticket.id } });
+    expect(fresh?.status).toBe("AWAITING_PAYMENT");
   });
 
   it("does not touch tickets that are already paid", async () => {
@@ -145,5 +167,42 @@ describe("updateTicketVersioned (optimistic concurrency)", () => {
     ).rejects.toBeInstanceOf(VersionConflictError);
     const fresh = await prisma.ticket.findUnique({ where: { id: ticket.id } });
     expect(fresh?.seatNumber).toBe(11);
+  });
+});
+
+describe("status follows the money", () => {
+  beforeEach(clean);
+
+  it("«Оплатити онлайн» on a reserved ticket starts the countdown with the online discount", async () => {
+    const { ticket } = await makeAwaitingTicket({ sent: false });
+    await prisma.payment.deleteMany();
+    await prisma.ticket.update({ where: { id: ticket.id }, data: { status: "RESERVED", finalPrice: 99 } });
+
+    const payment = await startOnlinePayment(ticket.id, ticket.userId);
+    expect(payment).toMatchObject({ amount: 94.05, fullAmount: 99, status: "PENDING" });
+    const hours = (payment.deadlineAt.getTime() - Date.now()) / 3_600_000;
+    expect(hours).toBeGreaterThan(23.9);
+    const fresh = await prisma.ticket.findUniqueOrThrow({ where: { id: ticket.id } });
+    expect(fresh).toMatchObject({ status: "AWAITING_PAYMENT", finalPrice: 94.05 });
+
+    // Only a reserved ticket can start it.
+    await expect(startOnlinePayment(ticket.id, ticket.userId)).rejects.toBeInstanceOf(StartPaymentError);
+  });
+
+  it("paying cash at the desk instead voids the online payment and restores the full price", async () => {
+    const { ticket, payment } = await makeAwaitingTicket({ sent: false });
+    await updateTicketStatus(ticket.id, "PAID_CASH", ticket.userId, {
+      cashCollector: { id: ticket.userId, label: "desk" },
+    });
+    const fresh = await prisma.ticket.findUniqueOrThrow({ where: { id: ticket.id } });
+    expect(fresh).toMatchObject({ status: "PAID_CASH", finalPrice: 99, cashCollectedById: ticket.userId });
+    expect((await prisma.payment.findUniqueOrThrow({ where: { id: payment.id } })).status).toBe("CANCELLED");
+  });
+
+  it("cancelling while waiting for the online payment voids it too", async () => {
+    const { ticket, payment } = await makeAwaitingTicket({ sent: false });
+    await updateTicketStatus(ticket.id, "CANCELLED", ticket.userId);
+    expect((await prisma.payment.findUniqueOrThrow({ where: { id: payment.id } })).status).toBe("CANCELLED");
+    expect((await prisma.ticket.findUniqueOrThrow({ where: { id: ticket.id } })).status).toBe("CANCELLED");
   });
 });

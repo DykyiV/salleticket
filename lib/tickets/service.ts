@@ -74,9 +74,30 @@ export async function updateTicketStatus(
       changed && newStatus === "PAID_CASH" && options.cashCollector
         ? options.cashCollector
         : null;
+
+    // Leaving "awaiting online payment" any other way than the payment
+    // itself (paid at the desk, back to reserve, cancelled): the pending
+    // online payment is void and, if the ticket stays sold, the online
+    // discount no longer applies — the full price is restored.
+    let restoredPrice: number | null = null;
+    if (changed && oldStatus === "AWAITING_PAYMENT" && newStatus !== "PAID_ONLINE") {
+      const pending = await db.payment.findFirst({
+        where: { ticketId, status: { in: ["PENDING", "SENT"] } },
+        orderBy: { createdAt: "desc" },
+      });
+      if (pending) {
+        await db.payment.update({ where: { id: pending.id }, data: { status: "CANCELLED" } });
+        if (newStatus !== "CANCELLED" && pending.fullAmount !== ticket.finalPrice) {
+          restoredPrice = pending.fullAmount;
+          await db.booking.updateMany({ where: { ticketId }, data: { finalPrice: restoredPrice } });
+        }
+      }
+    }
+
     const updated = changed
       ? await updateTicketVersioned(db, ticketId, ticket.version, {
           status: newStatus,
+          ...(restoredPrice != null ? { finalPrice: restoredPrice } : {}),
           ...(cash
             ? { cashCollectedById: cash.id, cashCollectedAt: cash.id ? new Date() : null }
             : {}),
@@ -93,6 +114,9 @@ export async function updateTicketStatus(
         ? {
             status: { from: oldStatus, to: newStatus },
             ...(cash ? { cashCollector: { from: null, to: cash.label } } : {}),
+            ...(restoredPrice != null
+              ? { finalPrice: { from: ticket.finalPrice, to: restoredPrice } }
+              : {}),
           }
         : null,
       source: options.source ?? "API",

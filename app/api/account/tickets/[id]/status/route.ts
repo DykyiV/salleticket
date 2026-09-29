@@ -74,7 +74,12 @@ export async function PATCH(req: NextRequest, props: Params) {
   }
 
   if (!isStaff) {
-    if (ticket.status !== "RESERVED" || nextStatus !== "CANCELLED") {
+    // A passenger may only cancel an unpaid booking (reserved, or waiting
+    // for their online payment).
+    if (
+      (ticket.status !== "RESERVED" && ticket.status !== "AWAITING_PAYMENT") ||
+      nextStatus !== "CANCELLED"
+    ) {
       return NextResponse.json(
         { error: "Можна скасувати лише незаплачений квиток" },
         { status: 409 }

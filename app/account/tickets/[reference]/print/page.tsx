@@ -1,26 +1,24 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { headers } from "next/headers";
 import PrintTicketButton from "@/components/ticket/PrintTicketButton";
 import { getCurrentUser } from "@/lib/auth/session";
 import { hasRoleAtLeast } from "@/lib/auth/constants";
 import { prisma } from "@/lib/db";
-import { findStopForCity, boardingLabel, mapsUrl } from "@/lib/routes/boarding";
+import { findStopForCity, boardingLabel } from "@/lib/routes/boarding";
 import { formatUkDate } from "@/lib/routes/dates";
 import { weekdayName } from "@/lib/routes/weekdays";
-import {
-  AGE_LABEL,
-  eur,
-  TICKET_STATUS_LABEL,
-  TRIP_KIND_LABEL,
-} from "@/lib/tickets/labels";
+import { qrCodeDataUrl } from "@/lib/tickets/qrcode";
+import { AGE_LABEL, eur, TICKET_STATUS_LABEL, TRIP_KIND_LABEL } from "@/lib/tickets/labels";
+import { moneyState, priceBreakdown } from "@/lib/tickets/ticketMoney";
 
 export const dynamic = "force-dynamic";
 
-export default async function PrintTicketPage(
-  props: {
-    params: Promise<{ reference: string }>;
-  }
-) {
+/**
+ * Printed ticket — one A4 page, two columns like the ticket card: left the
+ * passenger and the trip, right the status, number, QR code and price.
+ */
+export default async function PrintTicketPage(props: { params: Promise<{ reference: string }> }) {
   const params = await props.params;
   const user = await getCurrentUser();
   if (!user) notFound();
@@ -30,180 +28,185 @@ export default async function PrintTicketPage(
     include: {
       ticket: {
         include: {
-          trip: {
-            include: {
-              carrier: true,
-              departure: { include: { stops: true, template: true } },
-            },
-          },
-          returnTrip: {
-            include: {
-              carrier: true,
-              departure: { include: { stops: true, template: true } },
-            },
-          },
+          cashCollectedBy: { select: { email: true, displayName: true } },
+          payments: { orderBy: { createdAt: "desc" }, take: 1 },
+          history: { orderBy: { timestamp: "desc" }, select: { newStatus: true, timestamp: true } },
+          legs: { orderBy: { order: "asc" }, include: { assignment: { include: { bus: true } } } },
+          trip: { include: { carrier: true, departure: { include: { stops: true, template: true } } } },
+          returnTrip: { include: { carrier: true, departure: { include: { stops: true, template: true } } } },
         },
       },
     },
   });
-
   if (!booking) notFound();
-  if (
-    booking.ticket.userId !== user.id &&
-    !hasRoleAtLeast(user.role, "AGENT")
-  ) {
-    notFound();
-  }
+  if (booking.ticket.userId !== user.id && !hasRoleAtLeast(user.role, "AGENT")) notFound();
 
-  const trip = booking.ticket.trip;
-  const returnTrip = booking.ticket.returnTrip;
+  const ticket = booking.ticket;
+  const trip = ticket.trip;
+  const returnTrip = ticket.returnTrip;
   const departure = trip?.departure;
   const assignsSeats = departure?.hasAssignedSeats !== false;
   const board = findStopForCity(departure?.stops ?? [], trip?.fromCity);
   const alight = findStopForCity(departure?.stops ?? [], trip?.toCity);
-  const boardUrl = board ? mapsUrl(board) : null;
-  const alightUrl = alight ? mapsUrl(alight) : null;
+  const bus =
+    ticket.legs.map((l) => (l.assignment ? `${l.assignment.bus.model ?? "Автобус"} ${l.assignment.bus.plate}` : null)).find(Boolean) ??
+    departure?.defaultBus ??
+    null;
+
+  const h = await headers();
+  const qr = await qrCodeDataUrl(
+    `${h.get("x-forwarded-proto") ?? "http"}://${h.get("x-forwarded-host") ?? h.get("host")}/check/${booking.reference}`
+  );
+
+  const payment = ticket.payments[0] ?? null;
+  const livePayment = payment && ["PENDING", "SENT", "SETTLED"].includes(payment.status) ? payment : null;
+  const price = priceBreakdown({
+    basePrice: ticket.basePrice,
+    finalPrice: ticket.finalPrice,
+    ageCategory: booking.ageCategory,
+    promoCode: booking.promoCode,
+    onlinePayment: livePayment,
+  });
+  const money = moneyState({
+    status: ticket.status,
+    finalPrice: ticket.finalPrice,
+    payment: livePayment,
+    cashCollector: ticket.cashCollectedBy ? ticket.cashCollectedBy.displayName ?? ticket.cashCollectedBy.email : null,
+    cashCollectedAt: ticket.cashCollectedAt,
+    statusSince: ticket.history.find((row) => row.newStatus === ticket.status)?.timestamp ?? null,
+  });
+  const moneyClass =
+    money.tone === "paid"
+      ? "border-emerald-600 bg-emerald-50 text-emerald-900"
+      : money.tone === "due"
+        ? "border-amber-500 bg-amber-50 text-amber-900"
+        : "border-slate-400 bg-slate-50 text-slate-700";
 
   return (
-    <main className="mx-auto min-h-screen max-w-xl bg-white p-8 text-slate-900 print:p-0">
-      <div className="rounded-2xl border border-slate-300 p-6 print:border-black">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <p className="text-xs uppercase tracking-widest text-slate-500">
-              Asol BUS · квиток
-            </p>
-            <h1 className="mt-1 text-2xl font-bold">{booking.reference}</h1>
-          </div>
-          <p className="text-right text-xs font-semibold uppercase">
-            {TICKET_STATUS_LABEL[booking.ticket.status]}
+    <main className="mx-auto min-h-screen max-w-[210mm] bg-white p-6 text-slate-900 print:max-w-none print:p-0">
+      <style>{"@page { size: A4; margin: 10mm } @media print { html, body { background: #fff } }"}</style>
+      <div className="rounded-2xl border border-slate-300 p-5 print:rounded-none print:border-black">
+        <header className="flex items-center justify-between border-b border-slate-200 pb-3">
+          <p className="text-sm font-bold tracking-wide">
+            Asol <span className="text-brand-600 print:text-black">BUS</span>
+            <span className="ml-2 font-normal text-slate-500">· посадковий квиток</span>
           </p>
+          <p className="text-xs text-slate-500">{TRIP_KIND_LABEL[ticket.tripKind] ?? ticket.tripKind}</p>
+        </header>
+
+        <div className="mt-4 grid grid-cols-[minmax(0,1fr)_62mm] gap-5">
+          {/* Left: passenger + trip */}
+          <div className="space-y-4 text-sm">
+            <section>
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Пасажир</p>
+              <p className="text-lg font-semibold">
+                {booking.firstName} {booking.lastName}
+              </p>
+              <p className="text-slate-600">
+                {AGE_LABEL[booking.ageCategory] ?? booking.ageCategory} · {booking.phone}
+                {booking.email ? ` · ${booking.email}` : ""}
+              </p>
+            </section>
+
+            <section>
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Рейс</p>
+              <p className="text-lg font-semibold">{trip ? `${trip.fromCity} → ${trip.toCity}` : "Маршрут"}</p>
+              {trip ? (
+                <p className="text-slate-700">
+                  {formatUkDate(trip.departureTime)}
+                  {departure ? ` · ${weekdayName(departure.weekday)}` : ""}
+                  {trip.carrier?.name ? ` · ${trip.carrier.name}` : ""}
+                </p>
+              ) : null}
+              <div className="mt-2 grid grid-cols-2 gap-2">
+                <div>
+                  <p className="text-[10px] uppercase tracking-wider text-slate-500">Автобус</p>
+                  <p className="font-medium">{bus ?? "—"}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] uppercase tracking-wider text-slate-500">Місце</p>
+                  <p className="text-2xl font-bold leading-none">
+                    {assignsSeats ? ticket.seatNumber ?? "—" : "без місць"}
+                  </p>
+                </div>
+              </div>
+            </section>
+
+            <section className="grid grid-cols-2 gap-3 border-t border-slate-200 pt-3">
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Посадка</p>
+                <p className="font-medium">{board ? boardingLabel(board) : trip?.fromCity ?? "—"}</p>
+                {board?.boardingAddress && board.boardingAddress !== boardingLabel(board) ? (
+                  <p className="text-xs text-slate-600">{board.boardingAddress}</p>
+                ) : null}
+                {board?.outboundTime ? <p className="text-xl font-bold tabular-nums">{board.outboundTime}</p> : null}
+              </div>
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Висадка</p>
+                <p className="font-medium">{alight ? boardingLabel(alight) : trip?.toCity ?? "—"}</p>
+                {alight?.boardingAddress && alight.boardingAddress !== boardingLabel(alight) ? (
+                  <p className="text-xs text-slate-600">{alight.boardingAddress}</p>
+                ) : null}
+                {alight?.outboundTime ? <p className="text-xl font-bold tabular-nums">{alight.outboundTime}</p> : null}
+              </div>
+            </section>
+
+            {returnTrip || (ticket.tripKind === "OPEN_RETURN" && !returnTrip) ? (
+              <section className="border-t border-slate-200 pt-3">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Назад</p>
+                {returnTrip ? (
+                  <p>
+                    {returnTrip.fromCity} → {returnTrip.toCity} · {formatUkDate(returnTrip.departureTime)}
+                    {ticket.returnSeatNumber != null ? ` · місце ${ticket.returnSeatNumber}` : ""}
+                  </p>
+                ) : (
+                  <p>Відкрита дата</p>
+                )}
+              </section>
+            ) : null}
+
+            {departure?.busPhone || departure?.dispatcherPhone ? (
+              <p className="border-t border-slate-200 pt-3 text-xs text-slate-600">
+                {departure.busPhone ? `Тел. автобуса: ${departure.busPhone}` : ""}
+                {departure.busPhone && departure.dispatcherPhone ? " · " : ""}
+                {departure.dispatcherPhone ? `Диспетчер: ${departure.dispatcherPhone}` : ""}
+              </p>
+            ) : null}
+          </div>
+
+          {/* Right: status, number, QR, price */}
+          <aside className="space-y-3 text-sm">
+            <div className="text-center">
+              <p className="text-xs font-semibold uppercase">{TICKET_STATUS_LABEL[ticket.status]}</p>
+              <p className="mt-1 font-mono text-xl font-bold tracking-widest">{booking.reference}</p>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={qr} alt={`QR-код ${booking.reference}`} className="mx-auto mt-2 h-[44mm] w-[44mm]" />
+              <p className="text-[10px] text-slate-500">Покажіть QR водієві при посадці</p>
+            </div>
+            <div className="border-t border-slate-200 pt-2">
+              <div className="flex justify-between text-xs">
+                <span className="text-slate-500">Тариф</span>
+                <span className="tabular-nums">{eur(price.base)}</span>
+              </div>
+              {price.discounts.map((d) => (
+                <div key={d.label} className="flex justify-between text-xs">
+                  <span className="text-slate-500">{d.label}</span>
+                  <span className="tabular-nums">−{eur(d.amount)}</span>
+                </div>
+              ))}
+              <div className={`mt-2 rounded-lg border px-2 py-1.5 ${moneyClass}`}>
+                <div className="flex items-baseline justify-between">
+                  <span className="text-xs font-semibold">{money.label}</span>
+                  <span className="text-lg font-bold tabular-nums">{eur(money.amount)}</span>
+                </div>
+                {money.note ? <p className="text-[10px] leading-tight opacity-80">{money.note}</p> : null}
+              </div>
+            </div>
+          </aside>
         </div>
-
-        <section className="mt-6 border-t border-slate-200 pt-4">
-          <p className="text-lg font-semibold">
-            {trip ? `${trip.fromCity} → ${trip.toCity}` : "Маршрут"}
-          </p>
-          {trip ? (
-            <p className="mt-1 text-sm text-slate-600">
-              {formatUkDate(trip.departureTime)}
-              {departure ? ` · ${weekdayName(departure.weekday)}` : ""}
-            </p>
-          ) : null}
-          {departure?.template?.name ? (
-            <p className="mt-1 text-sm text-slate-600">{departure.template.name}</p>
-          ) : null}
-          {trip?.carrier?.name ? (
-            <p className="text-sm text-slate-600">Перевізник: {trip.carrier.name}</p>
-          ) : null}
-          <p className="mt-2 text-sm font-medium">
-            {TRIP_KIND_LABEL[booking.ticket.tripKind] ?? booking.ticket.tripKind}
-          </p>
-          <p className="text-sm">
-            Місце:{" "}
-            {assignsSeats
-              ? booking.ticket.seatNumber != null
-                ? booking.ticket.seatNumber
-                : "—"
-              : "без місць"}
-          </p>
-          {booking.ticket.tripKind === "OPEN_RETURN" && !returnTrip ? (
-            <p className="mt-2 text-sm text-slate-600">
-              Зворотня поїздка: відкрита дата
-            </p>
-          ) : null}
-          {returnTrip ? (
-            <p className="mt-2 text-sm">
-              Назад: {returnTrip.fromCity} → {returnTrip.toCity} ·{" "}
-              {formatUkDate(returnTrip.departureTime)}
-              {booking.ticket.returnSeatNumber != null
-                ? ` · місце ${booking.ticket.returnSeatNumber}`
-                : returnTrip.departure?.hasAssignedSeats === false
-                  ? " · без місць"
-                  : ""}
-            </p>
-          ) : null}
-          {departure?.defaultBus ? (
-            <p className="text-sm text-slate-600">Автобус: {departure.defaultBus}</p>
-          ) : null}
-        </section>
-
-        <section className="mt-6 border-t border-slate-200 pt-4 text-sm">
-          <p className="font-semibold">
-            {booking.firstName} {booking.lastName}
-          </p>
-          <p className="text-slate-600">
-            {AGE_LABEL[booking.ageCategory] ?? booking.ageCategory} · {booking.phone}
-          </p>
-          {booking.email ? <p className="text-slate-600">{booking.email}</p> : null}
-          <p className="mt-2 text-base font-bold">{eur(booking.finalPrice)}</p>
-        </section>
-
-        <section className="mt-6 grid gap-4 border-t border-slate-200 pt-4 text-sm sm:grid-cols-2">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-              Посадка
-            </p>
-            <p className="mt-1 font-medium">
-              {board ? boardingLabel(board) : trip?.fromCity ?? "—"}
-            </p>
-            {board?.boardingAddress ? <p>{board.boardingAddress}</p> : null}
-            {board?.outboundTime ? (
-              <p className="mt-1 text-lg font-semibold tabular-nums">
-                {board.outboundTime}
-              </p>
-            ) : null}
-            {boardUrl ? (
-              <p className="mt-1 print:hidden">
-                <a
-                  href={boardUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-xs text-slate-500 underline"
-                >
-                  Карта
-                </a>
-              </p>
-            ) : null}
-          </div>
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-              Висадка
-            </p>
-            <p className="mt-1 font-medium">
-              {alight ? boardingLabel(alight) : trip?.toCity ?? "—"}
-            </p>
-            {alight?.boardingAddress ? <p>{alight.boardingAddress}</p> : null}
-            {alight?.outboundTime ? (
-              <p className="mt-1 text-lg font-semibold tabular-nums">
-                {alight.outboundTime}
-              </p>
-            ) : null}
-            {alightUrl ? (
-              <p className="mt-1 print:hidden">
-                <a
-                  href={alightUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-xs text-slate-500 underline"
-                >
-                  Карта
-                </a>
-              </p>
-            ) : null}
-          </div>
-        </section>
-
-        {departure?.busPhone || departure?.dispatcherPhone ? (
-          <section className="mt-6 border-t border-slate-200 pt-4 text-sm text-slate-600">
-            {departure.busPhone ? <p>Тел. автобуса: {departure.busPhone}</p> : null}
-            {departure.dispatcherPhone ? (
-              <p>Диспетчер: {departure.dispatcherPhone}</p>
-            ) : null}
-          </section>
-        ) : null}
       </div>
 
-      <div className="mt-6 flex flex-wrap items-center justify-center gap-3 print:hidden">
+      <div className="mt-4 flex flex-wrap items-center justify-center gap-3 print:hidden">
         <PrintTicketButton />
         <Link
           href={`/cabinet/tickets/${booking.reference}`}

@@ -638,6 +638,14 @@ export default function BookingForm({
         <p className="text-xs text-slate-500">
           Оберіть спосіб завершення бронювання. Місця вже закріплені за вами.
         </p>
+        <p
+          data-testid="online-deadline-notice"
+          className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900"
+        >
+          «Оплатити зараз»: на оплату буде {salesSettings.paymentDeadlineHours} год. Якщо
+          оплата не надійде вчасно, бронювання автоматично скасується, а ми
+          повідомимо вас SMS та e-mail.
+        </p>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <button
             type="button"

@@ -957,6 +957,24 @@ async function seedDemoTickets() {
       },
     });
 
+    if (demo.status === TicketStatus.PAID_ONLINE) {
+      // Paid through the payment system: keep the transaction, it is shown
+      // next to the paid amount on the ticket.
+      await prisma.payment.create({
+        data: {
+          ticketId: ticket.id,
+          status: PaymentStatus.SETTLED,
+          amount: pricing.finalPrice,
+          fullAmount: pricing.finalPrice,
+          provider: "MONOBANK",
+          providerRef: `2605${demo.reference.replace(/\D/g, "")}`,
+          sentAt: new Date(),
+          settleAfter: new Date(),
+          deadlineAt: new Date(),
+        },
+      });
+    }
+
     if (demo.status === TicketStatus.AWAITING_PAYMENT) {
       const discountPct = DEFAULT_SITE_SETTINGS.onlineDiscountPercent;
       const amount = Math.round(pricing.finalPrice * (1 - discountPct / 100) * 100) / 100;

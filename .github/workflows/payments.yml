@@ -1,0 +1,33 @@
+name: Payments sweep
+
+# Runs every hour and calls POST /api/cron/payments: settles online payments
+# whose funds arrived and cancels bookings not paid before the deadline
+# (24 h by default), telling the passenger by SMS and e-mail.
+on:
+  schedule:
+    - cron: "23 * * * *"
+  workflow_dispatch:
+
+jobs:
+  payments:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger payment sweep
+        env:
+          APP_URL: ${{ vars.APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          if [ -z "$APP_URL" ] || [ -z "$CRON_SECRET" ]; then
+            # Not deployed yet: skip instead of failing (and e-mailing) every hour.
+            echo "::warning::Skipped — set the APP_URL repository variable and CRON_SECRET secret to enable the payment sweep."
+            exit 0
+          fi
+          response=$(curl -sS -w "\n%{http_code}" -X POST "$APP_URL/api/cron/payments" \
+            -H "Authorization: Bearer $CRON_SECRET")
+          body=$(echo "$response" | head -n 1)
+          code=$(echo "$response" | tail -n 1)
+          echo "$body"
+          if [ "$code" != "200" ]; then
+            echo "Payment sweep failed with HTTP $code"
+            exit 1
+          fi
