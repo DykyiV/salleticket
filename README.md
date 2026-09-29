@@ -84,10 +84,21 @@ page exposes it as tabs. A new integration implements `CarrierAdapter`
   — online money is ours and we owe the carrier its share, cash money is the
   carrier's and it owes us the commission. Lifecycle `GENERATED → SENT →
   PAID`, every step logged in `SettlementEvent`.
-- **Automatic run**: `.github/workflows/settlements.yml` calls
-  `POST /api/cron/settlements` (Bearer `CRON_SECRET`) on the 7th of each
-  month. It is skipped until the `APP_URL` variable and `CRON_SECRET` secret
-  are set.
+- **Reconciliation** (`lib/finance/reconciliation.ts`, page
+  `/cabinet/finance/reconciliation`): per carrier and per sales agent —
+  accrued (carrier settlement balances; agent reward = % of the agent's paid
+  sales, frozen on the ticket as `agentRewardPercent`), paid (recorded
+  `CounterpartyPayment`s, partial allowed) and the open balance. Marking a
+  settlement paid records the uncovered remainder, capped by the carrier's
+  open balance so nothing is counted twice.
+- **Auto-reports** (`lib/finance/autoReports.ts`, page
+  `/cabinet/finance/auto-reports`): per carrier / agent — send or not, day of
+  month (1–28), e-mail, agent reward %. `.github/workflows/settlements.yml`
+  calls `POST /api/cron/auto-reports` (Bearer `CRON_SECRET`) daily; due rows
+  get last month's report once per period. Ships **off** behind a global
+  switch; mail delivery is a stub (`lib/finance/mailer.ts`) until a provider
+  is configured. The workflow is skipped until `APP_URL` / `CRON_SECRET` are
+  set.
 
 ### Roles and permissions
 
@@ -117,7 +128,7 @@ Two layers:
 | Маршрути шаблони | `/cabinet/routes` | ADMIN |
 | Налаштування — site settings, permission matrix, tariffs | `/cabinet/settings` | ADMIN |
 | Звіти, Dashboard | `/cabinet/reports`, `/cabinet/stats` | ADMIN |
-| **Фінанси** — settlements, commissions, carrier report + CSV | `/cabinet/finance` | `finance.read` (ACCOUNTANT, MANAGER, ADMIN) |
+| **Фінанси** — settlements, reconciliation + payments, carrier report, commissions, auto-reports, CSV | `/cabinet/finance` | `finance.read` (ACCOUNTANT, MANAGER, ADMIN) |
 
 Old `/admin/*`, `/account` and `/agent` links redirect into the cabinet.
 
@@ -132,9 +143,9 @@ Old `/admin/*`, `/account` and `/agent` links redirect into the cabinet.
 | Payment | `/api/payments/[reference]/{pay,status}`, page `/pay/[reference]` |
 | Own ticket | `/api/account/tickets/[id]/{passenger,status,seat,return,trip,price-recalc,comments}` |
 | Documents | `GET /api/tickets/[reference]/pdf` (owner or AGENT+), `GET /api/tickets/bulk-pdf?ids=` (AGENT+, ≤100), `GET /api/tickets/[reference]/wallet`, public check `/check/[reference]` |
-| Finance | `/api/finance/settlements` (+ `[id]/{invoice,act,send,pay}`), `/api/finance/commissions`, `/api/finance/carrier-report/csv` — `finance.read` / `finance.edit` |
+| Finance | `/api/finance/settlements` (+ `[id]/{invoice,act,send,pay}`), `/api/finance/reconciliation` (+ `/csv`), `/api/finance/payments` (+ `[id]`), `/api/finance/auto-reports`, `/api/finance/commissions`, `/api/finance/carrier-report/csv` — `finance.read` / `finance.edit` |
 | Admin | `/api/admin/*` (users, permissions, routes, departures, buses, tariffs, discounts, settings, `sms`) — ADMIN |
-| Cron | `POST /api/cron/settlements` — Bearer `CRON_SECRET` |
+| Cron | `POST /api/cron/auto-reports` (daily), `POST /api/cron/settlements` (all carriers at once) — Bearer `CRON_SECRET` |
 
 CSV exports use a UTF-8 BOM, `;` and CRLF so Excel in Ukrainian/EU locales
 opens Cyrillic correctly, and prefix formula-like cells with `'` (CSV
@@ -147,7 +158,7 @@ injection).
 | `npm run dev` / `build` / `start` | Next.js |
 | `npm run lint` | ESLint 9 (flat config) |
 | `npm test` | Vitest — unit + integration against `/tmp/asol-test.db` |
-| `npm run test:smoke` | ~48 HTTP checks against a running server (`BASE_URL`, default `:3100`) |
+| `npm run test:smoke` | ~58 HTTP checks against a running server (`BASE_URL`, default `:3100`) |
 | `npm run db:push` / `db:seed` / `db:studio` | Prisma |
 
 CI (`.github/workflows/ci.yml`, every PR and push to `main`): install → db

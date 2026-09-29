@@ -2,11 +2,13 @@ import Link from "next/link";
 
 const TABS = [
   { href: "/cabinet/finance", label: "Розрахунки з перевізниками" },
+  { href: "/cabinet/finance/reconciliation", label: "Звірка" },
   { href: "/cabinet/finance/carrier-report", label: "Звіт перевізника" },
   { href: "/cabinet/finance/commissions", label: "Комісії" },
+  { href: "/cabinet/finance/auto-reports", label: "Автозвіти" },
 ] as const;
 
-/** Tab bar shared by the three /cabinet/finance pages. */
+/** Tab bar shared by the /cabinet/finance pages. */
 export default function FinanceTabs({ current }: { current: (typeof TABS)[number]["href"] }) {
   return (
     <nav aria-label="Фінанси" className="mb-6 flex flex-wrap gap-1 rounded-xl bg-slate-100 p-1 text-sm">

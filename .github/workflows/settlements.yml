@@ -1,33 +1,35 @@
-name: Monthly carrier settlements
+name: Finance auto-reports
 
-# Runs at 06:17 UTC on the 7th of every month: generates settlements
-# (invoice + act) for the previous month for every carrier and marks them
-# sent. Can also be triggered manually from the Actions tab.
+# Runs every day at 06:17 UTC and calls POST /api/cron/auto-reports. The app
+# decides who is due: every carrier / agent ticked in Фінанси → Автозвіти
+# whose day of month has come gets last month's report (carriers: the
+# settlement with invoice + act, generated if missing). Nothing is sent while
+# the global switch on that page is off. Can also be triggered manually.
 on:
   schedule:
-    - cron: "17 6 7 * *"
+    - cron: "17 6 * * *"
   workflow_dispatch:
 
 jobs:
-  generate:
+  auto-reports:
     runs-on: ubuntu-latest
     steps:
-      - name: Trigger settlement generation
+      - name: Trigger auto-reports
         env:
           APP_URL: ${{ vars.APP_URL }}
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: |
           if [ -z "$APP_URL" ] || [ -z "$CRON_SECRET" ]; then
-            # Not deployed yet: skip instead of failing (and e-mailing) every month.
-            echo "::warning::Skipped — set the APP_URL repository variable and CRON_SECRET secret to enable monthly settlements."
+            # Not deployed yet: skip instead of failing (and e-mailing) every day.
+            echo "::warning::Skipped — set the APP_URL repository variable and CRON_SECRET secret to enable auto-reports."
             exit 0
           fi
-          response=$(curl -sS -w "\n%{http_code}" -X POST "$APP_URL/api/cron/settlements" \
+          response=$(curl -sS -w "\n%{http_code}" -X POST "$APP_URL/api/cron/auto-reports" \
             -H "Authorization: Bearer $CRON_SECRET")
           body=$(echo "$response" | head -n 1)
           code=$(echo "$response" | tail -n 1)
           echo "$body"
           if [ "$code" != "200" ]; then
-            echo "Settlement generation failed with HTTP $code"
+            echo "Auto-reports failed with HTTP $code"
             exit 1
           fi

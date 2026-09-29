@@ -1060,6 +1060,28 @@ async function seedPartnerSales() {
     });
     console.log(`  created partner sale ${sale.reference} (${sale.carrier}, ${split.percent}%)`);
   }
+
+  // Sales-agent reward for the demo agent, and one advance already paid, so
+  // Фінанси → Звірка shows accrued / paid / open balance on a fresh install.
+  if (agent.agentRewardPercent == null) {
+    await prisma.user.update({ where: { id: agent.id }, data: { agentRewardPercent: 5 } });
+    console.log("  agent@ reward set to 5% of paid sales");
+  }
+  const demoNote = "Демо: аванс винагороди";
+  if (!(await prisma.counterpartyPayment.findFirst({ where: { userId: agent.id, note: demoNote } }))) {
+    await prisma.counterpartyPayment.create({
+      data: {
+        kind: "AGENT",
+        userId: agent.id,
+        direction: "OUTGOING",
+        amount: 5,
+        paidAt: thisMonth,
+        note: demoNote,
+        createdBy: "seed",
+      },
+    });
+    console.log("  recorded demo agent payment €5.00");
+  }
 }
 
 main()

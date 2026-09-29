@@ -156,7 +156,7 @@ export async function POST(req: NextRequest) {
 
   const account = await prisma.user.findUnique({
     where: { id: session.sub },
-    select: { email: true },
+    select: { email: true, agentRewardPercent: true },
   });
   if (!account) {
     return NextResponse.json(
@@ -535,6 +535,8 @@ export async function POST(req: NextRequest) {
             commissionPercent: commission?.percent ?? null,
             commissionAmount: commission?.commissionAmount ?? null,
             carrierAmount: commission?.carrierAmount ?? null,
+            // Sales-agent reward % frozen at booking (see agent reconciliation).
+            agentRewardPercent: account.agentRewardPercent ?? null,
             seatNumber: outboundSeat,
             fromStopIndex: segmentCities ? segment.fromIndex : null,
             toStopIndex: segmentCities ? segment.toIndex : null,
