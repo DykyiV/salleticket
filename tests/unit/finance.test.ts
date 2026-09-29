@@ -21,6 +21,17 @@ describe("computeSplit — payment point decides who owes whom", () => {
     expect(s.balanceDirection).toBe("TO_AGENT");
   });
 
+  it("cash our agent took counts as money we collected, cash paid to the driver as the carrier's", () => {
+    const s = computeSplit([
+      { status: "PAID_CASH", finalPrice: 100, commissionAmount: 12, carrierAmount: 88, cashCollectedById: "agent-1" },
+      { status: "PAID_CASH", finalPrice: 50, commissionAmount: 6, carrierAmount: 44, cashCollectedById: null },
+    ]);
+    expect(s.collectedByAgent).toBe(100);
+    expect(s.collectedByCarrier).toBe(50);
+    expect(s.balanceAmount).toBe(82); // 88 owed to the carrier − 6 it owes us
+    expect(s.balanceDirection).toBe("TO_CARRIER");
+  });
+
   it("AWAITING_PAYMENT (f005's open online window) counts as unpaid, like RESERVED", () => {
     expect(SELLABLE_STATUSES).toContain("AWAITING_PAYMENT");
     const s = computeSplit([

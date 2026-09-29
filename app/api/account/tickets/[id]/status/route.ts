@@ -8,6 +8,7 @@ import { isStatusTransitionAllowed, TICKET_STATUS_LABEL } from "@/lib/tickets/la
 import { TicketNotFoundError, updateTicketStatus } from "@/lib/tickets/service";import { VersionConflictError } from "@/lib/tickets/version";
 import { can } from "@/lib/auth/permissions";
 import { notifyRefundRequested, notifySeatFreed } from "@/lib/notify";
+import { CashCollectorError, resolveCashCollector } from "@/lib/finance/cash";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -21,9 +22,9 @@ export async function PATCH(req: NextRequest, props: Params) {
   const guard = await requireAuth();
   if (!guard.ok) return guard.response;
 
-  let body: { status?: string };
+  let body: { status?: string; cashCollector?: string };
   try {
-    body = (await req.json()) as { status?: string };
+    body = (await req.json()) as { status?: string; cashCollector?: string };
   } catch {
     return NextResponse.json({ error: "Некоректний JSON" }, { status: 400 });
   }
@@ -32,6 +33,16 @@ export async function PATCH(req: NextRequest, props: Params) {
     return NextResponse.json({ error: "Некоректний статус" }, { status: 400 });
   }
   const nextStatus = body.status as TicketStatus;
+  if (
+    body.cashCollector !== undefined &&
+    body.cashCollector !== "ME" &&
+    body.cashCollector !== "CARRIER"
+  ) {
+    return NextResponse.json(
+      { error: "`cashCollector` має бути ME або CARRIER" },
+      { status: 400 }
+    );
+  }
 
   const ticket = await prisma.ticket.findUnique({
     where: { id: params.id },
@@ -78,6 +89,19 @@ export async function PATCH(req: NextRequest, props: Params) {
     );
   }
 
+  // Paid in cash: record who holds the money (agent / desk or the driver).
+  let cashCollector;
+  if (nextStatus === "PAID_CASH") {
+    try {
+      cashCollector = await resolveCashCollector(guard.session.sub, body.cashCollector);
+    } catch (err) {
+      if (err instanceof CashCollectorError) {
+        return NextResponse.json({ error: err.message }, { status: 400 });
+      }
+      throw err;
+    }
+  }
+
   try {
     const result = await updateTicketStatus(
       params.id,
@@ -87,6 +111,7 @@ export async function PATCH(req: NextRequest, props: Params) {
         source: isStaff ? "ADMIN_PANEL" : "ACCOUNT",
         action: !isStaff ? "CANCELLED_BY_OWNER" : "STATUS_CHANGE",
         request: requestMeta(req),
+        cashCollector,
       }
     );
     if (result.changed) {

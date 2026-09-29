@@ -294,7 +294,7 @@ async function sendAgentReport(
   user: { id: string; email: string; displayName: string | null },
   email: string | null,
   period: string,
-  balance: { debt: number; side: "WE_OWE" | "THEY_OWE" | "SETTLED" } | undefined
+  balance: { debt: number; side: "WE_OWE" | "THEY_OWE" | "SETTLED"; reward?: number; cashHeld?: number } | undefined
 ): Promise<AutoReportResult> {
   const to = email ?? user.email;
   const name = user.displayName ? `${user.displayName} (${user.email})` : user.email;
@@ -318,6 +318,7 @@ async function sendAgentReport(
     `Звіт за ${period}.`,
     `Оплачених квитків: ${tickets.length}, на суму ${eur(gross)}.`,
     `Нараховано винагороди: ${eur(reward)}.`,
+    balance?.cashHeld ? `Готівка пасажирів у вас на руках (усього): ${eur(balance.cashHeld)}.` : "",
     balance
       ? `Загальне сальдо: ${eur(Math.abs(balance.debt))} (${SIDE_TEXT[balance.side]}).`
       : "",

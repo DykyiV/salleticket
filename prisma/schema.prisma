@@ -81,7 +81,8 @@ model User {
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 
-  tickets              Ticket[]
+  tickets              Ticket[]              @relation("TicketOwner")
+  cashCollected        Ticket[]              @relation("CashCollector")
   promos               Promo[]
   autoReportSetting    AutoReportSetting?
   counterpartyPayments CounterpartyPayment[]
@@ -197,7 +198,15 @@ model Ticket {
   updatedAt          DateTime     @updatedAt
 
   userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user   User   @relation("TicketOwner", fields: [userId], references: [id], onDelete: Cascade)
+
+  /// Who physically received the passenger's cash for a PAID_CASH ticket:
+  /// a sales agent / cash desk of the agency. The money stays with that person
+  /// until the mutual settlement (Фінанси → Звірка). Null on a PAID_CASH
+  /// ticket means the passenger paid the driver / carrier on the bus.
+  cashCollectedById String?
+  cashCollectedBy   User?     @relation("CashCollector", fields: [cashCollectedById], references: [id], onDelete: SetNull)
+  cashCollectedAt   DateTime?
 
   tripId String?
   trip   Trip?   @relation(fields: [tripId], references: [id], onDelete: SetNull)
@@ -239,6 +248,7 @@ model Ticket {
   @@index([tripId])
   @@index([returnTripId])
   @@index([settlementId])
+  @@index([cashCollectedById])
   @@map("tickets")
 }
 

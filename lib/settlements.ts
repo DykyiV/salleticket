@@ -13,7 +13,11 @@ import { netPaid, signedBalance } from "@/lib/finance/money";
  *
  * Payment point: where the passenger's money actually landed.
  *   PAID_ONLINE → collected by the agency  → we owe the carrier its share
- *   PAID_CASH   → collected by the carrier → the carrier owes us commission
+ *   PAID_CASH taken by our agent / cash desk (Ticket.cashCollectedById)
+ *               → also collected by the agency (the agent settles with us
+ *                 separately, see lib/finance/reconciliation.ts)
+ *   PAID_CASH paid to the driver (no collector)
+ *               → collected by the carrier → the carrier owes us commission
  *   RESERVED    → not paid yet             → reported, but outside the balance
  * The net balance (balanceAmount + balanceDirection) says who owes whom.
  */
@@ -82,6 +86,8 @@ export function computeSplit(
     finalPrice: number;
     commissionAmount: number | null;
     carrierAmount: number | null;
+    /** Set when our agent / cash desk took the cash (see Ticket). */
+    cashCollectedById?: string | null;
   }[]
 ): MoneySplit {
   let collectedByAgent = 0;
@@ -91,7 +97,8 @@ export function computeSplit(
   let oweAgent = 0; // our commission on money the carrier collected
 
   for (const t of tickets) {
-    if (t.status === TicketStatus.PAID_ONLINE) {
+    const agencyCash = t.status === TicketStatus.PAID_CASH && Boolean(t.cashCollectedById);
+    if (t.status === TicketStatus.PAID_ONLINE || agencyCash) {
       collectedByAgent += t.finalPrice;
       oweCarrier += t.carrierAmount ?? 0;
     } else if (t.status === TicketStatus.PAID_CASH) {
@@ -145,6 +152,7 @@ export async function getPeriodReport(period: string): Promise<CarrierReportRow[
       finalPrice: true,
       commissionAmount: true,
       carrierAmount: true,
+      cashCollectedById: true,
       trip: {
         select: {
           carrierId: true,
@@ -249,6 +257,7 @@ export async function generateSettlements(
       finalPrice: true,
       commissionAmount: true,
       carrierAmount: true,
+      cashCollectedById: true,
       trip: {
         select: {
           carrierId: true,

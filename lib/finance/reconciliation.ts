@@ -23,6 +23,10 @@ export type ReconciliationRow = Reconciled & {
   detail: string | null;
   /** Agents only: paid sales volume the reward is computed from. */
   salesGross?: number;
+  /** Agents only: reward earned (in the agent's favour). */
+  reward?: number;
+  /** Agents only: passengers' cash the agent took and still holds (ours). */
+  cashHeld?: number;
 };
 
 export type Reconciliation = {
@@ -36,8 +40,17 @@ export const AGENT_ROLES: Role[] = [Role.AGENT, Role.PARTNER];
 
 export const PAID_STATUSES: TicketStatus[] = [TicketStatus.PAID_ONLINE, TicketStatus.PAID_CASH];
 
+/**
+ * Agent counterparties: sales agents / partners, anyone with a reward %, and
+ * anyone holding passengers' cash (a cash desk) — cash they took stays with
+ * them until the mutual settlement.
+ */
 export const agentWhere: Prisma.UserWhereInput = {
-  OR: [{ role: { in: AGENT_ROLES } }, { agentRewardPercent: { not: null } }],
+  OR: [
+    { role: { in: AGENT_ROLES } },
+    { agentRewardPercent: { not: null } },
+    { cashCollected: { some: { status: TicketStatus.PAID_CASH } } },
+  ],
 };
 
 function sumRows(rows: ReconciliationRow[]): Reconciled {
@@ -99,10 +112,16 @@ export async function getAgentReconciliation(): Promise<ReconciliationRow[]> {
     orderBy: { email: "asc" },
   });
   const ids = agents.map((a) => a.id);
-  const [tickets, payments] = await Promise.all([
+  const [tickets, cash, payments] = await Promise.all([
     prisma.ticket.findMany({
       where: { userId: { in: ids }, status: { in: PAID_STATUSES } },
       select: { userId: true, finalPrice: true, agentRewardPercent: true },
+    }),
+    // Cash taken from passengers; a ticket cancelled / refunded afterwards
+    // means the cash went back to the passenger, so it no longer counts.
+    prisma.ticket.findMany({
+      where: { cashCollectedById: { in: ids }, status: TicketStatus.PAID_CASH },
+      select: { cashCollectedById: true, finalPrice: true },
     }),
     paymentsBy("AGENT"),
   ]);
@@ -110,10 +129,18 @@ export async function getAgentReconciliation(): Promise<ReconciliationRow[]> {
   return agents.map((a) => {
     const own = tickets.filter((t) => t.userId === a.id);
     // Tickets sold before a reward % existed fall back to the current one.
-    const accrued = own.reduce(
-      (sum, t) => sum + agentReward(t.finalPrice, t.agentRewardPercent ?? a.agentRewardPercent),
-      0
+    const reward = round2(
+      own.reduce(
+        (sum, t) => sum + agentReward(t.finalPrice, t.agentRewardPercent ?? a.agentRewardPercent),
+        0
+      )
     );
+    const cashHeld = round2(
+      cash.filter((t) => t.cashCollectedById === a.id).reduce((sum, t) => sum + t.finalPrice, 0)
+    );
+    // Mutual settlement: the agent keeps its reward out of the cash it holds.
+    //   + we owe the agent (reward > cash), − the agent owes us (cash > reward).
+    const accrued = reward - cashHeld;
     return {
       kind: "AGENT" as const,
       id: a.id,
@@ -121,6 +148,8 @@ export async function getAgentReconciliation(): Promise<ReconciliationRow[]> {
       documents: own.length,
       detail: a.agentRewardPercent != null ? `${a.agentRewardPercent}%` : null,
       salesGross: round2(own.reduce((s, t) => s + t.finalPrice, 0)),
+      reward,
+      cashHeld,
       ...reconcile(accrued, netPaid(payments.get(a.id) ?? [])),
     };
   });

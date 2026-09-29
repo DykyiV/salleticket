@@ -19,6 +19,12 @@ export type UpdateTicketStatusOptions = {
   action?: string;
   /** IP + User-Agent from the originating request. */
   request?: RequestMeta;
+  /**
+   * Only for a move to PAID_CASH: who received the cash. A user id (agent /
+   * cash desk — the money stays with them until the mutual settlement) or
+   * null (paid to the driver / carrier on the bus).
+   */
+  cashCollector?: { id: string | null; label: string };
 };
 
 export type UpdateTicketStatusResult = {
@@ -64,9 +70,16 @@ export async function updateTicketStatus(
     const oldStatus = ticket.status;
     const changed = oldStatus !== newStatus;
 
+    const cash =
+      changed && newStatus === "PAID_CASH" && options.cashCollector
+        ? options.cashCollector
+        : null;
     const updated = changed
       ? await updateTicketVersioned(db, ticketId, ticket.version, {
           status: newStatus,
+          ...(cash
+            ? { cashCollectedById: cash.id, cashCollectedAt: cash.id ? new Date() : null }
+            : {}),
         })
       : ticket;
 
@@ -77,7 +90,10 @@ export async function updateTicketStatus(
       oldStatus,
       newStatus,
       changes: changed
-        ? { status: { from: oldStatus, to: newStatus } }
+        ? {
+            status: { from: oldStatus, to: newStatus },
+            ...(cash ? { cashCollector: { from: null, to: cash.label } } : {}),
+          }
         : null,
       source: options.source ?? "API",
       changedBy: userId,

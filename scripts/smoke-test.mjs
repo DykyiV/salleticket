@@ -334,6 +334,59 @@ async function main() {
     check("GET /api/finance/reconciliation as AGENT returns 403", agentRecon.status === 403, `got ${agentRecon.status}`);
     const agentBulk = await fetch(`${BASE_URL}/api/tickets/bulk-pdf?ids=${ownTicketId}`, { headers: { Cookie: agentCookie } });
     check("GET /api/tickets/bulk-pdf as AGENT returns a PDF", agentBulk.status === 200 && agentBulk.headers.get("content-type") === "application/pdf", `got ${agentBulk.status}`);
+
+    // Agent takes the passenger's cash at the desk and keeps it until the
+    // mutual settlement: the reconciliation must count it against the agent.
+    const accForCash = await login("accountant@asolbus.local", "Accountant12345");
+    const agentRow = async () => {
+      const r = await fetch(`${BASE_URL}/api/finance/reconciliation`, { headers: { Cookie: accForCash } });
+      return (await r.json()).agents?.find((a) => a.name.includes("agent@asolbus.local"));
+    };
+    const before = await agentRow();
+    const seatsAgain = await (await fetch(`${BASE_URL}/api/trips/${encodeURIComponent(trip.id)}/seats`)).json();
+    const agentSeat = (seatsAgain.layout?.decks ?? [])
+      .flatMap((d) => d.rows.flat())
+      .map((cell) => cell.seat)
+      .find((seat) => seat && seat.status === "AVAILABLE" && seat.mult === 1);
+    const agentBooking = await fetch(`${BASE_URL}/api/booking`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Cookie: agentCookie },
+      body: JSON.stringify({
+        ...bookingPayload,
+        promoCode: undefined,
+        seatNumber: agentSeat?.number ?? null,
+        passenger: { name: "Cash Passenger", phone: "+380991112244", ageCategory: "ADULT" },
+      }),
+    });
+    const agentBookingBody = await agentBooking.json();
+    check("agent books a ticket for a walk-in passenger", agentBooking.status === 201, `got ${agentBooking.status}: ${JSON.stringify(agentBookingBody).slice(0, 160)}`);
+    const agentRef = agentBookingBody.booking?.reference;
+    const agentDetail = await (await fetch(`${BASE_URL}/api/booking?reference=${agentRef}`, { headers: { Cookie: agentCookie } })).json();
+    const agentTicket = agentDetail.booking?.ticket;
+    const paidCash = await fetch(`${BASE_URL}/api/account/tickets/${agentTicket?.id}/status`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", Cookie: agentCookie },
+      body: JSON.stringify({ status: "PAID_CASH" }),
+    });
+    const paidCashBody = await paidCash.json();
+    check(
+      "agent marks it paid in cash — the agent is recorded as holding the cash",
+      paidCash.status === 200 && paidCashBody.ticket?.cashCollectedById != null,
+      `got ${paidCash.status}: ${JSON.stringify(paidCashBody).slice(0, 160)}`
+    );
+    const badCollector = await fetch(`${BASE_URL}/api/account/tickets/${agentTicket?.id}/status`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", Cookie: agentCookie },
+      body: JSON.stringify({ status: "PAID_CASH", cashCollector: "BANK" }),
+    });
+    check("unknown cashCollector is rejected (400)", badCollector.status === 400, `got ${badCollector.status}`);
+    const after = await agentRow();
+    const price = agentTicket?.finalPrice ?? 0;
+    check(
+      "reconciliation: agent's cash on hand grows by the ticket price, balance moves in our favour",
+      before && after && Math.abs(after.cashHeld - before.cashHeld - price) < 0.01 && after.debt < before.debt,
+      `before ${before?.cashHeld}/${before?.debt}, after ${after?.cashHeld}/${after?.debt}, price ${price}`
+    );
   }
 
   const accountantCookie = await login("accountant@asolbus.local", "Accountant12345");
