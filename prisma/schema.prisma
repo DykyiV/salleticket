@@ -63,23 +63,28 @@ enum SettlementStatus {
 }
 
 model User {
-  id                String   @id @default(cuid())
-  email             String   @unique
-  password          String
-  displayName       String?
-  avatarUrl         String?
-  role              Role     @default(CUSTOMER)
+  id                 String   @id @default(cuid())
+  email              String   @unique
+  password           String
+  displayName        String?
+  avatarUrl          String?
+  role               Role     @default(CUSTOMER)
   /// Agent-only operational grants. Admins always have these capabilities.
-  canEditDepartures Boolean  @default(false)
-  canHideStops      Boolean  @default(false)
-  canHideSeats      Boolean  @default(false)
+  canEditDepartures  Boolean  @default(false)
+  canHideStops       Boolean  @default(false)
+  canHideSeats       Boolean  @default(false)
   /// JSON array of preferred notification channels: email, sms, viber, telegram, push.
-  notifyChannels    String   @default("[\"email\",\"push\"]")
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  notifyChannels     String   @default("[\"email\",\"push\"]")
+  /// Sales-agent reward, percent of the agent's paid sales. Null = the user
+  /// is not paid a reward (not listed in agent reconciliation).
+  agentRewardPercent Float?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
 
-  tickets Ticket[]
-  promos  Promo[]
+  tickets              Ticket[]
+  promos               Promo[]
+  autoReportSetting    AutoReportSetting?
+  counterpartyPayments CounterpartyPayment[]
 
   @@index([role])
   @@map("users")
@@ -129,9 +134,11 @@ model Carrier {
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
-  trips           Trip[]
-  commissionRules CommissionRule[]
-  settlements     Settlement[]
+  trips                Trip[]
+  commissionRules      CommissionRule[]
+  settlements          Settlement[]
+  autoReportSetting    AutoReportSetting?
+  counterpartyPayments CounterpartyPayment[]
 
   @@map("carriers")
 }
@@ -169,21 +176,25 @@ model Trip {
 }
 
 model Ticket {
-  id                String       @id @default(cuid())
-  status            TicketStatus @default(RESERVED)
-  basePrice         Float
+  id                 String       @id @default(cuid())
+  status             TicketStatus @default(RESERVED)
+  basePrice          Float
   /// The charged price after age + promo discounts. Stored under the existing
   /// `price` column so older rows keep working after the rename.
-  finalPrice        Float        @map("price")
+  finalPrice         Float        @map("price")
   /// Commission snapshot captured at booking time (never recomputed later, so
   /// changing commission rules does not rewrite history):
   ///   commissionAmount = finalPrice * commissionPercent / 100  (agency keeps)
   ///   carrierAmount    = finalPrice - commissionAmount         (owed to carrier)
-  commissionPercent Float?
-  commissionAmount  Float?
-  carrierAmount     Float?
-  createdAt         DateTime     @default(now())
-  updatedAt         DateTime     @updatedAt
+  commissionPercent  Float?
+  commissionAmount   Float?
+  carrierAmount      Float?
+  /// Sales-agent reward percent frozen at booking (the booker's
+  /// User.agentRewardPercent then). Reward = finalPrice × this / 100, counted
+  /// once the ticket is paid.
+  agentRewardPercent Float?
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
 
   userId String
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -749,8 +760,9 @@ model Settlement {
   carrierId String
   carrier   Carrier @relation(fields: [carrierId], references: [id], onDelete: Restrict)
 
-  tickets Ticket[]
-  events  SettlementEvent[]
+  tickets  Ticket[]
+  events   SettlementEvent[]
+  payments CounterpartyPayment[]
 
   @@unique([carrierId, period])
   @@index([period])
@@ -795,4 +807,70 @@ model TicketComment {
   @@index([ticketId])
   @@index([createdAt])
   @@map("ticket_comments")
+}
+
+enum CounterpartyKind {
+  CARRIER
+  AGENT
+}
+
+/// OUTGOING — we paid the counterparty; INCOMING — the counterparty paid us.
+enum PaymentDirection {
+  OUTGOING
+  INCOMING
+}
+
+/// Monthly auto-report delivery for one counterparty: a third-party carrier
+/// (settlement: invoice + act) or a sales agent (sales and reward statement).
+/// Nothing is sent while the global switch (site setting
+/// "autoReports.enabled") is off, whatever the per-row checkbox says.
+model AutoReportSetting {
+  id             String           @id @default(cuid())
+  kind           CounterpartyKind
+  /// Send or not (the checkbox).
+  enabled        Boolean          @default(false)
+  /// Day of month (1–28) to send the report for the previous month.
+  sendDay        Int              @default(7)
+  /// Where to send; for agents falls back to the account e-mail.
+  email          String?
+  /// YYYY-MM of the last period sent, so a day's re-run never sends twice.
+  lastSentPeriod String?
+  lastSentAt     DateTime?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  carrierId String?  @unique
+  carrier   Carrier? @relation(fields: [carrierId], references: [id], onDelete: Cascade)
+  userId    String?  @unique
+  user      User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("auto_report_settings")
+}
+
+/// Money actually transferred to or from a counterparty. Reconciliation:
+/// debt = accrued (settlement balances / agent rewards) − payments.
+model CounterpartyPayment {
+  id        String           @id @default(cuid())
+  kind      CounterpartyKind
+  direction PaymentDirection
+  /// Positive amount in EUR; the sign comes from `direction`.
+  amount    Float
+  paidAt    DateTime
+  note      String?
+  /// E-mail of the staff member who recorded it.
+  createdBy String?
+  createdAt DateTime         @default(now())
+
+  carrierId    String?
+  carrier      Carrier?    @relation(fields: [carrierId], references: [id], onDelete: Restrict)
+  userId       String?
+  user         User?       @relation(fields: [userId], references: [id], onDelete: Restrict)
+  /// Set when the payment closes (part of) a specific settlement.
+  settlementId String?
+  settlement   Settlement? @relation(fields: [settlementId], references: [id], onDelete: SetNull)
+
+  @@index([carrierId])
+  @@index([userId])
+  @@index([settlementId])
+  @@map("counterparty_payments")
 }

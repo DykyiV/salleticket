@@ -1,5 +1,6 @@
 import type { Role, TicketStatus } from "@prisma/client";
 import { prisma } from "@/lib/db";
+import { toCsv } from "@/lib/finance/csv";
 
 /**
  * Report 9.2 — carrier report: every passenger booked on one carrier across
@@ -134,24 +135,6 @@ export async function getCarrierReport(input: {
 // ---------------------------------------------------------------------------
 // CSV export
 // ---------------------------------------------------------------------------
-
-/**
- * One CSV cell. `;`-separated with a UTF-8 BOM so Excel in Ukrainian / EU
- * locales opens Cyrillic correctly in separate columns. Cells that start
- * with = + - @ are prefixed with ' so a spreadsheet never evaluates
- * passenger-supplied text as a formula (CSV injection).
- */
-function cell(value: string | number | null | undefined): string {
-  if (value == null) return "";
-  let s = typeof value === "number" ? value.toFixed(2) : String(value);
-  if (/^[=+\-@\t\r]/.test(s)) s = `'${s}`;
-  return /[";\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-}
-
-function toCsv(header: string[], rows: (string | number | null)[][]): string {
-  const lines = [header, ...rows].map((r) => r.map(cell).join(";"));
-  return `﻿${lines.join("\r\n")}\r\n`;
-}
 
 export function carrierReportCsv(
   report: CarrierReport,

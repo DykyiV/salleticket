@@ -14,6 +14,8 @@ const PERIOD = "2026-08";
 const IN_PERIOD = new Date("2026-08-15T10:00:00.000Z");
 
 async function clean() {
+  await prisma.counterpartyPayment.deleteMany();
+  await prisma.autoReportSetting.deleteMany();
   await prisma.settlementEvent.deleteMany();
   await prisma.ticket.updateMany({ data: { settlementId: null } });
   await prisma.settlement.deleteMany();

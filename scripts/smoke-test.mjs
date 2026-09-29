@@ -296,6 +296,9 @@ async function main() {
   const adminApi = await fetch(`${BASE_URL}/api/admin/users`, { headers: { Cookie: cookie } });
   check("GET /api/admin/users as CUSTOMER returns 403", adminApi.status === 403, `got ${adminApi.status}`);
 
+  const autoCronNoAuth = await fetch(`${BASE_URL}/api/cron/auto-reports`, { method: "POST" });
+  check("POST /api/cron/auto-reports without secret returns 401/503", [401, 503].includes(autoCronNoAuth.status), `got ${autoCronNoAuth.status}`);
+
   const cronNoAuth = await fetch(`${BASE_URL}/api/cron/settlements`, { method: "POST" });
   check("POST /api/cron/settlements without secret returns 401/503", [401, 503].includes(cronNoAuth.status), `got ${cronNoAuth.status}`);
 
@@ -304,6 +307,9 @@ async function main() {
     "/api/finance/settlements",
     "/api/finance/commissions",
     "/api/finance/carrier-report/csv",
+    "/api/finance/reconciliation",
+    "/api/finance/auto-reports",
+    "/api/finance/payments",
   ];
   for (const url of financeUrls) {
     const res = await fetch(`${BASE_URL}${url}`, { headers: { Cookie: cookie } });
@@ -324,6 +330,8 @@ async function main() {
   if (agentCookie) {
     const agentFinance = await fetch(`${BASE_URL}/api/finance/settlements`, { headers: { Cookie: agentCookie } });
     check("GET /api/finance/settlements as AGENT returns 403", agentFinance.status === 403, `got ${agentFinance.status}`);
+    const agentRecon = await fetch(`${BASE_URL}/api/finance/reconciliation`, { headers: { Cookie: agentCookie } });
+    check("GET /api/finance/reconciliation as AGENT returns 403", agentRecon.status === 403, `got ${agentRecon.status}`);
     const agentBulk = await fetch(`${BASE_URL}/api/tickets/bulk-pdf?ids=${ownTicketId}`, { headers: { Cookie: agentCookie } });
     check("GET /api/tickets/bulk-pdf as AGENT returns a PDF", agentBulk.status === 200 && agentBulk.headers.get("content-type") === "application/pdf", `got ${agentBulk.status}`);
   }
@@ -345,6 +353,43 @@ async function main() {
     );
     const accPage = await fetch(`${BASE_URL}/cabinet/finance`, { headers: { Cookie: accountantCookie }, redirect: "manual" });
     check("GET /cabinet/finance as ACCOUNTANT returns 200", accPage.status === 200, `got ${accPage.status}`);
+
+    // Звірка: accrued / paid / debt per carrier and agent.
+    const recon = await fetch(`${BASE_URL}/api/finance/reconciliation`, { headers: { Cookie: accountantCookie } });
+    const reconBody = await recon.json();
+    const demoAgent = reconBody.agents?.find((a) => a.name.includes("agent@asolbus.local"));
+    check(
+      "reconciliation lists carriers and the seeded agent with accrued/paid/debt",
+      recon.status === 200 && Array.isArray(reconBody.carriers) && demoAgent &&
+        typeof demoAgent.accrued === "number" && typeof demoAgent.paid === "number" &&
+        Math.abs(demoAgent.accrued - demoAgent.paid - demoAgent.debt) < 0.01,
+      `got ${recon.status}`
+    );
+    const badPayment = await fetch(`${BASE_URL}/api/finance/payments`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Cookie: accountantCookie },
+      body: JSON.stringify({ kind: "AGENT", counterpartyId: demoAgent?.id, direction: "OUTGOING", amount: -5, paidAt: "2026-09-01" }),
+    });
+    check("POST /api/finance/payments rejects a negative amount (400)", badPayment.status === 400, `got ${badPayment.status}`);
+    const reconCsv = await fetch(`${BASE_URL}/api/finance/reconciliation/csv`, { headers: { Cookie: accountantCookie } });
+    const reconBytes = Buffer.from(await reconCsv.arrayBuffer());
+    check(
+      "reconciliation CSV downloads (BOM + header)",
+      reconCsv.status === 200 && reconBytes.subarray(0, 3).equals(Buffer.from([0xef, 0xbb, 0xbf])) &&
+        reconBytes.toString("utf8").includes("Нараховано, EUR;Виплачено, EUR;Борг, EUR"),
+      `got ${reconCsv.status}`
+    );
+
+    // Автозвіти ship switched off.
+    const auto = await fetch(`${BASE_URL}/api/finance/auto-reports`, { headers: { Cookie: accountantCookie } });
+    const autoBody = await auto.json();
+    check("auto-reports are off by default and list carriers + agents", auto.status === 200 && autoBody.enabled === false && autoBody.carriers?.length > 0 && autoBody.agents?.length > 0, `got ${auto.status}`);
+    const badDay = await fetch(`${BASE_URL}/api/finance/auto-reports`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json", Cookie: accountantCookie },
+      body: JSON.stringify({ rows: [{ kind: "CARRIER", id: autoBody.carriers?.[0]?.id, enabled: true, sendDay: 31 }] }),
+    });
+    check("PUT auto-reports rejects day 31 (400)", badDay.status === 400, `got ${badDay.status}`);
   }
 
   // --- Cancellation (owner may cancel a RESERVED ticket) ----------------------

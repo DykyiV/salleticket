@@ -1,6 +1,7 @@
 import { Prisma, SettlementStatus, TicketStatus } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { resolveCommission } from "@/lib/commission";
+import { netPaid, signedBalance } from "@/lib/finance/money";
 
 /**
  * Monthly carrier settlements.
@@ -222,7 +223,9 @@ export type GeneratedSettlement = {
  */
 export async function generateSettlements(
   period: string,
-  actor = "system"
+  actor = "system",
+  /** Limit generation to these carriers (auto-reports send per carrier). */
+  carrierIds?: string[]
 ): Promise<GeneratedSettlement[]> {
   if (!isValidPeriod(period)) {
     throw new Error(`Invalid period "${period}" — expected YYYY-MM`);
@@ -236,7 +239,9 @@ export async function generateSettlements(
       createdAt: { gte: start, lt: end },
       settlementId: null,
       tripId: { not: null },
-      trip: THIRD_PARTY_TRIP,
+      trip: carrierIds
+        ? { ...THIRD_PARTY_TRIP, carrierId: { in: carrierIds } }
+        : THIRD_PARTY_TRIP,
     },
     select: {
       id: true,
@@ -482,6 +487,10 @@ export async function markSettlementSent(settlementId: string, actor = "system")
 /**
  * Mark a settlement as paid (money transferred) and record a PAID event.
  * Allowed from GENERATED or SENT; a second call is a no-op error.
+ *
+ * Whatever part of the balance is not yet covered by payments linked to this
+ * settlement is recorded as a CounterpartyPayment, so the reconciliation
+ * (accrued − paid) agrees with the PAID status.
  */
 export async function markSettlementPaid(settlementId: string, actor = "system") {
   return prisma.$transaction(async (tx) => {
@@ -494,6 +503,48 @@ export async function markSettlementPaid(settlementId: string, actor = "system")
       where: { id: settlementId },
       data: { status: SettlementStatus.PAID, paidAt: new Date() },
     });
+    const [linked, allSettlements, allPayments] = await Promise.all([
+      tx.counterpartyPayment.findMany({
+        where: { settlementId },
+        select: { direction: true, amount: true },
+      }),
+      tx.settlement.findMany({
+        where: { carrierId: current.carrierId },
+        select: { balanceAmount: true, balanceDirection: true },
+      }),
+      tx.counterpartyPayment.findMany({
+        where: { carrierId: current.carrierId },
+        select: { direction: true, amount: true },
+      }),
+    ]);
+    // Uncovered part of this settlement…
+    const remaining = round2(
+      signedBalance(current.balanceDirection, current.balanceAmount) - netPaid(linked)
+    );
+    // …capped by the carrier's overall open balance, so a payment recorded in
+    // the reconciliation without a settlement link is not counted twice.
+    const openDebt = round2(
+      allSettlements.reduce((s, x) => s + signedBalance(x.balanceDirection, x.balanceAmount), 0) -
+        netPaid(allPayments)
+    );
+    const toRecord =
+      remaining > 0
+        ? Math.min(remaining, Math.max(openDebt, 0))
+        : Math.max(remaining, Math.min(openDebt, 0));
+    if (Math.abs(toRecord) >= 0.01) {
+      await tx.counterpartyPayment.create({
+        data: {
+          kind: "CARRIER",
+          carrierId: current.carrierId,
+          settlementId,
+          direction: toRecord > 0 ? "OUTGOING" : "INCOMING",
+          amount: round2(Math.abs(toRecord)),
+          paidAt: new Date(),
+          note: `Оплата ${current.invoiceNumber}`,
+          createdBy: actor,
+        },
+      });
+    }
     await tx.settlementEvent.create({
       data: {
         settlementId,
