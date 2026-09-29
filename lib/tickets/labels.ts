@@ -44,16 +44,21 @@ export const HISTORY_ACTION_LABEL: Record<string, string> = {
   PROMO_APPLIED: "Застосовано промокод",
   PAYMENT_STARTED: "Розпочато онлайн-оплату",
   PAYMENT_SETTLED: "Платіж отримано",
-  PAYMENT_EXPIRED: "Знижка за онлайн-оплату згоріла",
+  PAYMENT_EXPIRED: "Час на онлайн-оплату минув — бронювання скасовано",
+  PAYMENT_CANCELLED: "Онлайн-оплату скасовано",
+  SMS_SENT: "SMS відправлено",
+  SMS_FAILED: "SMS не відправлено",
   EMAIL_SENT: "Email відправлено",
   PRICE_RECALCED: "Перераховано ціну",
 };
 
 export const STATUS_TRANSITIONS: Record<TicketStatus, TicketStatus[]> = {
   RESERVED: ["AWAITING_PAYMENT", "PAID_ONLINE", "PAID_CASH", "CANCELLED"],
-  AWAITING_PAYMENT: ["PAID_ONLINE", "RESERVED", "CANCELLED"],
-  PAID_ONLINE: ["REFUNDED", "CANCELLED"],
-  PAID_CASH: ["REFUNDED", "CANCELLED"],
+  // Started online payment but paid at the desk instead, or gave up.
+  AWAITING_PAYMENT: ["PAID_ONLINE", "PAID_CASH", "RESERVED", "CANCELLED"],
+  // A paid ticket is never "cancelled" — it is refunded.
+  PAID_ONLINE: ["REFUNDED"],
+  PAID_CASH: ["REFUNDED"],
   CANCELLED: [],
   REFUNDED: [],
 };

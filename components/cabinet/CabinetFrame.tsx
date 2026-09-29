@@ -26,7 +26,7 @@ export default function CabinetFrame({
           </button>
           <span className="text-sm font-semibold text-slate-900">Asol BUS</span>
         </header>
-        <main className="flex-1 overflow-auto px-4 py-6 sm:px-6 lg:px-8">
+        <main className="flex-1 overflow-auto px-3 py-4 sm:px-4 lg:px-5">
           {children}
         </main>
       </div>

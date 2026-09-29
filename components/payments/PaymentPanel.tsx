@@ -148,8 +148,8 @@ export default function PaymentPanel({
       <div className="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-center">
         <p className="text-lg font-semibold text-amber-800">Час вийшов</p>
         <p className="mt-1 text-sm text-amber-700">
-          24 години на онлайн-оплату минули — знижка згоріла. Квиток у резерві
-          за повною ціною, оплата в автобусі.
+          Час на онлайн-оплату минув — бронювання скасовано, місце звільнено.
+          Ми надіслали вам SMS та e-mail. Можна оформити новий квиток.
         </p>
         <a
           href={`/cabinet/tickets/${state.items[0]?.reference ?? reference}`}
@@ -193,14 +193,14 @@ export default function PaymentPanel({
 
       {deadline && !deadlinePassed ? (
         <p className="mt-1 text-sm text-slate-500">
-          До кінця знижки:{" "}
+          Сплатіть протягом:{" "}
           <span className="font-semibold tabular-nums text-slate-900">
             {formatCountdown(deadlineMs ?? 0)}
           </span>{" "}
           <span className="text-xs text-slate-400">
             (до {new Date(deadline).toLocaleString("uk-UA")})
           </span>{" "}
-          — інакше знижка за онлайн-оплату згорить.
+          — інакше бронювання автоматично скасується (повідомимо SMS та e-mail).
         </p>
       ) : null}
 

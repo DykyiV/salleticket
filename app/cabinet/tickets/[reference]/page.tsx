@@ -1,20 +1,21 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { headers } from "next/headers";
-import PageHeader from "@/components/cabinet/PageHeader";
 import BoardingHint from "@/components/ticket/BoardingHint";
-import CancelTicketButton from "@/components/ticket/CancelTicketButton";
 import PassengerEditor from "@/components/ticket/PassengerEditor";
 import TicketItineraryEditor from "@/components/ticket/TicketItineraryEditor";
-import TicketStatusControl from "@/components/ticket/TicketStatusControl";
+import TicketPaymentActions from "@/components/ticket/TicketPaymentActions";
 import RecalcPriceButton from "@/components/ticket/RecalcPriceButton";
 import TicketComments from "@/components/ticket/TicketComments";
 import SendSmsButton from "@/components/ticket/SendSmsButton";
+import DialogButton from "@/components/ui/DialogButton";
 import { ticketAccess } from "@/lib/tickets/permissions";
 import { getCurrentUser } from "@/lib/auth/session";
 import { hasRoleAtLeast } from "@/lib/auth/constants";
+import { can } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/db";
 import { reconcileTicketPayment } from "@/lib/payments";
+import { getSiteSettings } from "@/lib/settings";
 import { qrCodeDataUrl } from "@/lib/tickets/qrcode";
 import { buildTimeline } from "@/lib/tickets/timeline";
 import { findStopForCity } from "@/lib/routes/boarding";
@@ -27,26 +28,41 @@ import {
   TICKET_STATUS_CLASS,
   TICKET_STATUS_LABEL,
 } from "@/lib/tickets/labels";
+import { MONEY_TONE_CLASS, moneyState, priceBreakdown } from "@/lib/tickets/ticketMoney";
 
 export const dynamic = "force-dynamic";
 
-export default async function CabinetTicketEditPage(
-  props: {
-    params: Promise<{ reference: string }>;
-  }
-) {
+/**
+ * Ticket card, one screen: left — passenger and trip (bus, seat, boarding);
+ * right — status, number, QR, downloads and the price block. The status is
+ * not edited by hand: it follows from how the ticket was booked and paid
+ * (see TicketPaymentActions). History and comments open in dialogs.
+ */
+export default async function CabinetTicketEditPage(props: {
+  params: Promise<{ reference: string }>;
+}) {
   const params = await props.params;
   const user = await getCurrentUser();
   if (!user) return null;
 
   const booking = await prisma.booking.findUnique({
     where: { reference: params.reference },
+    select: { id: true, ticketId: true },
+  });
+  if (!booking) notFound();
+
+  // Settle / expire a pending online payment before showing the ticket.
+  await reconcileTicketPayment(booking.ticketId);
+
+  const full = await prisma.booking.findUnique({
+    where: { id: booking.id },
     include: {
       ticket: {
         include: {
           history: { orderBy: { timestamp: "desc" } },
           comments: { orderBy: { createdAt: "asc" } },
           cashCollectedBy: { select: { email: true, displayName: true } },
+          payments: { orderBy: { createdAt: "desc" }, take: 1 },
           legs: {
             orderBy: { order: "asc" },
             include: {
@@ -70,372 +86,335 @@ export default async function CabinetTicketEditPage(
       },
     },
   });
-  if (!booking) notFound();
+  if (!full) notFound();
+  const ticket = full.ticket;
 
   const staff = hasRoleAtLeast(user.role, "AGENT");
-  if (booking.ticket.userId !== user.id && !staff) notFound();
-  const access = await ticketAccess(
-    { sub: user.id, role: user.role },
-    booking.ticket.userId
-  );
+  const isOwner = ticket.userId === user.id;
+  if (!isOwner && !staff) notFound();
+  const access = await ticketAccess({ sub: user.id, role: user.role }, ticket.userId);
+  const [canEditBooking, canCancel, canRefund, settings] = await Promise.all([
+    staff ? can(user, "booking.edit") : Promise.resolve(false),
+    staff ? can(user, "booking.cancel") : Promise.resolve(false),
+    staff ? can(user, "payment.refund") : Promise.resolve(false),
+    getSiteSettings(),
+  ]);
 
-  await reconcileTicketPayment(booking.ticket.id);
-  const freshTicket = await prisma.ticket.findUnique({
-    where: { id: booking.ticket.id },
-    include: { payments: { orderBy: { createdAt: "desc" }, take: 1 } },
-  });
-  const payment = freshTicket?.payments[0] ?? null;
-  if (freshTicket) {
-    booking.ticket.status = freshTicket.status;
-    booking.ticket.finalPrice = freshTicket.finalPrice;
-  }
-
-  const actorIds = [
-    ...new Set(
-      booking.ticket.history
-        .map((row) => row.changedBy)
-        .filter((id): id is string => Boolean(id))
-    ),
-  ];
+  const actorIds = [...new Set(ticket.history.map((row) => row.changedBy).filter((id): id is string => Boolean(id)))];
   const actors = actorIds.length
     ? await prisma.user.findMany({
         where: { id: { in: actorIds } },
-        select: { id: true, displayName: true, email: true, role: true },
+        select: { id: true, displayName: true, email: true },
       })
     : [];
-  const actorNames = new Map(
-    actors.map((a) => [
-      a.id,
-      `${a.displayName?.trim() || a.email.split("@")[0]}`,
-    ])
-  );
-  const timeline = buildTimeline(
-    booking.ticket.history,
-    actorNames,
-    (action) => HISTORY_ACTION_LABEL[action] ?? action
-  );
+  const actorNames = new Map(actors.map((a) => [a.id, `${a.displayName?.trim() || a.email.split("@")[0]}`]));
+  const timeline = buildTimeline(ticket.history, actorNames, (action) => HISTORY_ACTION_LABEL[action] ?? action);
 
-  const host = (await headers()).get("x-forwarded-host") ?? (await headers()).get("host");
-  const proto = (await headers()).get("x-forwarded-proto") ?? "http";
-  const qrPayload = `${proto}://${host}/check/${booking.reference}`;
-  const qrCode = await qrCodeDataUrl(qrPayload);
+  const h = await headers();
+  const host = h.get("x-forwarded-host") ?? h.get("host");
+  const proto = h.get("x-forwarded-proto") ?? "http";
+  const qrCode = await qrCodeDataUrl(`${proto}://${host}/check/${full.reference}`);
 
-  const trip = booking.ticket.trip;
-  const returnTrip = booking.ticket.returnTrip;
+  const trip = ticket.trip;
+  const returnTrip = ticket.returnTrip;
   const departure = trip?.departure;
   const stops = departure?.stops ?? [];
   const board = findStopForCity(stops, trip?.fromCity);
   const alight = findStopForCity(stops, trip?.toCity);
-  const status = booking.ticket.status;
-  const discount =
-    booking.ticket.basePrice > booking.ticket.finalPrice
-      ? booking.ticket.basePrice - booking.ticket.finalPrice
-      : 0;
+  const status = ticket.status;
+
+  const payment = ticket.payments[0] ?? null;
+  const livePayment = payment && ["PENDING", "SENT", "SETTLED"].includes(payment.status) ? payment : null;
+  const statusSince = ticket.history.find((row) => row.newStatus === status)?.timestamp ?? null;
+  const price = priceBreakdown({
+    basePrice: ticket.basePrice,
+    finalPrice: ticket.finalPrice,
+    ageCategory: full.ageCategory,
+    promoCode: full.promoCode,
+    onlinePayment: livePayment,
+  });
+  const money = moneyState({
+    status,
+    finalPrice: ticket.finalPrice,
+    payment: livePayment,
+    cashCollector: ticket.cashCollectedBy
+      ? ticket.cashCollectedBy.displayName
+        ? `${ticket.cashCollectedBy.displayName} (${ticket.cashCollectedBy.email})`
+        : ticket.cashCollectedBy.email
+      : null,
+    cashCollectedAt: ticket.cashCollectedAt,
+    statusSince,
+  });
+
+  const buses = [
+    ...new Set(
+      ticket.legs
+        .map((leg) => (leg.assignment ? `${leg.assignment.bus.model ?? "Автобус"} ${leg.assignment.bus.plate}` : null))
+        .filter((b): b is string => Boolean(b))
+    ),
+  ];
+  const busLabel = buses.length ? buses.join(", ") : departure?.defaultBus ?? null;
 
   return (
-    <div className="mx-auto max-w-3xl space-y-5">
-      <PageHeader
-        title={booking.reference}
-        subtitle="Редагування квитка: дані пасажира, маршрут і посадка з виїзду."
-      />
-
-      <div className="flex flex-wrap items-center gap-2">
-        <span
-          className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ring-1 ring-inset ${TICKET_STATUS_CLASS[status]}`}
-        >
-          {TICKET_STATUS_LABEL[status]}
-        </span>
-        <span className="text-sm font-bold tabular-nums">{eur(booking.finalPrice)}</span>
-        {user.role === "SUPER_ADMIN" ? (
-          <RecalcPriceButton ticketId={booking.ticket.id} />
-        ) : null}
-        <Link
-          href={`/account/tickets/${booking.reference}/print`}
-          className="ml-auto rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700"
-        >
-          Друкований квиток
+    <div className="space-y-3">
+      <div className="flex items-center gap-3 text-sm">
+        <Link href="/cabinet/tickets" className="text-slate-500 hover:text-brand-700">
+          ← Квитки
         </Link>
-        <Link
-          href="/cabinet/tickets"
-          className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700"
-        >
-          До списку
-        </Link>
+        <span className="text-slate-300">/</span>
+        <span className="font-mono font-semibold text-slate-900">{full.reference}</span>
       </div>
 
-      <section className="rounded-2xl bg-white p-5 ring-1 ring-slate-200">
-        <h2 className="text-sm font-semibold text-slate-900">Квиток — 3 варіанти</h2>
-        <div className="mt-3 flex flex-wrap items-center gap-5">
-          <div className="min-w-40">
-            <p className="text-xs text-slate-500">Номер бронювання</p>
-            <p className="mt-1 font-mono text-2xl font-bold tracking-widest text-slate-900">
-              {booking.reference}
-            </p>
-            <a
-              href={`/api/tickets/${booking.reference}/pdf`}
-              className="mt-3 inline-block rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-medium text-white"
-            >
-              Завантажити PDF
-            </a>
-            <a
-              href={`/api/tickets/${booking.reference}/wallet`}
-              className="mt-3 ml-2 inline-block rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700"
-            >
-              Google Wallet
-            </a>
-          </div>
-          <div className="text-center">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={qrCode}
-              alt={`QR-код квитка ${booking.reference}`}
-              className="h-28 w-28 rounded-lg ring-1 ring-slate-200"
+      <div className="grid items-start gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(300px,360px)]">
+        {/* ---------------- Left: passenger + trip ---------------- */}
+        <div className="space-y-3">
+          <section className="rounded-2xl bg-white p-4 ring-1 ring-slate-200">
+            <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Пасажир</h2>
+            <PassengerEditor
+              key={`${full.firstName}-${full.lastName}-${full.phone}-${full.email}`}
+              ticketId={ticket.id}
+              category={AGE_LABEL[full.ageCategory] ?? full.ageCategory}
+              canEdit={access.canEdit}
+              passenger={{
+                firstName: full.firstName,
+                lastName: full.lastName,
+                phone: full.phone,
+                email: full.email,
+              }}
             />
-            <p className="mt-1 text-[11px] text-slate-500">QR для посадки</p>
-          </div>
-        </div>
-      </section>
+          </section>
 
-      <section className="rounded-2xl bg-white p-5 ring-1 ring-slate-200">
-        <h2 className="text-sm font-semibold text-slate-900">Пасажир</h2>
-        <p className="mt-1 text-xs text-slate-500">
-          {AGE_LABEL[booking.ageCategory] ?? booking.ageCategory}
-        </p>
-        <div className="mt-4">
-          <PassengerEditor
-            key={`${booking.firstName}-${booking.lastName}-${booking.phone}-${booking.email}`}
-            ticketId={booking.ticket.id}
-            passenger={{
-              firstName: booking.firstName,
-              lastName: booking.lastName,
-              phone: booking.phone,
-              email: booking.email,
-            }}
-          />
-        </div>
-      </section>
-
-      <section className="rounded-2xl bg-white p-5 ring-1 ring-slate-200">
-        <h2 className="text-sm font-semibold text-slate-900">Рейс</h2>
-        <p className="mt-2 text-base font-semibold text-slate-900">
-          {trip ? `${trip.fromCity} → ${trip.toCity}` : "Маршрут не привʼязано"}
-        </p>
-        {trip ? (
-          <p className="mt-1 text-sm text-slate-600">
-            {formatUkDate(trip.departureTime)}
-            {departure ? ` · ${weekdayName(departure.weekday)}` : ""}
-            {trip.carrier?.name ? ` · ${trip.carrier.name}` : ""}
-          </p>
-        ) : null}
-        {departure?.template?.name ? (
-          <p className="mt-1 text-xs text-slate-500">{departure.template.name}</p>
-        ) : null}
-        {departure?.defaultBus ? (
-          <p className="mt-1 text-xs text-slate-500">Автобус: {departure.defaultBus}</p>
-        ) : null}
-        <div className="mt-4 space-y-1">
-          <BoardingHint label="Посадка" stop={board} />
-          <BoardingHint label="Висадка" stop={alight} />
-        </div>
-        {booking.ticket.legs.length > 0 ? (
-          <div className="mt-4 border-t border-slate-100 pt-4">
-            <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-              Плечі поїздки (реальні автобуси)
-            </h3>
-            <ul className="mt-2 space-y-1.5 text-sm">
-              {booking.ticket.legs.map((leg) => (
-                <li
-                  key={leg.id}
-                  className="flex flex-wrap items-center gap-2 rounded-lg bg-slate-50 px-3 py-1.5"
-                >
-                  <span className="text-xs font-semibold text-slate-500">
-                    Плече {leg.order}
-                  </span>
-                  <span className="text-slate-900">
-                    {leg.fromCity ?? leg.trip.fromCity} → {leg.toCity ?? leg.trip.toCity}
-                  </span>
-                  <span className="font-mono text-xs text-slate-600">
-                    {leg.assignment
-                      ? `${leg.assignment.bus.model ?? "Автобус"} ${leg.assignment.bus.plate}`
-                      : "автобус не призначено"}
-                  </span>
-                  {leg.seatNumber != null ? (
-                    <span className="rounded bg-white px-1.5 py-0.5 text-xs font-semibold text-brand-800 ring-1 ring-brand-200">
-                      місце {leg.seatNumber}
-                    </span>
-                  ) : null}
-                </li>
-              ))}
-            </ul>
-          </div>
-        ) : null}
-        <div className="mt-4 border-t border-slate-100 pt-4">
-          <TicketItineraryEditor
-            ticketId={booking.ticket.id}
-            tripKind={booking.ticket.tripKind}
-            outbound={{
-              tripId: trip?.id ?? null,
-              fromCity: trip?.fromCity ?? "",
-              toCity: trip?.toCity ?? "",
-              date: trip ? trip.departureTime.toISOString().slice(0, 10) : null,
-              seatNumber: booking.ticket.seatNumber,
-              hasAssignedSeats: departure?.hasAssignedSeats !== false,
-            }}
-            returnLeg={
-              booking.ticket.tripKind === "ONE_WAY"
-                ? null
-                : {
-                    tripId: returnTrip?.id ?? null,
-                    fromCity: returnTrip?.fromCity ?? trip?.toCity ?? "",
-                    toCity: returnTrip?.toCity ?? trip?.fromCity ?? "",
-                    date: returnTrip
-                      ? returnTrip.departureTime.toISOString().slice(0, 10)
-                      : null,
-                    seatNumber: booking.ticket.returnSeatNumber,
-                    hasAssignedSeats:
-                      returnTrip?.departure?.hasAssignedSeats !== false,
-                  }
-            }
-          />
-        </div>
-      </section>
-
-      {staff ? (
-        <section className="rounded-2xl bg-white p-5 ring-1 ring-slate-200">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <h2 className="text-sm font-semibold text-slate-900">Статус</h2>
-              <p className="mt-1 text-xs text-slate-500">
-                Зміна записується в історію квитка.
+          <section className="rounded-2xl bg-white p-4 ring-1 ring-slate-200">
+            <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Рейс</h2>
+            <p className="mt-1 text-base font-semibold text-slate-900">
+              {trip ? `${trip.fromCity} → ${trip.toCity}` : "Маршрут не привʼязано"}
+            </p>
+            {trip ? (
+              <p className="text-sm text-slate-600">
+                {formatUkDate(trip.departureTime)}
+                {departure ? ` · ${weekdayName(departure.weekday)}` : ""}
+                {trip.carrier?.name ? ` · ${trip.carrier.name}` : ""}
+                {departure?.template?.name ? (
+                  <span className="text-slate-400"> · {departure.template.name}</span>
+                ) : null}
               </p>
-            </div>
-            {hasRoleAtLeast(user.role, "ADMIN") ? (
-              <SendSmsButton
-                ticketId={booking.ticket.id}
-                passengerName={`${booking.firstName} ${booking.lastName}`.trim()}
-              />
             ) : null}
-          </div>
-          <div className="mt-4">
-            <TicketStatusControl
-              ticketId={booking.ticket.id}
-              currentStatus={status}
-            />
-          </div>
-        </section>
-      ) : status === "RESERVED" ? (
-        <section className="rounded-2xl bg-white p-5 ring-1 ring-slate-200">
-          <h2 className="text-sm font-semibold text-slate-900">Скасування</h2>
-          <p className="mt-1 text-xs text-slate-500">
-            Незаплачений квиток можна скасувати самостійно.
-          </p>
-          <div className="mt-4">
-            <CancelTicketButton ticketId={booking.ticket.id} />
-          </div>
-        </section>
-      ) : null}
 
-      <section className="rounded-2xl bg-white p-5 ring-1 ring-slate-200">
-        <h2 className="text-sm font-semibold text-slate-900">Оплата</h2>
-        <dl className="mt-3 grid grid-cols-2 gap-2 text-sm">
-          <dt className="text-slate-500">Базова ціна</dt>
-          <dd className="text-right tabular-nums">{eur(booking.ticket.basePrice)}</dd>
-          <dt className="text-slate-500">Знижка</dt>
-          <dd className="text-right tabular-nums">
-            {discount > 0 ? `−${eur(discount)}` : "—"}
-          </dd>
-          <dt className="font-medium text-slate-900">До сплати</dt>
-          <dd className="text-right font-semibold tabular-nums">
-            {eur(booking.finalPrice)}
-          </dd>
-          {booking.ticket.status === "PAID_CASH" ? (
-            <>
-              <dt className="text-slate-500">Готівку отримав</dt>
-              <dd className="text-right">
-                {booking.ticket.cashCollectedBy
-                  ? booking.ticket.cashCollectedBy.displayName ?? booking.ticket.cashCollectedBy.email
-                  : "Водій / перевізник"}
-              </dd>
-            </>
-          ) : null}
-        </dl>
-        {payment ? (
-          <div className="mt-4 rounded-xl border border-violet-200 bg-violet-50 px-4 py-3 text-sm">
-            <p className="font-medium text-violet-900">
-              Онлайн-оплата: {eur(payment.amount)}
-              {payment.fullAmount > payment.amount
-                ? ` замість ${eur(payment.fullAmount)}`
-                : ""}
-            </p>
-            <p className="mt-0.5 text-xs text-violet-700">
-              {payment.status === "SETTLED"
-                ? "Кошти зараховано."
-                : payment.status === "SENT"
-                  ? "Оплату надіслано — очікуємо зарахування коштів (20–30 хв)."
-                  : payment.status === "EXPIRED"
-                    ? "Дедлайн минув — знижка згоріла, квиток за повною ціною."
-                    : `Оплатіть до ${payment.deadlineAt.toLocaleString("uk-UA")} — інакше знижка згорить.`}
-            </p>
-            {booking.ticket.status === "AWAITING_PAYMENT" &&
-            payment.status !== "EXPIRED" ? (
-              <Link
-                href={`/pay/${booking.reference}`}
-                className="mt-2 inline-block rounded-lg bg-violet-600 px-3 py-1.5 text-xs font-semibold text-white"
-              >
-                {payment.status === "SENT" ? "Статус оплати" : "Сплатити зараз"}
-              </Link>
-            ) : null}
-          </div>
-        ) : null}
-      </section>
-
-      <section className="rounded-2xl bg-white p-5 ring-1 ring-slate-200">
-        <h2 className="mb-3 text-sm font-semibold text-slate-900">Коментарі</h2>
-        <TicketComments
-          ticketId={booking.ticket.id}
-          comments={booking.ticket.comments.map((c) => ({
-            id: c.id,
-            text: c.text,
-            authorEmail: c.authorEmail,
-            createdAt: c.createdAt.toISOString(),
-          }))}
-          canComment={access.canEdit}
-        />
-      </section>
-
-      {timeline.length > 0 ? (
-        <section className="rounded-2xl bg-white p-5 ring-1 ring-slate-200">
-          <h2 className="text-sm font-semibold text-slate-900">
-            Таймлайн бронювання
-          </h2>
-          <ol className="mt-4 space-y-0">
-            {timeline.map((entry) => (
-              <li key={entry.id} className="relative flex gap-3 pb-4">
-                <span className="relative flex flex-col items-center">
-                  <span className="mt-1 h-2.5 w-2.5 rounded-full bg-brand-500 ring-2 ring-brand-100" />
-                  <span className="w-px flex-1 bg-slate-200" />
-                </span>
-                <div className="min-w-0 flex-1 pb-1">
-                  <p className="text-xs tabular-nums text-slate-400">
-                    {entry.time}
-                  </p>
-                  <p className="text-sm font-medium text-slate-900">
-                    {entry.action}
-                  </p>
-                  <p className="text-xs text-slate-500">{entry.actor}</p>
-                  {entry.lines.length > 0 ? (
-                    <ul className="mt-1 space-y-0.5 text-xs text-slate-600">
-                      {entry.lines.map((line) => (
-                        <li key={line}>{line}</li>
-                      ))}
-                    </ul>
+            <dl className="mt-3 grid gap-x-4 gap-y-1 text-sm sm:grid-cols-2">
+              <div className="flex gap-2">
+                <dt className="text-slate-500">Автобус:</dt>
+                <dd className="text-slate-900">{busLabel ?? "не призначено"}</dd>
+              </div>
+              <div className="flex gap-2">
+                <dt className="text-slate-500">Місце:</dt>
+                <dd className="font-semibold text-slate-900">
+                  {departure?.hasAssignedSeats === false
+                    ? "без місць"
+                    : ticket.seatNumber != null
+                      ? ticket.seatNumber
+                      : "не обрано"}
+                  {ticket.returnSeatNumber != null ? (
+                    <span className="font-normal text-slate-500"> · назад {ticket.returnSeatNumber}</span>
                   ) : null}
+                </dd>
+              </div>
+            </dl>
+
+            {board || alight ? (
+              <div className="mt-2 grid gap-x-4 gap-y-1 sm:grid-cols-2">
+                <BoardingHint label="Посадка" stop={board} />
+                <BoardingHint label="Висадка" stop={alight} />
+              </div>
+            ) : null}
+
+            {ticket.legs.length > 1 ? (
+              <ul className="mt-3 space-y-1 text-sm">
+                {ticket.legs.map((leg) => (
+                  <li key={leg.id} className="flex flex-wrap items-center gap-2 rounded-lg bg-slate-50 px-3 py-1">
+                    <span className="text-xs font-semibold text-slate-500">Плече {leg.order}</span>
+                    <span className="text-slate-900">
+                      {leg.fromCity ?? leg.trip.fromCity} → {leg.toCity ?? leg.trip.toCity}
+                    </span>
+                    <span className="font-mono text-xs text-slate-600">
+                      {leg.assignment ? `${leg.assignment.bus.model ?? "Автобус"} ${leg.assignment.bus.plate}` : "автобус не призначено"}
+                    </span>
+                    {leg.seatNumber != null ? (
+                      <span className="rounded bg-white px-1.5 py-0.5 text-xs font-semibold text-brand-800 ring-1 ring-brand-200">
+                        місце {leg.seatNumber}
+                      </span>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+
+            <div className="mt-3 border-t border-slate-100 pt-3">
+              <TicketItineraryEditor
+                ticketId={ticket.id}
+                tripKind={ticket.tripKind}
+                outbound={{
+                  tripId: trip?.id ?? null,
+                  fromCity: trip?.fromCity ?? "",
+                  toCity: trip?.toCity ?? "",
+                  date: trip ? trip.departureTime.toISOString().slice(0, 10) : null,
+                  seatNumber: ticket.seatNumber,
+                  hasAssignedSeats: departure?.hasAssignedSeats !== false,
+                }}
+                returnLeg={
+                  ticket.tripKind === "ONE_WAY"
+                    ? null
+                    : {
+                        tripId: returnTrip?.id ?? null,
+                        fromCity: returnTrip?.fromCity ?? trip?.toCity ?? "",
+                        toCity: returnTrip?.toCity ?? trip?.fromCity ?? "",
+                        date: returnTrip ? returnTrip.departureTime.toISOString().slice(0, 10) : null,
+                        seatNumber: ticket.returnSeatNumber,
+                        hasAssignedSeats: returnTrip?.departure?.hasAssignedSeats !== false,
+                      }
+                }
+              />
+            </div>
+          </section>
+
+          <div className="flex flex-wrap gap-2">
+            <DialogButton label={`Історія квитка (${timeline.length})`} title={`Історія квитка ${full.reference}`}>
+              {timeline.length === 0 ? (
+                <p className="text-sm text-slate-500">Подій ще немає.</p>
+              ) : (
+                <ol>
+                  {timeline.map((entry) => (
+                    <li key={entry.id} className="relative flex gap-3 pb-4">
+                      <span className="relative flex flex-col items-center">
+                        <span className="mt-1 h-2.5 w-2.5 rounded-full bg-brand-500 ring-2 ring-brand-100" />
+                        <span className="w-px flex-1 bg-slate-200" />
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs tabular-nums text-slate-400">{entry.time}</p>
+                        <p className="text-sm font-medium text-slate-900">{entry.action}</p>
+                        <p className="text-xs text-slate-500">{entry.actor}</p>
+                        {entry.lines.length > 0 ? (
+                          <ul className="mt-1 space-y-0.5 text-xs text-slate-600">
+                            {entry.lines.map((line) => (
+                              <li key={line}>{line}</li>
+                            ))}
+                          </ul>
+                        ) : null}
+                      </div>
+                    </li>
+                  ))}
+                </ol>
+              )}
+            </DialogButton>
+            <DialogButton label={`Коментарі (${ticket.comments.length})`} title={`Коментарі до ${full.reference}`}>
+              <TicketComments
+                ticketId={ticket.id}
+                comments={ticket.comments.map((c) => ({
+                  id: c.id,
+                  text: c.text,
+                  authorEmail: c.authorEmail,
+                  createdAt: c.createdAt.toISOString(),
+                }))}
+                canComment={access.canEdit}
+              />
+            </DialogButton>
+          </div>
+        </div>
+
+        {/* ---------------- Right: status, QR, downloads, price ---------------- */}
+        <div className="space-y-3 lg:sticky lg:top-4">
+          <section className="rounded-2xl bg-white p-4 ring-1 ring-slate-200">
+            <div className="flex items-start gap-3">
+              <div className="min-w-0 flex-1">
+                <span
+                  data-testid="ticket-status"
+                  className={`inline-flex rounded-full px-3 py-1 text-sm font-semibold ring-1 ring-inset ${TICKET_STATUS_CLASS[status]}`}
+                >
+                  {TICKET_STATUS_LABEL[status]}
+                </span>
+                <p className="mt-2 text-xs text-slate-500">Номер квитка</p>
+                <p className="font-mono text-xl font-bold tracking-widest text-slate-900">{full.reference}</p>
+              </div>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={qrCode}
+                alt={`QR-код квитка ${full.reference}`}
+                className="h-24 w-24 shrink-0 rounded-lg ring-1 ring-slate-200"
+              />
+            </div>
+            <div className="mt-3 flex flex-wrap gap-1.5">
+              <a
+                href={`/api/tickets/${full.reference}/pdf`}
+                className="rounded-lg bg-slate-900 px-2.5 py-1.5 text-xs font-medium text-white hover:bg-slate-700"
+              >
+                PDF
+              </a>
+              <Link
+                href={`/account/tickets/${full.reference}/print`}
+                className="rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:border-brand-300"
+              >
+                Друк
+              </Link>
+              <a
+                href={`/api/tickets/${full.reference}/wallet`}
+                className="rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:border-brand-300"
+              >
+                Google Wallet
+              </a>
+              {hasRoleAtLeast(user.role, "ADMIN") ? (
+                <SendSmsButton ticketId={ticket.id} passengerName={`${full.firstName} ${full.lastName}`.trim()} />
+              ) : null}
+            </div>
+          </section>
+
+          <section className="rounded-2xl bg-white p-4 ring-1 ring-slate-200">
+            <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Вартість</h2>
+            <dl className="mt-2 space-y-1 text-sm">
+              <div className="flex justify-between">
+                <dt className="text-slate-500">Тариф</dt>
+                <dd className="tabular-nums text-slate-900">{eur(price.base)}</dd>
+              </div>
+              {price.discounts.map((d) => (
+                <div key={d.label} className="flex justify-between">
+                  <dt className="text-slate-500">{d.label}</dt>
+                  <dd className="tabular-nums text-emerald-700">−{eur(d.amount)}</dd>
                 </div>
-              </li>
-            ))}
-          </ol>
-        </section>
-      ) : null}
+              ))}
+            </dl>
+            <div data-testid="ticket-money" className={`mt-3 rounded-xl px-3 py-2.5 ring-1 ring-inset ${MONEY_TONE_CLASS[money.tone]}`}>
+              <div className="flex items-baseline justify-between gap-3">
+                <span className="text-sm font-semibold">{money.label}</span>
+                <span className="text-xl font-bold tabular-nums">{eur(money.amount)}</span>
+              </div>
+              {money.note ? <p className="mt-0.5 text-xs opacity-75">{money.note}</p> : null}
+              {status === "AWAITING_PAYMENT" && livePayment?.status === "PENDING" && (isOwner || staff) ? (
+                <Link
+                  href={`/pay/${full.reference}`}
+                  className="mt-2 inline-flex h-8 items-center rounded-lg bg-amber-600 px-3 text-xs font-semibold text-white hover:bg-amber-700"
+                >
+                  Сплатити зараз
+                </Link>
+              ) : null}
+            </div>
+            <div className="mt-3">
+              <TicketPaymentActions
+                ticketId={ticket.id}
+                reference={full.reference}
+                status={status}
+                canCash={staff && canEditBooking}
+                canCancel={isOwner || canCancel}
+                canRefund={canRefund}
+                canPayOnline={isOwner || staff}
+                deadlineHours={settings.paymentDeadlineHours}
+              />
+            </div>
+            {user.role === "SUPER_ADMIN" ? (
+              <div className="mt-3 border-t border-slate-100 pt-3">
+                <RecalcPriceButton ticketId={ticket.id} />
+              </div>
+            ) : null}
+          </section>
+        </div>
+      </div>
     </div>
   );
 }
