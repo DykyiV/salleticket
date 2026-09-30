@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Header from "@/components/Header";
 import SearchForm from "@/components/SearchForm";
 
@@ -79,10 +80,9 @@ export default function Home() {
       <Header />
 
       <main className="flex-1">
-        <section className="relative overflow-hidden">
-          <div className="absolute inset-0 -z-10 bg-gradient-to-br from-brand-700 via-brand-600 to-brand-500" />
+        <section className="relative isolate overflow-hidden bg-gradient-to-br from-brand-700 via-brand-600 to-brand-500">
           <div
-            className="absolute inset-0 -z-10 opacity-30 [mask-image:radial-gradient(circle_at_top,white,transparent_70%)]"
+            className="pointer-events-none absolute inset-0 -z-10 opacity-30 [mask-image:radial-gradient(circle_at_top,white,transparent_70%)]"
             style={{
               backgroundImage:
                 "radial-gradient(circle at 1px 1px, rgba(255,255,255,0.25) 1px, transparent 0)",
@@ -90,23 +90,37 @@ export default function Home() {
             }}
           />
 
-          <div className="mx-auto max-w-6xl px-4 pb-24 pt-16 sm:px-6 sm:pt-20 lg:px-8">
-            <div className="mx-auto max-w-3xl text-center text-white">
-              <span className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-xs font-medium text-white ring-1 ring-inset ring-white/20 backdrop-blur">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-                Bus ticket marketplace
-              </span>
-              <h1 className="mt-5 text-4xl font-bold tracking-tight sm:text-5xl md:text-6xl">
-                Travel between cities the <span className="text-brand-100">smart way</span>
-              </h1>
-              <p className="mx-auto mt-5 max-w-2xl text-base text-brand-50/90 sm:text-lg">
-                Compare routes, carriers, and prices — and book your next bus
-                trip in a couple of clicks. No hidden fees, no paperwork.
-              </p>
-            </div>
+          <div className="mx-auto max-w-6xl px-4 pb-24 pt-12 sm:px-6 sm:pt-16 lg:px-8">
+            <div className="grid w-full min-w-0 items-center gap-4 lg:grid-cols-2 lg:gap-8">
+              <div className="order-1 min-w-0 text-center text-white lg:text-left">
+                <span className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-xs font-medium text-white ring-1 ring-inset ring-white/20 backdrop-blur">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                  Bus ticket marketplace
+                </span>
+                <h1 className="mt-5 text-4xl font-bold tracking-tight sm:text-5xl md:text-6xl">
+                  Travel between cities the <span className="text-brand-100">smart way</span>
+                </h1>
+                <p className="mx-auto mt-5 max-w-2xl text-base text-brand-50/90 sm:text-lg lg:mx-0">
+                  Compare routes, carriers, and prices — and book your next bus
+                  trip in a couple of clicks. No hidden fees, no paperwork.
+                </p>
+              </div>
 
-            <div className="mx-auto mt-10 max-w-5xl">
-              <SearchForm />
+              <div className="order-2 flex min-w-0 items-center justify-center">
+                <Image
+                  src="/grandes-tour-bus.webp"
+                  alt="Двоповерховий автобус Grandes Tour"
+                  width={1778}
+                  height={830}
+                  priority
+                  className="h-auto w-full max-h-72 object-contain drop-shadow-[0_22px_28px_rgba(0,0,0,0.38)] sm:max-h-96 lg:max-h-[26rem]"
+                  style={{ width: "100%", height: "auto" }}
+                />
+              </div>
+
+              <div className="order-3 mx-auto mt-2 w-full min-w-0 max-w-5xl lg:col-span-2 lg:mt-4">
+                <SearchForm />
+              </div>
             </div>
 
             <dl className="mx-auto mt-10 grid max-w-4xl grid-cols-2 gap-4 sm:grid-cols-4">
