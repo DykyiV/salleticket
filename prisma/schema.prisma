@@ -561,6 +561,9 @@ model Booking {
   lastName    String
   ageCategory AgeCategory @default(ADULT)
   phone       String
+  /// Optional second and third mobile numbers. The first phone stays required.
+  phone2      String?
+  phone3      String?
   email       String?
   promoCode   String?
   finalPrice  Float

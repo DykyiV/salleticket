@@ -54,30 +54,14 @@ export default function TicketComments({
 
   return (
     <div>
-      {comments.length === 0 ? (
-        <p className="text-sm text-slate-400">Коментарів ще немає.</p>
-      ) : (
-        <ul className="flex flex-col gap-3">
-          {comments.map((c) => (
-            <li key={c.id} className="rounded-xl bg-slate-50 px-4 py-3 ring-1 ring-slate-100">
-              <p className="whitespace-pre-wrap text-sm text-slate-800">{c.text}</p>
-              <p className="mt-1 text-xs text-slate-400">
-                {c.authorEmail} ·{" "}
-                {new Date(c.createdAt).toISOString().slice(0, 16).replace("T", " ")}
-              </p>
-            </li>
-          ))}
-        </ul>
-      )}
-
       {canComment ? (
-        <div className="mt-4">
+        <div>
           <textarea
             value={text}
             onChange={(e) => setText(e.target.value)}
             rows={2}
             maxLength={1000}
-            placeholder="Додати коментар…"
+            placeholder="Коментар до талона"
             className="w-full rounded-xl border-0 px-3 py-2 text-sm text-slate-900 ring-1 ring-slate-300 focus:ring-2 focus:ring-brand-500"
           />
           {error ? <p className="mt-1 text-xs text-rose-600">{error}</p> : null}
@@ -85,11 +69,23 @@ export default function TicketComments({
             type="button"
             onClick={add}
             disabled={busy || text.trim().length === 0}
-            className="mt-2 rounded-lg bg-brand-600 px-4 py-2 text-xs font-semibold text-white transition hover:bg-brand-700 disabled:opacity-50"
+            className="mt-2 rounded-lg bg-brand-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-brand-700 disabled:opacity-50"
           >
-            {busy ? "Зберігаю…" : "Додати коментар"}
+            {busy ? "Зберігаю…" : "Зберегти коментар"}
           </button>
         </div>
+      ) : null}
+      {comments.length > 0 ? (
+        <ul className="mt-3 flex flex-col gap-2">
+          {comments.map((c) => (
+            <li key={c.id} className="rounded-lg bg-slate-50 px-3 py-2">
+              <p className="whitespace-pre-wrap text-sm text-slate-800">{c.text}</p>
+              <p className="mt-0.5 text-[11px] text-slate-400">
+                {c.authorEmail} · {new Date(c.createdAt).toISOString().slice(0, 16).replace("T", " ")}
+              </p>
+            </li>
+          ))}
+        </ul>
       ) : null}
     </div>
   );

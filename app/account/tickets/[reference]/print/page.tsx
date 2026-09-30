@@ -5,11 +5,9 @@ import PrintTicketButton from "@/components/ticket/PrintTicketButton";
 import { getCurrentUser } from "@/lib/auth/session";
 import { hasRoleAtLeast } from "@/lib/auth/constants";
 import { prisma } from "@/lib/db";
-import { findStopForCity, boardingLabel } from "@/lib/routes/boarding";
-import { formatUkDate } from "@/lib/routes/dates";
-import { weekdayName } from "@/lib/routes/weekdays";
+import { formatTripMoment, toBoardingPass } from "@/lib/tickets/boardingPass";
 import { qrCodeDataUrl } from "@/lib/tickets/qrcode";
-import { AGE_LABEL, eur, TICKET_STATUS_LABEL, TRIP_KIND_LABEL } from "@/lib/tickets/labels";
+import { eur, TICKET_STATUS_LABEL, TRIP_KIND_LABEL } from "@/lib/tickets/labels";
 import { moneyState, priceBreakdown } from "@/lib/tickets/ticketMoney";
 
 export const dynamic = "force-dynamic";
@@ -32,7 +30,7 @@ export default async function PrintTicketPage(props: { params: Promise<{ referen
           payments: { orderBy: { createdAt: "desc" }, take: 1 },
           history: { orderBy: { timestamp: "desc" }, select: { newStatus: true, timestamp: true } },
           legs: { orderBy: { order: "asc" }, include: { assignment: { include: { bus: true } } } },
-          trip: { include: { carrier: true, departure: { include: { stops: true, template: true } } } },
+          trip: { include: { carrier: true, departure: { include: { stops: true, template: true, bus: true } } } },
           returnTrip: { include: { carrier: true, departure: { include: { stops: true, template: true } } } },
         },
       },
@@ -42,16 +40,8 @@ export default async function PrintTicketPage(props: { params: Promise<{ referen
   if (booking.ticket.userId !== user.id && !hasRoleAtLeast(user.role, "AGENT")) notFound();
 
   const ticket = booking.ticket;
-  const trip = ticket.trip;
   const returnTrip = ticket.returnTrip;
-  const departure = trip?.departure;
-  const assignsSeats = departure?.hasAssignedSeats !== false;
-  const board = findStopForCity(departure?.stops ?? [], trip?.fromCity);
-  const alight = findStopForCity(departure?.stops ?? [], trip?.toCity);
-  const bus =
-    ticket.legs.map((l) => (l.assignment ? `${l.assignment.bus.model ?? "Автобус"} ${l.assignment.bus.plate}` : null)).find(Boolean) ??
-    departure?.defaultBus ??
-    null;
+  const pass = toBoardingPass(booking);
 
   const h = await headers();
   const qr = await qrCodeDataUrl(
@@ -89,7 +79,7 @@ export default async function PrintTicketPage(props: { params: Promise<{ referen
         <header className="flex items-center justify-between border-b border-slate-200 pb-3">
           <p className="text-sm font-bold tracking-wide">
             Asol <span className="text-brand-600 print:text-black">BUS</span>
-            <span className="ml-2 font-normal text-slate-500">· посадковий квиток</span>
+            <span className="ml-2 font-normal text-slate-500">· посадковий талон</span>
           </p>
           <p className="text-xs text-slate-500">{TRIP_KIND_LABEL[ticket.tripKind] ?? ticket.tripKind}</p>
         </header>
@@ -98,79 +88,60 @@ export default async function PrintTicketPage(props: { params: Promise<{ referen
           {/* Left: passenger + trip */}
           <div className="space-y-4 text-sm">
             <section>
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Пасажир</p>
-              <p className="text-lg font-semibold">
-                {booking.firstName} {booking.lastName}
-              </p>
-              <p className="text-slate-600">
-                {AGE_LABEL[booking.ageCategory] ?? booking.ageCategory} · {booking.phone}
-                {booking.email ? ` · ${booking.email}` : ""}
-              </p>
+              <p className="text-lg font-semibold">{pass.passengerName}</p>
+              <p className="text-slate-600">{pass.phones.join(" · ")}</p>
             </section>
-
             <section>
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Рейс</p>
-              <p className="text-lg font-semibold">{trip ? `${trip.fromCity} → ${trip.toCity}` : "Маршрут"}</p>
-              {trip ? (
-                <p className="text-slate-700">
-                  {formatUkDate(trip.departureTime)}
-                  {departure ? ` · ${weekdayName(departure.weekday)}` : ""}
-                  {trip.carrier?.name ? ` · ${trip.carrier.name}` : ""}
-                </p>
-              ) : null}
-              <div className="mt-2 grid grid-cols-2 gap-2">
+              <p className="text-lg font-semibold">
+                {pass.fromCity} → {pass.toCity}
+              </p>
+              <div className="mt-2 grid grid-cols-2 gap-3">
                 <div>
-                  <p className="text-[10px] uppercase tracking-wider text-slate-500">Автобус</p>
-                  <p className="font-medium">{bus ?? "—"}</p>
+                  <p className="text-[10px] uppercase tracking-wider text-slate-500">Виїзд</p>
+                  <p className="text-lg font-bold tabular-nums">{pass.departureLabel}</p>
                 </div>
                 <div>
-                  <p className="text-[10px] uppercase tracking-wider text-slate-500">Місце</p>
-                  <p className="text-2xl font-bold leading-none">
-                    {assignsSeats ? ticket.seatNumber ?? "—" : "без місць"}
-                  </p>
+                  <p className="text-[10px] uppercase tracking-wider text-slate-500">Прибуття</p>
+                  <p className="text-lg font-bold tabular-nums">{pass.arrivalLabel}</p>
                 </div>
               </div>
             </section>
-
+            <section className="border-t border-slate-200 pt-3">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Місце посадки</p>
+              <p className="font-medium">{pass.boardingPlace}</p>
+              {pass.coordinates ? <p className="text-xs tabular-nums text-slate-600">{pass.coordinates}</p> : null}
+              {pass.mapsUrl ? <p className="break-all text-xs text-slate-600">{pass.mapsUrl}</p> : null}
+            </section>
             <section className="grid grid-cols-2 gap-3 border-t border-slate-200 pt-3">
               <div>
-                <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Посадка</p>
-                <p className="font-medium">{board ? boardingLabel(board) : trip?.fromCity ?? "—"}</p>
-                {board?.boardingAddress && board.boardingAddress !== boardingLabel(board) ? (
-                  <p className="text-xs text-slate-600">{board.boardingAddress}</p>
-                ) : null}
-                {board?.outboundTime ? <p className="text-xl font-bold tabular-nums">{board.outboundTime}</p> : null}
+                <p className="text-[10px] uppercase tracking-wider text-slate-500">Номер автобуса</p>
+                <p className="text-xl font-bold">{pass.busNumber}</p>
               </div>
               <div>
-                <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Висадка</p>
-                <p className="font-medium">{alight ? boardingLabel(alight) : trip?.toCity ?? "—"}</p>
-                {alight?.boardingAddress && alight.boardingAddress !== boardingLabel(alight) ? (
-                  <p className="text-xs text-slate-600">{alight.boardingAddress}</p>
-                ) : null}
-                {alight?.outboundTime ? <p className="text-xl font-bold tabular-nums">{alight.outboundTime}</p> : null}
+                <p className="text-[10px] uppercase tracking-wider text-slate-500">Місце</p>
+                <p className="text-xl font-bold">{pass.seatLabel}</p>
+              </div>
+              <div>
+                <p className="text-[10px] uppercase tracking-wider text-slate-500">Телефон автобуса</p>
+                <p className="font-medium">{pass.busPhone}</p>
+              </div>
+              <div>
+                <p className="text-[10px] uppercase tracking-wider text-slate-500">Диспетчер</p>
+                <p className="font-medium">{pass.dispatcherPhone}</p>
               </div>
             </section>
-
             {returnTrip || (ticket.tripKind === "OPEN_RETURN" && !returnTrip) ? (
               <section className="border-t border-slate-200 pt-3">
                 <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Назад</p>
                 {returnTrip ? (
                   <p>
-                    {returnTrip.fromCity} → {returnTrip.toCity} · {formatUkDate(returnTrip.departureTime)}
+                    {returnTrip.fromCity} → {returnTrip.toCity} · {formatTripMoment(returnTrip.departureTime)}
                     {ticket.returnSeatNumber != null ? ` · місце ${ticket.returnSeatNumber}` : ""}
                   </p>
                 ) : (
                   <p>Відкрита дата</p>
                 )}
               </section>
-            ) : null}
-
-            {departure?.busPhone || departure?.dispatcherPhone ? (
-              <p className="border-t border-slate-200 pt-3 text-xs text-slate-600">
-                {departure.busPhone ? `Тел. автобуса: ${departure.busPhone}` : ""}
-                {departure.busPhone && departure.dispatcherPhone ? " · " : ""}
-                {departure.dispatcherPhone ? `Диспетчер: ${departure.dispatcherPhone}` : ""}
-              </p>
             ) : null}
           </div>
 

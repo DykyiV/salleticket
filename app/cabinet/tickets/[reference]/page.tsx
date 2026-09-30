@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { headers } from "next/headers";
-import BoardingHint from "@/components/ticket/BoardingHint";
+import BoardingPassCard from "@/components/ticket/BoardingPassCard";
+import { toBoardingPass } from "@/lib/tickets/boardingPass";
 import PassengerEditor from "@/components/ticket/PassengerEditor";
 import TicketItineraryEditor from "@/components/ticket/TicketItineraryEditor";
 import TicketPaymentActions from "@/components/ticket/TicketPaymentActions";
@@ -18,7 +19,6 @@ import { reconcileTicketPayment } from "@/lib/payments";
 import { getSiteSettings } from "@/lib/settings";
 import { qrCodeDataUrl } from "@/lib/tickets/qrcode";
 import { buildTimeline } from "@/lib/tickets/timeline";
-import { findStopForCity } from "@/lib/routes/boarding";
 import { formatUkDate } from "@/lib/routes/dates";
 import { weekdayName } from "@/lib/routes/weekdays";
 import {
@@ -73,13 +73,13 @@ export default async function CabinetTicketEditPage(props: {
           trip: {
             include: {
               carrier: true,
-              departure: { include: { stops: true, template: true } },
+              departure: { include: { stops: true, template: true, bus: true } },
             },
           },
           returnTrip: {
             include: {
               carrier: true,
-              departure: { include: { stops: true, template: true } },
+              departure: { include: { stops: true, template: true, bus: true } },
             },
           },
         },
@@ -118,10 +118,8 @@ export default async function CabinetTicketEditPage(props: {
   const trip = ticket.trip;
   const returnTrip = ticket.returnTrip;
   const departure = trip?.departure;
-  const stops = departure?.stops ?? [];
-  const board = findStopForCity(stops, trip?.fromCity);
-  const alight = findStopForCity(stops, trip?.toCity);
   const status = ticket.status;
+  const pass = toBoardingPass(full);
 
   const payment = ticket.payments[0] ?? null;
   const livePayment = payment && ["PENDING", "SENT", "SETTLED"].includes(payment.status) ? payment : null;
@@ -179,12 +177,30 @@ export default async function CabinetTicketEditPage(props: {
                 firstName: full.firstName,
                 lastName: full.lastName,
                 phone: full.phone,
+                phone2: full.phone2,
+                phone3: full.phone3,
                 email: full.email,
               }}
             />
           </section>
 
+          <BoardingPassCard pass={pass} />
+
           <section className="rounded-2xl bg-white p-4 ring-1 ring-slate-200">
+            <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Коментар</h2>
+            <TicketComments
+              ticketId={ticket.id}
+              comments={ticket.comments.map((c) => ({
+                id: c.id,
+                text: c.text,
+                authorEmail: c.authorEmail,
+                createdAt: c.createdAt.toISOString(),
+              }))}
+              canComment={access.canEdit}
+            />
+          </section>
+
+          {staff ? <section className="rounded-2xl bg-white p-4 ring-1 ring-slate-200">
             <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Рейс</h2>
             <p className="mt-1 text-base font-semibold text-slate-900">
               {trip ? `${trip.fromCity} → ${trip.toCity}` : "Маршрут не привʼязано"}
@@ -219,13 +235,6 @@ export default async function CabinetTicketEditPage(props: {
                 </dd>
               </div>
             </dl>
-
-            {board || alight ? (
-              <div className="mt-2 grid gap-x-4 gap-y-1 sm:grid-cols-2">
-                <BoardingHint label="Посадка" stop={board} />
-                <BoardingHint label="Висадка" stop={alight} />
-              </div>
-            ) : null}
 
             {ticket.legs.length > 1 ? (
               <ul className="mt-3 space-y-1 text-sm">
@@ -274,7 +283,7 @@ export default async function CabinetTicketEditPage(props: {
                 }
               />
             </div>
-          </section>
+          </section> : null}
 
           <div className="flex flex-wrap gap-2">
             <DialogButton label={`Історія квитка (${timeline.length})`} title={`Історія квитка ${full.reference}`}>
@@ -305,18 +314,6 @@ export default async function CabinetTicketEditPage(props: {
                 </ol>
               )}
             </DialogButton>
-            <DialogButton label={`Коментарі (${ticket.comments.length})`} title={`Коментарі до ${full.reference}`}>
-              <TicketComments
-                ticketId={ticket.id}
-                comments={ticket.comments.map((c) => ({
-                  id: c.id,
-                  text: c.text,
-                  authorEmail: c.authorEmail,
-                  createdAt: c.createdAt.toISOString(),
-                }))}
-                canComment={access.canEdit}
-              />
-            </DialogButton>
           </div>
         </div>
 
@@ -331,7 +328,7 @@ export default async function CabinetTicketEditPage(props: {
                 >
                   {TICKET_STATUS_LABEL[status]}
                 </span>
-                <p className="mt-2 text-xs text-slate-500">Номер квитка</p>
+                <p className="mt-2 text-xs text-slate-500">Посадковий талон</p>
                 <p className="font-mono text-xl font-bold tracking-widest text-slate-900">{full.reference}</p>
               </div>
               {/* eslint-disable-next-line @next/next/no-img-element */}

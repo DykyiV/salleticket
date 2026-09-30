@@ -65,7 +65,7 @@ type CreateBookingBody = {
   returnTripId?: string;
   paymentMethod?: string;
   holdSessionId?: string;
-  contact?: { phone?: string; email?: string };
+  contact?: { phone?: string; phone2?: string; phone3?: string; email?: string };
   passengers?: PassengerInput[];
   /** Operational legs of the selected option (from search results). */
   legSegments?: LegSegmentInput[];
@@ -132,6 +132,15 @@ function resolvePassenger(p?: PassengerInput): ResolvedPassenger {
     returnSeatNumber: p.returnSeatNumber ?? null,
     legSeats: p.legSeats,
   };
+}
+
+function optionalPhone(value: string | undefined, label: string): string | null {
+  const trimmed = value?.trim() ?? "";
+  if (!trimmed) return null;
+  if (trimmed.replace(/\D/g, "").length < 7) {
+    throw new ValidationError(`${label} має містити щонайменше 7 цифр`);
+  }
+  return trimmed;
 }
 
 function hhmm(date: Date): string {
@@ -255,6 +264,17 @@ export async function POST(req: NextRequest) {
       { error: "Телефон має містити щонайменше 7 цифр" },
       { status: 400 }
     );
+  }
+  let phone2: string | null = null;
+  let phone3: string | null = null;
+  try {
+    phone2 = optionalPhone(body.contact?.phone2, "Другий телефон");
+    phone3 = optionalPhone(body.contact?.phone3, "Третій телефон");
+  } catch (err) {
+    if (err instanceof ValidationError) {
+      return NextResponse.json({ error: err.message }, { status: 400 });
+    }
+    throw err;
   }
 
   let passengers: ResolvedPassenger[];
@@ -669,6 +689,8 @@ export async function POST(req: NextRequest) {
             lastName: p.lastName,
             ageCategory: p.ageCategory,
             phone,
+            phone2,
+            phone3,
             email: accountEmail,
             promoCode: validatedPromos[i]?.code ?? null,
             finalPrice,
