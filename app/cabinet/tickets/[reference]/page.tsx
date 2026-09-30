@@ -226,7 +226,7 @@ export default async function CabinetTicketEditPage(props: {
                 ))}
               </ul>
             ) : null}
-            {access.canEdit && ticket.tripKind !== "ONE_WAY" ? (
+            {access.canEdit && trip ? (
               <TicketItineraryEditor
                 ticketId={ticket.id}
                 tripKind={ticket.tripKind}

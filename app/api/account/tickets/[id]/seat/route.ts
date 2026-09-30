@@ -16,7 +16,8 @@ export const dynamic = "force-dynamic";
 
 type Params = { params: Promise<{ id: string }> };
 
-async function canMutate(role: string) {
+async function canMutate(role: string, isOwner: boolean) {
+  if (isOwner) return true;
   return hasRoleAtLeast(role as never, "AGENT") && (await can({ role: role as never }, "booking.edit"));
 }
 
@@ -39,8 +40,9 @@ export async function PATCH(req: NextRequest, props: Params) {
   if (!ticket) {
     return NextResponse.json({ error: "Квиток не знайдено" }, { status: 404 });
   }
-  if (!(await canMutate(guard.session.role))) {
-    return NextResponse.json({ error: "Змінювати місце може лише агент" }, { status: 403 });
+  const isOwner = ticket.userId === guard.session.sub;
+  if (!(await canMutate(guard.session.role, isOwner))) {
+    return NextResponse.json({ error: "Немає доступу змінювати місце" }, { status: 403 });
   }
 
   const leg = body.leg === "return" ? "return" : "outbound";

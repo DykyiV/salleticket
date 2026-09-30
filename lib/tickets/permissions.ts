@@ -14,10 +14,8 @@ export type TicketAccess = {
 /**
  * What the session user may do with a ticket owned by `ticketUserId`.
  *
- * The passenger who booked it, and staff from AGENT upward, may open the
- * ticket. Changing passenger data, the seat or the trip is the agent
- * workspace and needs `booking.edit`. A customer sees the same screen
- * read-only.
+ * The passenger who booked the ticket can correct it. Staff from AGENT
+ * upward can open every ticket; editing theirs needs `booking.edit`.
  */
 export async function ticketAccess(
   session: { sub: string; role: Role },
@@ -30,6 +28,6 @@ export async function ticketAccess(
     isOwner,
     isStaff,
     canView: isOwner || isStaff,
-    canEdit: staffCanEdit,
+    canEdit: isOwner || staffCanEdit,
   };
 }

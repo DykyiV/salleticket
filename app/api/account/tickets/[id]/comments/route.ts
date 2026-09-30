@@ -23,8 +23,8 @@ async function loadTicketWithPermissions(
 
 /**
  * GET /api/tickets/[id]/comments — list comments (view permission required).
- * POST /api/tickets/[id]/comments { text } — add a comment (staff with the
- * booking.edit grant — see ticketAccess()). A customer can read comments.
+ * POST /api/tickets/[id]/comments { text } — add a comment when ticketAccess
+ * allows editing (the passenger who booked, or staff with booking.edit).
  */
 export async function GET(
   _req: Request,

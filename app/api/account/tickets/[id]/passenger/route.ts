@@ -37,12 +37,13 @@ export async function PATCH(req: NextRequest, props: Params) {
     return NextResponse.json({ error: "Квиток не знайдено" }, { status: 404 });
   }
 
+  const isOwner = ticket.userId === guard.session.sub;
   const isStaff = hasRoleAtLeast(guard.session.role, "AGENT");
-  if (!isStaff || !(await can({ role: guard.session.role }, "passenger.edit"))) {
-    return NextResponse.json(
-      { error: "Редагування пасажира доступне лише агенту" },
-      { status: 403 }
-    );
+  if (!isOwner && !isStaff) {
+    return NextResponse.json({ error: "Немає доступу" }, { status: 403 });
+  }
+  if (!(await can({ role: guard.session.role }, "passenger.edit"))) {
+    return NextResponse.json({ error: "Немає дозволу редагувати пасажира" }, { status: 403 });
   }
 
   try {
@@ -51,7 +52,7 @@ export async function PATCH(req: NextRequest, props: Params) {
       body,
       guard.session.sub,
       {
-        source: "ADMIN_PANEL",
+        source: isStaff && !isOwner ? "ADMIN_PANEL" : "ACCOUNT",
         request: requestMeta(req),
       }
     );

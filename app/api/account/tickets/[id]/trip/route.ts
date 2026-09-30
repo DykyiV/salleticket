@@ -39,8 +39,9 @@ export async function PATCH(req: NextRequest, props: Params) {
     return NextResponse.json({ error: "Квиток не знайдено" }, { status: 404 });
   }
   const staff = hasRoleAtLeast(guard.session.role, "AGENT");
-  if (!staff || !(await can({ role: guard.session.role }, "booking.edit"))) {
-    return NextResponse.json({ error: "Змінювати рейс може лише агент" }, { status: 403 });
+  const isOwner = ticket.userId === guard.session.sub;
+  if (!isOwner && (!staff || !(await can({ role: guard.session.role }, "booking.edit")))) {
+    return NextResponse.json({ error: "Немає доступу змінювати рейс" }, { status: 403 });
   }
 
   const nextTrip = await prisma.trip.findUnique({
