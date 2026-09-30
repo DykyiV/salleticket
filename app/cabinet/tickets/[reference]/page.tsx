@@ -331,12 +331,12 @@ export default async function CabinetTicketEditPage(props: {
               >
                 Друк
               </Link>
-              <a
-                href={`/api/tickets/${full.reference}/wallet`}
+              <Link
+                href={`/account/tickets/${full.reference}/wallet`}
                 className="rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:border-brand-300"
               >
-                Google Wallet
-              </a>
+                Apple Wallet
+              </Link>
               {hasRoleAtLeast(user.role, "ADMIN") ? (
                 <SendSmsButton ticketId={ticket.id} passengerName={`${full.firstName} ${full.lastName}`.trim()} />
               ) : null}
