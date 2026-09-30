@@ -5,6 +5,7 @@ import {
   issueSession,
   setSessionCookie,
 } from "@/lib/auth/session";
+import { claimGuestTickets, clearGuestCookie, readGuestToken } from "@/lib/auth/guest";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -29,22 +30,23 @@ export async function POST(req: NextRequest) {
   const password = body.password ?? "";
   if (!email || !password) {
     return NextResponse.json(
-      { error: "Email and password are required" },
+      { error: "Вкажіть email і пароль" },
       { status: 400 }
     );
   }
 
   const user = await prisma.user.findUnique({ where: { email } });
   const genericError = NextResponse.json(
-    { error: "Invalid email or password" },
+    { error: "Невірний email або пароль" },
     { status: 401 }
   );
 
-  if (!user) return genericError;
+  if (!user?.password) return genericError;
 
   const ok = await verifyPassword(password, user.password);
   if (!ok) return genericError;
 
+  const claimed = await claimGuestTickets(user.id, readGuestToken(req));
   const token = await issueSession(user);
   const res = NextResponse.json({
     user: {
@@ -53,7 +55,9 @@ export async function POST(req: NextRequest) {
       role: user.role,
       createdAt: user.createdAt,
     },
+    claimed,
   });
   setSessionCookie(res, token);
+  clearGuestCookie(res);
   return res;
 }

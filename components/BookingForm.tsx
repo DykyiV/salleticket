@@ -323,6 +323,7 @@ export default function BookingForm({
         }),
       });
 
+      const data = await res.json();
       if (res.status === 401) {
         const next =
           typeof window !== "undefined"
@@ -331,10 +332,15 @@ export default function BookingForm({
         router.push(`/login?next=${encodeURIComponent(next)}`);
         return;
       }
-
-      const data = await res.json();
       if (!res.ok) {
         throw new Error(data?.error ?? "Booking failed");
+      }
+
+      if (data.needsAccount) {
+        const payUrl = data.booking?.payment?.payUrl as string | undefined;
+        const next = payUrl || "/cabinet/tickets";
+        router.push(`/login?next=${encodeURIComponent(next)}&booked=1`);
+        return;
       }
 
       if (paymentMethod === "ONLINE" && data.booking.payment?.payUrl) {
@@ -433,7 +439,10 @@ export default function BookingForm({
         </div>
       ) : (
         <div className="mt-4 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-brand-200 bg-brand-50 px-3 py-2 text-sm text-brand-900">
-          <span>Увійдіть, щоб зберегти квитки в кабінеті.</span>
+          <span>
+            Можна забронювати без акаунта. Після входу або реєстрації ці квитки
+            з’являться в кабінеті.
+          </span>
           <a
             href={loginHref}
             className="rounded-lg bg-brand-600 px-3 py-1 text-xs font-semibold text-white transition hover:bg-brand-700"

@@ -65,7 +65,11 @@ enum SettlementStatus {
 model User {
   id                 String   @id @default(cuid())
   email              String   @unique
-  password           String
+  /// Null for accounts that sign in only through Google, Apple, Facebook or Instagram.
+  password           String?
+  /// password | google | apple | facebook | instagram
+  authProvider       String   @default("password")
+  providerAccountId  String?
   displayName        String?
   avatarUrl          String?
   role               Role     @default(CUSTOMER)
@@ -87,6 +91,7 @@ model User {
   autoReportSetting    AutoReportSetting?
   counterpartyPayments CounterpartyPayment[]
 
+  @@unique([authProvider, providerAccountId])
   @@index([role])
   @@map("users")
 }
@@ -200,6 +205,10 @@ model Ticket {
   userId String
   user   User   @relation("TicketOwner", fields: [userId], references: [id], onDelete: Cascade)
 
+  /// Set while a guest booking waits for the browser to sign in or register.
+  /// Cleared once the ticket is moved onto that account.
+  guestClaim String?
+
   /// Who physically received the passenger's cash for a PAID_CASH ticket:
   /// a sales agent / cash desk of the agency. The money stays with that person
   /// until the mutual settlement (Фінанси → Звірка). Null on a PAID_CASH
@@ -244,6 +253,7 @@ model Ticket {
   legs     TicketLeg[]
 
   @@index([userId])
+  @@index([guestClaim])
   @@index([status])
   @@index([tripId])
   @@index([returnTripId])
