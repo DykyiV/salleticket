@@ -8,10 +8,13 @@ export default function HeroFallback() {
         role="img"
         aria-label="Asol BUS coach and boarding pass"
       >
-        <rect x="36" y="78" width="430" height="130" rx="28" fill="#f8fafc" />
-        <rect x="56" y="98" width="250" height="46" rx="8" fill="#10243f" />
-        <rect x="318" y="98" width="120" height="46" rx="8" fill="#10243f" />
-        <rect x="56" y="156" width="382" height="10" rx="5" fill="#195ef0" />
+        <rect x="36" y="48" width="430" height="168" rx="28" fill="#121316" />
+        <rect x="56" y="68" width="300" height="36" rx="6" fill="#1a2433" />
+        <rect x="56" y="116" width="250" height="28" rx="6" fill="#1a2433" />
+        <path d="M70 188 C 160 176, 280 196, 430 168" stroke="#f0c21a" strokeWidth="6" fill="none" />
+        <text x="150" y="158" fill="#f0c21a" fontSize="16" fontFamily="sans-serif" fontWeight="700">
+          GRANDES TOUR
+        </text>
         <circle cx="140" cy="214" r="22" fill="#1c1c1c" />
         <circle cx="140" cy="214" r="10" fill="#d7dee7" />
         <circle cx="360" cy="214" r="22" fill="#1c1c1c" />
