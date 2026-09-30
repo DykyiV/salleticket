@@ -20,8 +20,6 @@ import { reconcileTicketPayment } from "@/lib/payments";
 import { getSiteSettings } from "@/lib/settings";
 import { qrCodeDataUrl } from "@/lib/tickets/qrcode";
 import { buildTimeline } from "@/lib/tickets/timeline";
-import { formatUkDate } from "@/lib/routes/dates";
-import { weekdayName } from "@/lib/routes/weekdays";
 import {
   AGE_LABEL,
   eur,
@@ -145,15 +143,6 @@ export default async function CabinetTicketEditPage(props: {
     statusSince,
   });
 
-  const buses = [
-    ...new Set(
-      ticket.legs
-        .map((leg) => (leg.assignment ? `${leg.assignment.bus.model ?? "Автобус"} ${leg.assignment.bus.plate}` : null))
-        .filter((b): b is string => Boolean(b))
-    ),
-  ];
-  const busLabel = buses.length ? buses.join(", ") : departure?.defaultBus ?? null;
-
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-3 text-sm">
@@ -216,79 +205,9 @@ export default async function CabinetTicketEditPage(props: {
                 />
               ) : undefined
             }
-          />
-
-          <section className="rounded-2xl bg-white p-4 ring-1 ring-slate-200">
-            <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Коментар</h2>
-            <TicketComments
-              ticketId={ticket.id}
-              comments={ticket.comments.map((c) => ({
-                id: c.id,
-                text: c.text,
-                authorEmail: c.authorEmail,
-                createdAt: c.createdAt.toISOString(),
-              }))}
-              canComment={access.canEdit}
-            />
-          </section>
-
-          {staff ? <section className="rounded-2xl bg-white p-4 ring-1 ring-slate-200">
-            <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Рейс</h2>
-            <p className="mt-1 text-base font-semibold text-slate-900">
-              {trip ? `${trip.fromCity} → ${trip.toCity}` : "Маршрут не привʼязано"}
-            </p>
-            {trip ? (
-              <p className="text-sm text-slate-600">
-                {formatUkDate(trip.departureTime)}
-                {departure ? ` · ${weekdayName(departure.weekday)}` : ""}
-                {trip.carrier?.name ? ` · ${trip.carrier.name}` : ""}
-                {departure?.template?.name ? (
-                  <span className="text-slate-400"> · {departure.template.name}</span>
-                ) : null}
-              </p>
-            ) : null}
-
-            <dl className="mt-3 grid gap-x-4 gap-y-1 text-sm sm:grid-cols-2">
-              <div className="flex gap-2">
-                <dt className="text-slate-500">Автобус:</dt>
-                <dd className="text-slate-900">{busLabel ?? "не призначено"}</dd>
-              </div>
-              <div className="flex gap-2">
-                <dt className="text-slate-500">Місце:</dt>
-                <dd className="font-semibold text-slate-900">
-                  {access.canEdit && trip ? (
-                    <ChangeSeatButton
-                      label={
-                        departure?.hasAssignedSeats === false
-                          ? "без місць"
-                          : ticket.seatNumber != null
-                            ? String(ticket.seatNumber)
-                            : "не обрано"
-                      }
-                      ticketId={ticket.id}
-                      leg="outbound"
-                      tripId={trip.id}
-                      fromCity={trip.fromCity}
-                      toCity={trip.toCity}
-                      initialDate={trip.departureTime.toISOString().slice(0, 10)}
-                      initialSeat={ticket.seatNumber}
-                    />
-                  ) : departure?.hasAssignedSeats === false ? (
-                    "без місць"
-                  ) : ticket.seatNumber != null ? (
-                    ticket.seatNumber
-                  ) : (
-                    "не обрано"
-                  )}
-                  {ticket.returnSeatNumber != null ? (
-                    <span className="font-normal text-slate-500"> · назад {ticket.returnSeatNumber}</span>
-                  ) : null}
-                </dd>
-              </div>
-            </dl>
-
-            {ticket.legs.length > 1 ? (
-              <ul className="mt-3 space-y-1 text-sm">
+          >
+            {staff && ticket.legs.length > 1 ? (
+              <ul className="space-y-1 text-sm">
                 {ticket.legs.map((leg) => (
                   <li key={leg.id} className="flex flex-wrap items-center gap-2 rounded-lg bg-slate-50 px-3 py-1">
                     <span className="text-xs font-semibold text-slate-500">Плече {leg.order}</span>
@@ -307,8 +226,7 @@ export default async function CabinetTicketEditPage(props: {
                 ))}
               </ul>
             ) : null}
-
-            <div className="mt-3 border-t border-slate-100 pt-3">
+            {access.canEdit && ticket.tripKind !== "ONE_WAY" ? (
               <TicketItineraryEditor
                 ticketId={ticket.id}
                 tripKind={ticket.tripKind}
@@ -320,21 +238,33 @@ export default async function CabinetTicketEditPage(props: {
                   seatNumber: ticket.seatNumber,
                   hasAssignedSeats: departure?.hasAssignedSeats !== false,
                 }}
-                returnLeg={
-                  ticket.tripKind === "ONE_WAY"
-                    ? null
-                    : {
-                        tripId: returnTrip?.id ?? null,
-                        fromCity: returnTrip?.fromCity ?? trip?.toCity ?? "",
-                        toCity: returnTrip?.toCity ?? trip?.fromCity ?? "",
-                        date: returnTrip ? returnTrip.departureTime.toISOString().slice(0, 10) : null,
-                        seatNumber: ticket.returnSeatNumber,
-                        hasAssignedSeats: returnTrip?.departure?.hasAssignedSeats !== false,
-                      }
-                }
+                returnLeg={{
+                  tripId: returnTrip?.id ?? null,
+                  fromCity: returnTrip?.fromCity ?? trip?.toCity ?? "",
+                  toCity: returnTrip?.toCity ?? trip?.fromCity ?? "",
+                  date: returnTrip ? returnTrip.departureTime.toISOString().slice(0, 10) : null,
+                  seatNumber: ticket.returnSeatNumber,
+                  hasAssignedSeats: returnTrip?.departure?.hasAssignedSeats !== false,
+                }}
               />
-            </div>
-          </section> : null}
+            ) : null}
+          </BoardingPassCard>
+
+          {access.canEdit || ticket.comments.length > 0 ? (
+            <section className="rounded-2xl bg-white p-4 ring-1 ring-slate-200">
+              <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Коментар</h2>
+              <TicketComments
+                ticketId={ticket.id}
+                comments={ticket.comments.map((c) => ({
+                  id: c.id,
+                  text: c.text,
+                  authorEmail: c.authorEmail,
+                  createdAt: c.createdAt.toISOString(),
+                }))}
+                canComment={access.canEdit}
+              />
+            </section>
+          ) : null}
 
           <div className="flex flex-wrap gap-2">
             <DialogButton label={`Історія квитка (${timeline.length})`} title={`Історія квитка ${full.reference}`}>
@@ -379,8 +309,7 @@ export default async function CabinetTicketEditPage(props: {
                 >
                   {TICKET_STATUS_LABEL[status]}
                 </span>
-                <p className="mt-2 text-xs text-slate-500">Посадковий талон</p>
-                <p className="font-mono text-xl font-bold tracking-widest text-slate-900">{full.reference}</p>
+                <p className="mt-2 font-mono text-xl font-bold tracking-widest text-slate-900">{full.reference}</p>
               </div>
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img

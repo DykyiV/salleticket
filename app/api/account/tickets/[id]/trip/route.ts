@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { requireAuth } from "@/lib/auth/guard";
 import { hasRoleAtLeast } from "@/lib/auth/constants";
+import { can } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/db";
 import { recordTicketHistory, requestMeta } from "@/lib/tickets/history";
 import { updateTicketVersioned, VersionConflictError } from "@/lib/tickets/version";
@@ -38,8 +39,8 @@ export async function PATCH(req: NextRequest, props: Params) {
     return NextResponse.json({ error: "Квиток не знайдено" }, { status: 404 });
   }
   const staff = hasRoleAtLeast(guard.session.role, "AGENT");
-  if (ticket.userId !== guard.session.sub && !staff) {
-    return NextResponse.json({ error: "Немає доступу" }, { status: 403 });
+  if (!staff || !(await can({ role: guard.session.role }, "booking.edit"))) {
+    return NextResponse.json({ error: "Змінювати рейс може лише агент" }, { status: 403 });
   }
 
   const nextTrip = await prisma.trip.findUnique({

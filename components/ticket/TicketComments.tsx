@@ -61,7 +61,7 @@ export default function TicketComments({
             onChange={(e) => setText(e.target.value)}
             rows={2}
             maxLength={1000}
-            placeholder="Коментар до талона"
+            placeholder="Коментар до квитка"
             className="w-full rounded-xl border-0 px-3 py-2 text-sm text-slate-900 ring-1 ring-slate-300 focus:ring-2 focus:ring-brand-500"
           />
           {error ? <p className="mt-1 text-xs text-rose-600">{error}</p> : null}

@@ -5,25 +5,20 @@ export default function BoardingPassCard({
   pass,
   seatAction,
   returnSeatAction,
+  children,
 }: {
   pass: BoardingPassModel;
   seatAction?: ReactNode;
   returnSeatAction?: ReactNode;
+  children?: ReactNode;
 }) {
   return (
-    <section className="overflow-hidden rounded-2xl bg-white ring-1 ring-slate-200">
-      <div className="flex items-center justify-between bg-slate-900 px-4 py-3 text-white">
-        <p className="text-xs font-semibold uppercase tracking-[0.18em]">Посадковий талон</p>
-        <p className="font-mono text-sm font-bold tracking-widest">{pass.reference}</p>
-      </div>
-      <div className="space-y-3 p-4">
-        <div>
-          <p className="text-lg font-semibold text-slate-900">{pass.passengerName}</p>
-          <p className="text-sm text-slate-600">{pass.phones.join(" · ") || "—"}</p>
-        </div>
-        <p className="text-base font-semibold text-slate-900">
-          {pass.fromCity} → {pass.toCity}
-        </p>
+    <section className="rounded-2xl bg-white p-4 ring-1 ring-slate-200">
+      <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Рейс</h2>
+      <p className="mt-1 text-base font-semibold text-slate-900">
+        {pass.fromCity} → {pass.toCity}
+      </p>
+      <div className="mt-3 space-y-3">
         <dl className="grid gap-3 sm:grid-cols-2">
           <div>
             <dt className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Виїзд</dt>
@@ -73,6 +68,7 @@ export default function BoardingPassCard({
             <dd className="text-sm text-slate-900">{pass.dispatcherPhone}</dd>
           </div>
         </dl>
+        {children}
       </div>
     </section>
   );

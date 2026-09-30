@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { requireAuth } from "@/lib/auth/guard";
 import { hasRoleAtLeast } from "@/lib/auth/constants";
+import { can } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/db";
 import { requestMeta, recordTicketHistory } from "@/lib/tickets/history";
 import { updateTicketVersioned, VersionConflictError } from "@/lib/tickets/version";
@@ -15,8 +16,8 @@ export const dynamic = "force-dynamic";
 
 type Params = { params: Promise<{ id: string }> };
 
-async function canMutate(ticketUserId: string, sessionSub: string, role: string) {
-  return ticketUserId === sessionSub || hasRoleAtLeast(role as never, "AGENT");
+async function canMutate(role: string) {
+  return hasRoleAtLeast(role as never, "AGENT") && (await can({ role: role as never }, "booking.edit"));
 }
 
 export async function PATCH(req: NextRequest, props: Params) {
@@ -38,8 +39,8 @@ export async function PATCH(req: NextRequest, props: Params) {
   if (!ticket) {
     return NextResponse.json({ error: "Квиток не знайдено" }, { status: 404 });
   }
-  if (!(await canMutate(ticket.userId, guard.session.sub, guard.session.role))) {
-    return NextResponse.json({ error: "Немає доступу" }, { status: 403 });
+  if (!(await canMutate(guard.session.role))) {
+    return NextResponse.json({ error: "Змінювати місце може лише агент" }, { status: 403 });
   }
 
   const leg = body.leg === "return" ? "return" : "outbound";
