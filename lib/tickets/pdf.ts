@@ -4,7 +4,8 @@ import { PDFDocument, rgb, type PDFFont } from "pdf-lib";
 import fontkit from "@pdf-lib/fontkit";
 import type { Prisma } from "@prisma/client";
 import { qrCodePngBuffer } from "@/lib/tickets/qrcode";
-import { toBoardingPass } from "@/lib/tickets/boardingPass";
+import { TICKET_BACK, TICKET_BRIEF } from "@/lib/legal";
+import { buildETicket } from "@/lib/tickets/eTicket";
 
 /**
  * Ticket PDF rendering shared by the single-ticket download
@@ -31,7 +32,7 @@ export const TICKET_PDF_INCLUDE = {
         },
       },
       returnTrip: true,
-      legs: { include: { assignment: { include: { bus: true } } } },
+      legs: { include: { assignment: { include: { bus: true, leg: true } } } },
     },
   },
 } satisfies Prisma.BookingInclude;
@@ -66,56 +67,83 @@ function wrap(text: string, width = 42): string[] {
 async function drawTicketPage(
   pdf: PDFDocument,
   booking: TicketPdfBooking,
-  { font, bold }: Fonts,
+  fonts: Fonts,
   checkUrl: string
 ): Promise<void> {
-  const page = pdf.addPage([420, 560]);
-  const pass = toBoardingPass(booking);
-  let y = 528;
+  const { font, bold } = fonts;
+  const ticket = buildETicket(booking);
+  const page = pdf.addPage([595, 842]);
+  page.drawRectangle({ x: 0, y: 790, width: 595, height: 52, color: BRAND });
+  page.drawText("Asol BUS", { x: 28, y: 812, size: 14, font: bold, color: rgb(1, 1, 1) });
+  page.drawText("Електронний квиток", { x: 28, y: 798, size: 9, font, color: rgb(1, 1, 1) });
+  page.drawText(ticket.reference, { x: 400, y: 808, size: 14, font: bold, color: rgb(1, 1, 1) });
 
-  page.drawText("Asol BUS — посадковий талон", { x: 24, y, size: 10, font, color: MUTE });
-  y -= 28;
-  page.drawText(pass.reference, { x: 24, y, size: 22, font: bold, color: INK });
-  y -= 22;
-  page.drawText(pass.passengerName, { x: 24, y, size: 13, font: bold, color: INK });
+  let y = 760;
+  page.drawText("Дані пасажира", { x: 28, y, size: 9, font: bold, color: BRAND });
   y -= 16;
-  page.drawText(pass.phones.join(" · ") || "—", { x: 24, y, size: 9, font, color: MUTE });
-  y -= 22;
-  page.drawText(`${pass.fromCity} → ${pass.toCity}`, { x: 24, y, size: 12, font, color: INK });
-  y -= 18;
-  page.drawText(`Виїзд: ${pass.departureLabel}`, { x: 24, y, size: 10, font, color: INK });
+  page.drawText(ticket.passenger, { x: 28, y, size: 12, font: bold, color: INK });
   y -= 14;
-  page.drawText(`Прибуття: ${pass.arrivalLabel}`, { x: 24, y, size: 10, font, color: INK });
-  y -= 20;
-  page.drawText("Місце посадки", { x: 24, y, size: 8, font, color: MUTE });
+  page.drawText(`${ticket.category} · ${ticket.phones}`, { x: 28, y, size: 9, font, color: MUTE });
+  y -= 12;
+  page.drawText(ticket.email, { x: 28, y, size: 9, font, color: MUTE });
+  y -= 24;
+  page.drawText(`Маршрут ${ticket.routeFrom} — ${ticket.routeTo}`, { x: 28, y, size: 12, font: bold, color: INK });
   y -= 14;
-  for (const line of wrap(pass.boardingPlace)) {
-    page.drawText(line, { x: 24, y, size: 10, font, color: INK });
+  page.drawText(`Виїзд ${ticket.depart}    Прибуття ${ticket.arrive}`, { x: 28, y, size: 9, font, color: MUTE });
+
+  for (let i = 0; i < ticket.segments.length; i += 1) {
+    const segment = ticket.segments[i];
+    y -= 22;
+    page.drawText(`${segment.order}. ${segment.fromCity} → ${segment.toCity}`, { x: 28, y, size: 11, font: bold, color: INK });
     y -= 13;
+    page.drawText(`${segment.depart}  →  ${segment.arrive}`, { x: 28, y, size: 9, font, color: INK });
+    y -= 12;
+    page.drawText(`${segment.bus} · ${segment.seat}`, { x: 28, y, size: 9, font, color: MUTE });
+    const layover = ticket.layovers[i];
+    if (layover) {
+      y -= 16;
+      page.drawText(`Можлива зміна автобуса · ${layover.city} · ${layover.minutes} хв`, {
+        x: 28,
+        y,
+        size: 9,
+        font,
+        color: BRAND,
+      });
+    }
   }
-  if (pass.coordinates) {
-    page.drawText(pass.coordinates, { x: 24, y, size: 9, font, color: BRAND });
-    y -= 14;
+
+  y -= 28;
+  for (const line of wrap(TICKET_BRIEF.baggage, 90)) {
+    page.drawText(line, { x: 28, y, size: 8, font, color: INK });
+    y -= 11;
   }
-  y -= 6;
-  page.drawText(`Автобус: ${pass.busNumber}`, { x: 24, y, size: 11, font: bold, color: INK });
-  y -= 16;
-  page.drawText(`Тел. автобуса: ${pass.busPhone}`, { x: 24, y, size: 10, font, color: INK });
-  y -= 14;
-  page.drawText(`Диспетчер: ${pass.dispatcherPhone}`, { x: 24, y, size: 10, font, color: INK });
-  y -= 16;
-  page.drawText(`Місце в салоні: ${pass.seatLabel}`, { x: 24, y, size: 10, font, color: INK });
+  y -= 4;
+  for (const line of wrap(TICKET_BRIEF.refund, 90)) {
+    page.drawText(line, { x: 28, y, size: 8, font, color: INK });
+    y -= 11;
+  }
+  page.drawText(`Вартість ${ticket.price}`, { x: 28, y: 48, size: 12, font: bold, color: INK });
 
   const qrImage = await pdf.embedPng(await qrCodePngBuffer(checkUrl));
-  page.drawImage(qrImage, { x: 300, y: 430, width: 96, height: 96 });
-  page.drawText("QR для посадки", { x: 308, y: 416, size: 8, font, color: MUTE });
-  page.drawText("Покажіть цей талон і QR водієві при посадці.", {
-    x: 24,
-    y: 24,
-    size: 8,
-    font,
-    color: MUTE,
-  });
+  page.drawImage(qrImage, { x: 450, y: 680, width: 110, height: 110 });
+  page.drawText("QR для посадки", { x: 468, y: 666, size: 8, font, color: MUTE });
+
+  const back = pdf.addPage([595, 842]);
+  back.drawRectangle({ x: 0, y: 790, width: 595, height: 52, color: BRAND });
+  back.drawText("Зворотна сторона квитка", { x: 28, y: 808, size: 14, font: bold, color: rgb(1, 1, 1) });
+  let by = 760;
+  for (const section of TICKET_BACK) {
+    back.drawText(section.title, { x: 28, y: by, size: 11, font: bold, color: BRAND });
+    by -= 16;
+    for (const paragraph of section.body) {
+      for (const line of wrap(paragraph, 95)) {
+        back.drawText(line, { x: 28, y: by, size: 9, font, color: INK });
+        by -= 12;
+      }
+      by -= 4;
+    }
+    by -= 8;
+  }
 }
 
 /**

@@ -32,6 +32,7 @@ export const AGE_LABEL: Record<string, string> = {
 };
 
 export const HISTORY_ACTION_LABEL: Record<string, string> = {
+  BOARDED: "Пасажир сів в автобус",
   CREATED: "Створено бронювання",
   PASSENGER_UPDATED: "Змінено пасажира",
   STATUS_CHANGE: "Змінено статус",

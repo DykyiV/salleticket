@@ -4,9 +4,10 @@ import { getCurrentUser } from "@/lib/auth/session";
 import { hasRoleAtLeast } from "@/lib/auth/constants";
 import { prisma } from "@/lib/db";
 import { reconcileTicketPayment } from "@/lib/payments";
-import { formatUkDate } from "@/lib/routes/dates";
+import { markPassengerBoarded } from "@/lib/tickets/board";
+import { formatTripMoment } from "@/lib/tickets/boardingPass";
+import { buildETicket } from "@/lib/tickets/eTicket";
 import {
-  AGE_LABEL,
   eur,
   TICKET_STATUS_CLASS,
   TICKET_STATUS_LABEL,
@@ -27,7 +28,12 @@ export default async function CheckTicketPage(
   const booking = await prisma.booking.findUnique({
     where: { reference: params.reference },
     include: {
-      ticket: { include: { trip: { include: { carrier: true } } } },
+      ticket: {
+        include: {
+          legs: { include: { assignment: { include: { bus: true, leg: true } } } },
+          trip: { include: { carrier: true, departure: { include: { stops: true, bus: true } } } },
+        },
+      },
     },
   });
   if (!booking) notFound();
@@ -35,9 +41,10 @@ export default async function CheckTicketPage(
   await reconcileTicketPayment(booking.ticket.id);
   const fresh = await prisma.ticket.findUnique({ where: { id: booking.ticket.id } });
   const status = fresh?.status ?? booking.ticket.status;
-  const trip = booking.ticket.trip;
   const valid =
-    status === "PAID_ONLINE" || status === "PAID_CASH" || status === "RESERVED";
+    status === "PAID_ONLINE" || status === "PAID_CASH" || status === "RESERVED" || status === "AWAITING_PAYMENT";
+  const boardedAt = valid ? await markPassengerBoarded(booking.ticket.id, user.id) : booking.ticket.boardedAt;
+  const eTicket = buildETicket(booking);
 
   return (
     <main className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center bg-slate-50 p-6">
@@ -58,45 +65,38 @@ export default async function CheckTicketPage(
           {TICKET_STATUS_LABEL[status]}
         </p>
         <p className={`mt-4 text-lg font-bold ${valid ? "text-emerald-700" : "text-rose-700"}`}>
-          {valid ? "Посадку дозволено" : "Квиток недійсний"}
+          {valid ? "Пасажир сів в автобус" : "Квиток недійсний"}
         </p>
+        {boardedAt ? (
+          <p className="mt-1 text-sm text-slate-600">Посадку зафіксовано: {formatTripMoment(boardedAt)}</p>
+        ) : null}
+        <p className="mt-4 text-3xl font-bold tabular-nums">{eur(booking.finalPrice)}</p>
+        <p className="text-xs uppercase tracking-wide text-slate-500">Вартість квитка</p>
         <dl className="mt-4 space-y-1 text-left text-sm">
-          <div className="flex justify-between">
+          <div className="flex justify-between gap-3">
             <dt className="text-slate-500">Пасажир</dt>
-            <dd className="font-medium">
-              {booking.firstName} {booking.lastName}
+            <dd className="text-right font-medium">{eTicket.passenger}</dd>
+          </div>
+          <div className="flex justify-between gap-3">
+            <dt className="text-slate-500">Маршрут</dt>
+            <dd className="text-right">
+              {eTicket.routeFrom} → {eTicket.routeTo}
             </dd>
           </div>
-          <div className="flex justify-between">
-            <dt className="text-slate-500">Категорія</dt>
-            <dd>{AGE_LABEL[booking.ageCategory] ?? booking.ageCategory}</dd>
+          <div className="flex justify-between gap-3">
+            <dt className="text-slate-500">Виїзд</dt>
+            <dd className="text-right">{eTicket.depart}</dd>
           </div>
-          {trip ? (
-            <div className="flex justify-between">
-              <dt className="text-slate-500">Рейс</dt>
-              <dd>
-                {trip.fromCity} → {trip.toCity}
+          {eTicket.segments.map((segment) => (
+            <div key={segment.order} className="flex justify-between gap-3">
+              <dt className="text-slate-500">
+                {segment.fromCity} → {segment.toCity}
+              </dt>
+              <dd className="text-right">
+                {segment.bus} · {segment.seat}
               </dd>
             </div>
-          ) : null}
-          {trip ? (
-            <div className="flex justify-between">
-              <dt className="text-slate-500">Дата</dt>
-              <dd>{formatUkDate(trip.departureTime)}</dd>
-            </div>
-          ) : null}
-          <div className="flex justify-between">
-            <dt className="text-slate-500">Місце</dt>
-            <dd className="font-semibold">
-              {booking.ticket.seatNumber != null
-                ? `№${booking.ticket.seatNumber}`
-                : "без місця"}
-            </dd>
-          </div>
-          <div className="flex justify-between">
-            <dt className="text-slate-500">Ціна</dt>
-            <dd className="tabular-nums">{eur(booking.finalPrice)}</dd>
-          </div>
+          ))}
         </dl>
         <Link
           href={`/cabinet/tickets/${booking.reference}`}

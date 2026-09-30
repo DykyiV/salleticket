@@ -25,6 +25,7 @@ type Leg = {
   label: string;
   fromStopId: string | null;
   toStopId: string | null;
+  transferMinutes: number | null;
   assignments: Assignment[];
 };
 type OpsData = {
@@ -54,6 +55,7 @@ export default function DepartureOps({ departureId }: { departureId: string }) {
   const [addBusFor, setAddBusFor] = useState<string | null>(null);
   const [addBusId, setAddBusId] = useState("");
   const [newLegLabel, setNewLegLabel] = useState("");
+  const [newTransfer, setNewTransfer] = useState("30");
   const [newLegFrom, setNewLegFrom] = useState("");
   const [newLegTo, setNewLegTo] = useState("");
   const [zoneFor, setZoneFor] = useState<string | null>(null);
@@ -326,6 +328,22 @@ export default function DepartureOps({ departureId }: { departureId: string }) {
             ))}
           </ul>
 
+          {leg.order > 1 ? (
+            <label className="mt-2 flex items-center gap-2 text-xs text-slate-600">
+              Зміна автобуса, хв
+              <input
+                type="number"
+                min={0}
+                className={`${inputClass} w-20`}
+                defaultValue={leg.transferMinutes ?? 30}
+                onBlur={async (e) => {
+                  const transferMinutes = Number(e.target.value);
+                  if (!Number.isFinite(transferMinutes)) return;
+                  await call(`/api/admin/legs/${leg.id}`, "PATCH", { transferMinutes });
+                }}
+              />
+            </label>
+          ) : null}
           <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
             {addBusFor === leg.id ? (
               <>
@@ -387,6 +405,16 @@ export default function DepartureOps({ departureId }: { departureId: string }) {
             <option key={s.id} value={s.id}>{s.city}</option>
           ))}
         </select>
+        <label className="flex items-center gap-1 text-slate-600">
+          зміна, хв
+          <input
+            type="number"
+            min={0}
+            className={`${inputClass} w-16`}
+            value={newTransfer}
+            onChange={(e) => setNewTransfer(e.target.value)}
+          />
+        </label>
         <button
           type="button"
           className={btnGhost}
@@ -396,6 +424,7 @@ export default function DepartureOps({ departureId }: { departureId: string }) {
               label: newLegLabel,
               fromStopId: newLegFrom || undefined,
               toStopId: newLegTo || undefined,
+              transferMinutes: Number(newTransfer),
             });
             if (json) setNewLegLabel("");
           }}

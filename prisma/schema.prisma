@@ -220,6 +220,9 @@ model Ticket {
   tripId String?
   trip   Trip?   @relation(fields: [tripId], references: [id], onDelete: SetNull)
 
+  /// Set when a driver checks the QR and the passenger boards.
+  boardedAt DateTime?
+
   /// Set once the ticket is included in a monthly settlement invoice.
   settlementId String?
   settlement   Settlement? @relation(fields: [settlementId], references: [id], onDelete: SetNull)
@@ -420,6 +423,8 @@ model Leg {
   /// Stop range this leg covers (null = whole run).
   fromStopId  String?
   toStopId    String?
+  /// Minutes to change buses before this leg. Empty on a direct first leg.
+  transferMinutes Int?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
