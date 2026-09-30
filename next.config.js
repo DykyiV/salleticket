@@ -1,5 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  allowedDevOrigins: ["127.0.0.1"],
   /**
    * The staff area lives in /cabinet. These keep links from the former
    * /admin section (bookmarks, e-mailed report links) working after the
