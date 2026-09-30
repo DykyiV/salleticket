@@ -1,5 +1,5 @@
+import Image from "next/image";
 import Header from "@/components/Header";
-import HeroStage from "@/components/home/HeroStage";
 import SearchForm from "@/components/SearchForm";
 
 const FEATURES = [
@@ -106,11 +106,19 @@ export default function Home() {
                 </p>
               </div>
 
-              <div className="order-3 h-64 min-w-0 sm:h-80 lg:order-2 lg:h-[26rem]">
-                <HeroStage />
+              <div className="order-2 flex min-w-0 items-center justify-center">
+                <Image
+                  src="/grandes-tour-bus.webp"
+                  alt="Двоповерховий автобус Grandes Tour"
+                  width={1778}
+                  height={830}
+                  priority
+                  className="h-auto w-full max-h-72 object-contain drop-shadow-[0_22px_28px_rgba(0,0,0,0.38)] sm:max-h-96 lg:max-h-[26rem]"
+                  style={{ width: "100%", height: "auto" }}
+                />
               </div>
 
-              <div className="order-2 mx-auto mt-2 w-full min-w-0 max-w-5xl lg:order-3 lg:col-span-2 lg:mt-4">
+              <div className="order-3 mx-auto mt-2 w-full min-w-0 max-w-5xl lg:col-span-2 lg:mt-4">
                 <SearchForm />
               </div>
             </div>
