@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { headers } from "next/headers";
 import BoardingPassCard from "@/components/ticket/BoardingPassCard";
+import { ChangeSeatButton } from "@/components/ticket/ChangeSeatModal";
 import { toBoardingPass } from "@/lib/tickets/boardingPass";
 import PassengerEditor from "@/components/ticket/PassengerEditor";
 import TicketItineraryEditor from "@/components/ticket/TicketItineraryEditor";
@@ -184,7 +185,38 @@ export default async function CabinetTicketEditPage(props: {
             />
           </section>
 
-          <BoardingPassCard pass={pass} />
+          <BoardingPassCard
+            pass={pass}
+            seatAction={
+              access.canEdit && trip ? (
+                <ChangeSeatButton
+                  label={pass.seatLabel}
+                  ticketId={ticket.id}
+                  leg="outbound"
+                  tripId={trip.id}
+                  fromCity={trip.fromCity}
+                  toCity={trip.toCity}
+                  initialDate={trip.departureTime.toISOString().slice(0, 10)}
+                  initialSeat={ticket.seatNumber}
+                />
+              ) : undefined
+            }
+            returnSeatAction={
+              access.canEdit && returnTrip ? (
+                <ChangeSeatButton
+                  label={ticket.returnSeatNumber != null ? String(ticket.returnSeatNumber) : "обрати"}
+                  ticketId={ticket.id}
+                  leg="return"
+                  tripId={returnTrip.id}
+                  fromCity={returnTrip.fromCity}
+                  toCity={returnTrip.toCity}
+                  initialDate={returnTrip.departureTime.toISOString().slice(0, 10)}
+                  initialSeat={ticket.returnSeatNumber}
+                  title="Оберіть місце назад"
+                />
+              ) : undefined
+            }
+          />
 
           <section className="rounded-2xl bg-white p-4 ring-1 ring-slate-200">
             <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Коментар</h2>
@@ -224,11 +256,30 @@ export default async function CabinetTicketEditPage(props: {
               <div className="flex gap-2">
                 <dt className="text-slate-500">Місце:</dt>
                 <dd className="font-semibold text-slate-900">
-                  {departure?.hasAssignedSeats === false
-                    ? "без місць"
-                    : ticket.seatNumber != null
-                      ? ticket.seatNumber
-                      : "не обрано"}
+                  {access.canEdit && trip ? (
+                    <ChangeSeatButton
+                      label={
+                        departure?.hasAssignedSeats === false
+                          ? "без місць"
+                          : ticket.seatNumber != null
+                            ? String(ticket.seatNumber)
+                            : "не обрано"
+                      }
+                      ticketId={ticket.id}
+                      leg="outbound"
+                      tripId={trip.id}
+                      fromCity={trip.fromCity}
+                      toCity={trip.toCity}
+                      initialDate={trip.departureTime.toISOString().slice(0, 10)}
+                      initialSeat={ticket.seatNumber}
+                    />
+                  ) : departure?.hasAssignedSeats === false ? (
+                    "без місць"
+                  ) : ticket.seatNumber != null ? (
+                    ticket.seatNumber
+                  ) : (
+                    "не обрано"
+                  )}
                   {ticket.returnSeatNumber != null ? (
                     <span className="font-normal text-slate-500"> · назад {ticket.returnSeatNumber}</span>
                   ) : null}

@@ -26,7 +26,7 @@ export default function PassengerEditor({
   canEdit?: boolean;
 }) {
   const router = useRouter();
-  const [editing, setEditing] = useState(false);
+  const [editing, setEditing] = useState(canEdit);
   const [firstName, setFirstName] = useState(passenger.firstName);
   const [lastName, setLastName] = useState(passenger.lastName);
   const [phone, setPhone] = useState(passenger.phone);
@@ -67,7 +67,6 @@ export default function PassengerEditor({
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error ?? "Не вдалося зберегти");
-      setEditing(false);
       setMessage("Збережено.");
       router.refresh();
     } catch (err) {
@@ -120,6 +119,7 @@ export default function PassengerEditor({
 
   return (
     <div className="space-y-3">
+      <p className="text-sm text-slate-600">Імʼя, прізвище і телефон можна виправити, якщо в даних помилка.</p>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <Field label="Імʼя *">
           <input

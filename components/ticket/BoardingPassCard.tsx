@@ -1,6 +1,15 @@
+import type { ReactNode } from "react";
 import type { BoardingPassModel } from "@/lib/tickets/boardingPass";
 
-export default function BoardingPassCard({ pass }: { pass: BoardingPassModel }) {
+export default function BoardingPassCard({
+  pass,
+  seatAction,
+  returnSeatAction,
+}: {
+  pass: BoardingPassModel;
+  seatAction?: ReactNode;
+  returnSeatAction?: ReactNode;
+}) {
   return (
     <section className="overflow-hidden rounded-2xl bg-white ring-1 ring-slate-200">
       <div className="flex items-center justify-between bg-slate-900 px-4 py-3 text-white">
@@ -47,8 +56,14 @@ export default function BoardingPassCard({ pass }: { pass: BoardingPassModel }) 
           </div>
           <div>
             <dt className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Місце</dt>
-            <dd className="text-sm font-semibold text-slate-900">{pass.seatLabel}</dd>
+            <dd className="text-sm font-semibold text-slate-900">{seatAction ?? pass.seatLabel}</dd>
           </div>
+          {returnSeatAction ? (
+            <div>
+              <dt className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Місце назад</dt>
+              <dd className="text-sm font-semibold text-slate-900">{returnSeatAction}</dd>
+            </div>
+          ) : null}
           <div>
             <dt className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Телефон автобуса</dt>
             <dd className="text-sm text-slate-900">{pass.busPhone}</dd>
