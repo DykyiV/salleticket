@@ -57,6 +57,7 @@ export async function GET(_req: NextRequest, props: Params) {
       label: leg.label,
       fromStopId: leg.fromStopId,
       toStopId: leg.toStopId,
+      transferMinutes: leg.transferMinutes,
       assignments,
     });
   }
@@ -80,7 +81,7 @@ export async function POST(req: NextRequest, props: Params) {
     return NextResponse.json({ error: "Немає дозволу route.edit" }, { status: 403 });
   }
 
-  let body: { label?: string; fromStopId?: string; toStopId?: string };
+  let body: { label?: string; fromStopId?: string; toStopId?: string; transferMinutes?: number };
   try {
     body = (await req.json()) as typeof body;
   } catch {
@@ -91,6 +92,8 @@ export async function POST(req: NextRequest, props: Params) {
   }
 
   const count = await prisma.leg.count({ where: { departureId: params.id } });
+  const requested = Number(body.transferMinutes);
+  const transferMinutes = count === 0 ? null : Number.isFinite(requested) && requested >= 0 ? Math.round(requested) : 30;
   const leg = await prisma.leg.create({
     data: {
       departureId: params.id,
@@ -98,6 +101,7 @@ export async function POST(req: NextRequest, props: Params) {
       label: body.label.trim(),
       fromStopId: body.fromStopId || null,
       toStopId: body.toStopId || null,
+      transferMinutes,
     },
   });
   return NextResponse.json({ leg }, { status: 201 });

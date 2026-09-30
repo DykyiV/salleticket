@@ -7,18 +7,15 @@ export type TicketAccess = {
   isStaff: boolean;
   /** May see the ticket and its comments. */
   canView: boolean;
-  /** May add comments / edit passenger details. */
+  /** Agent workspace: change passenger, seat, trip and comments. */
   canEdit: boolean;
 };
 
 /**
  * What the session user may do with a ticket owned by `ticketUserId`.
  *
- * Same audience as the rest of the cabinet: the passenger who booked it, and
- * staff (AGENT and above — who can already list every ticket). Editing by
- * staff additionally needs the `booking.edit` grant from the role/permission
- * matrix (/cabinet/settings), replacing main's per-user canViewAllTickets /
- * canEditAllTickets flags with the single permission system.
+ * The passenger who booked the ticket can correct it. Staff from AGENT
+ * upward can open every ticket; editing theirs needs `booking.edit`.
  */
 export async function ticketAccess(
   session: { sub: string; role: Role },

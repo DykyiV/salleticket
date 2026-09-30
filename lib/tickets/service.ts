@@ -149,6 +149,8 @@ export type PassengerDetailsInput = {
   firstName?: string;
   lastName?: string;
   phone?: string;
+  phone2?: string | null;
+  phone3?: string | null;
   email?: string | null;
 };
 
@@ -189,6 +191,16 @@ function cleanPhone(value: string | undefined): string | undefined {
   return v;
 }
 
+function cleanOptionalPhone(value: string | null | undefined): string | null | undefined {
+  if (value === undefined) return undefined;
+  const v = (value ?? "").trim();
+  if (v === "") return null;
+  if (v.replace(/\D/g, "").length < 7 || !/^[+0-9()\-\s]{5,20}$/.test(v)) {
+    throw new PassengerValidationError("Некоректний телефон");
+  }
+  return v;
+}
+
 function cleanEmail(value: string | null | undefined): string | null | undefined {
   if (value === undefined) return undefined;
   const v = (value ?? "").trim();
@@ -218,22 +230,30 @@ export async function updatePassengerDetails(
     const firstName = cleanName(input.firstName, "Імʼя");
     const lastName = cleanName(input.lastName, "Прізвище");
     const phone = cleanPhone(input.phone);
+    const phone2 = cleanOptionalPhone(input.phone2);
+    const phone3 = cleanOptionalPhone(input.phone3);
     const email = cleanEmail(input.email);
     if (firstName !== undefined) next.firstName = firstName;
     if (lastName !== undefined) next.lastName = lastName;
     if (phone !== undefined) next.phone = phone;
+    if (phone2 !== undefined) next.phone2 = phone2;
+    if (phone3 !== undefined) next.phone3 = phone3;
     if (email !== undefined) next.email = email;
 
     const before = {
       firstName: ticket.booking.firstName,
       lastName: ticket.booking.lastName,
       phone: ticket.booking.phone,
+      phone2: ticket.booking.phone2,
+      phone3: ticket.booking.phone3,
       email: ticket.booking.email,
     };
     const after = {
       firstName: (next.firstName as string | undefined) ?? before.firstName,
       lastName: (next.lastName as string | undefined) ?? before.lastName,
       phone: (next.phone as string | undefined) ?? before.phone,
+      phone2: next.phone2 !== undefined ? (next.phone2 as string | null) : before.phone2,
+      phone3: next.phone3 !== undefined ? (next.phone3 as string | null) : before.phone3,
       email:
         next.email !== undefined ? (next.email as string | null) : before.email,
     };

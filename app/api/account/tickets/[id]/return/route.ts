@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { TripKind } from "@prisma/client";
 import { requireAuth } from "@/lib/auth/guard";
 import { hasRoleAtLeast } from "@/lib/auth/constants";
+import { can } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/db";
 import { recordTicketHistory, requestMeta } from "@/lib/tickets/history";
 import { updateTicketVersioned, VersionConflictError } from "@/lib/tickets/version";
@@ -39,8 +40,9 @@ export async function PATCH(req: NextRequest, props: Params) {
     return NextResponse.json({ error: "Квиток не знайдено" }, { status: 404 });
   }
   const staff = hasRoleAtLeast(guard.session.role, "AGENT");
-  if (ticket.userId !== guard.session.sub && !staff) {
-    return NextResponse.json({ error: "Немає доступу" }, { status: 403 });
+  const isOwner = ticket.userId === guard.session.sub;
+  if (!isOwner && (!staff || !(await can({ role: guard.session.role }, "booking.edit")))) {
+    return NextResponse.json({ error: "Немає доступу змінювати рейс" }, { status: 403 });
   }
   if (ticket.tripKind === TripKind.ONE_WAY) {
     return NextResponse.json(

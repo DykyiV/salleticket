@@ -12,6 +12,7 @@ import { AGE_LABEL } from "@/lib/tickets/labels";
 import { parseTripKind, type TripKindId } from "@/lib/tickets/kinds";
 import { TRIP_KIND_LABEL } from "@/lib/tickets/labels";
 import { useBookingSessionId } from "@/lib/seatSession";
+import GuestPassDelivery from "@/components/ticket/GuestPassDelivery";
 
 type PromoPreview = {
   code: string;
@@ -81,6 +82,9 @@ type Confirmation = {
   totalPaid: number;
   status: string;
   paymentMethod: "CASH_ON_BUS" | "ONLINE";
+  needsAccount?: boolean;
+  contactEmail?: string;
+  payUrl?: string;
 };
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
@@ -126,6 +130,8 @@ export default function BookingForm({
     Array.from({ length: count }, emptyPassenger)
   );
   const [phone, setPhone] = useState("");
+  const [phone2, setPhone2] = useState("");
+  const [phone3, setPhone3] = useState("");
   const [email, setEmail] = useState(currentUser?.email ?? "");
   const [agree, setAgree] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -269,6 +275,12 @@ export default function BookingForm({
     if (phone.replace(/\D/g, "").length < 7) {
       next.phone = "Вкажіть телефон";
     }
+    if (phone2.trim() && phone2.replace(/\D/g, "").length < 7) {
+      next.phone2 = "Другий телефон має містити щонайменше 7 цифр";
+    }
+    if (phone3.trim() && phone3.replace(/\D/g, "").length < 7) {
+      next.phone3 = "Третій телефон має містити щонайменше 7 цифр";
+    }
     if (email && !/^\S+@\S+\.\S+$/.test(email)) {
       next.email = "Некоректний email";
     }
@@ -293,7 +305,12 @@ export default function BookingForm({
           paymentMethod,
           holdSessionId: sessionId,
           returnTripId: tripKind === "ROUND_TRIP" ? returnTripId : undefined,
-          contact: { phone: phone.trim(), email: email.trim() || undefined },
+          contact: {
+            phone: phone.trim(),
+            phone2: phone2.trim() || undefined,
+            phone3: phone3.trim() || undefined,
+            email: email.trim() || undefined,
+          },
           passengers: passengers.map((p, i) => ({
             firstName: p.firstName.trim(),
             lastName: p.lastName.trim(),
@@ -323,6 +340,7 @@ export default function BookingForm({
         }),
       });
 
+      const data = await res.json();
       if (res.status === 401) {
         const next =
           typeof window !== "undefined"
@@ -331,10 +349,24 @@ export default function BookingForm({
         router.push(`/login?next=${encodeURIComponent(next)}`);
         return;
       }
-
-      const data = await res.json();
       if (!res.ok) {
         throw new Error(data?.error ?? "Booking failed");
+      }
+
+      if (data.needsAccount) {
+        setConfirmation({
+          references: (data.booking.passengers ?? []).map(
+            (p: { reference: string }) => p.reference
+          ),
+          groupRef: data.booking.groupRef,
+          totalPaid: data.booking.totalPaid,
+          status: data.booking.status,
+          paymentMethod,
+          needsAccount: true,
+          contactEmail: email.trim(),
+          payUrl: data.booking.payment?.payUrl as string | undefined,
+        });
+        return;
       }
 
       if (paymentMethod === "ONLINE" && data.booking.payment?.payUrl) {
@@ -372,7 +404,11 @@ export default function BookingForm({
               Бронювання створено
             </h2>
             <p className="text-sm text-slate-500">
-              Оплата в автобусі при посадці. Квитки вже в кабінеті.
+              {confirmation.needsAccount
+                ? "Посадковий талон готовий. Його можна завантажити або надіслати на пошту без реєстрації."
+                : confirmation.paymentMethod === "ONLINE"
+                  ? "Посадковий талон у кабінеті. Завершіть оплату, якщо ще не сплатили."
+                  : "Оплата в автобусі при посадці. Посадковий талон уже в кабінеті."}
             </p>
           </div>
         </div>
@@ -397,13 +433,23 @@ export default function BookingForm({
           </div>
         </dl>
 
+        {confirmation.needsAccount ? (
+          <GuestPassDelivery
+            references={confirmation.references}
+            email={confirmation.contactEmail ?? ""}
+            payUrl={confirmation.payUrl}
+          />
+        ) : null}
+
         <div className="mt-6 flex flex-wrap gap-2">
-          <a
-            href={`/cabinet/tickets/${confirmation.references[0] ?? ""}`}
-            className="inline-flex items-center justify-center rounded-xl bg-brand-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-700"
-          >
-            Відкрити квиток
-          </a>
+          {confirmation.needsAccount ? null : (
+            <a
+              href={`/cabinet/tickets/${confirmation.references[0] ?? ""}`}
+              className="inline-flex items-center justify-center rounded-xl bg-brand-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-700"
+            >
+              Відкрити посадковий талон
+            </a>
+          )}
           <Link
             href="/"
             className="inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-brand-300 hover:text-brand-700"
@@ -433,7 +479,10 @@ export default function BookingForm({
         </div>
       ) : (
         <div className="mt-4 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-brand-200 bg-brand-50 px-3 py-2 text-sm text-brand-900">
-          <span>Увійдіть, щоб зберегти квитки в кабінеті.</span>
+          <span>
+            Можна не реєструватися: після бронювання талон можна завантажити або
+            надіслати на пошту. Імʼя, прізвище і один телефон обовʼязкові.
+          </span>
           <a
             href={loginHref}
             className="rounded-lg bg-brand-600 px-3 py-1 text-xs font-semibold text-white transition hover:bg-brand-700"
@@ -551,13 +600,31 @@ export default function BookingForm({
       <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
         <Field
           id="phone"
-          label="Контактний телефон"
+          label="Телефон"
           type="tel"
           placeholder="+380 99 123 45 67"
           value={phone}
           onChange={(e) => setPhone(e.target.value)}
           error={errors.phone}
           required
+        />
+        <Field
+          id="phone2"
+          label="Телефон 2"
+          type="tel"
+          placeholder="необовʼязково"
+          value={phone2}
+          onChange={(e) => setPhone2(e.target.value)}
+          error={errors.phone2}
+        />
+        <Field
+          id="phone3"
+          label="Телефон 3"
+          type="tel"
+          placeholder="необовʼязково"
+          value={phone3}
+          onChange={(e) => setPhone3(e.target.value)}
+          error={errors.phone3}
         />
         <Field
           id="email"

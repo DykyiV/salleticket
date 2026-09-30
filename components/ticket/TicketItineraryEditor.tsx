@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import SeatPickerModal from "@/components/ticket/SeatPickerModal";
+import ChangeSeatModal from "@/components/ticket/ChangeSeatModal";
 import TripChangeModal from "@/components/ticket/TripChangeModal";
 import { addUtcDays, formatUkDate, toIsoDate, utcDateOnly } from "@/lib/routes/dates";
 import { TRIP_KIND_LABEL } from "@/lib/tickets/labels";
@@ -30,6 +30,7 @@ export default function TicketItineraryEditor({
   const router = useRouter();
   const [seatModal, setSeatModal] = useState<"outbound" | "return" | null>(null);
   const [dateModal, setDateModal] = useState<"outbound" | "return" | null>(null);
+  const openSeat = (leg: "outbound" | "return") => setSeatModal(leg);
   const [error, setError] = useState<string | null>(null);
 
   const patch = async (url: string, body: unknown) => {
@@ -60,8 +61,8 @@ export default function TicketItineraryEditor({
         date={outbound.date}
         seatNumber={outbound.seatNumber}
         hasAssignedSeats={outbound.hasAssignedSeats}
-        onSeat={() => outbound.tripId && setSeatModal("outbound")}
-        onDate={() => setDateModal("outbound")}
+        onSeat={() => outbound.tripId && openSeat("outbound")}
+        onDate={() => (outbound.tripId ? openSeat("outbound") : setDateModal("outbound"))}
       />
       {tripKind !== "ONE_WAY" ? (
         openReturn ? (
@@ -80,46 +81,40 @@ export default function TicketItineraryEditor({
             date={returnLeg.date}
             seatNumber={returnLeg.seatNumber}
             hasAssignedSeats={returnLeg.hasAssignedSeats}
-            onSeat={() => returnLeg.tripId && setSeatModal("return")}
-            onDate={() => setDateModal("return")}
+            onSeat={() => returnLeg.tripId && openSeat("return")}
+            onDate={() => (returnLeg.tripId ? openSeat("return") : setDateModal("return"))}
           />
         ) : null
       ) : null}
       {error ? <p className="text-sm text-rose-700">{error}</p> : null}
 
       {seatModal === "outbound" && outbound.tripId ? (
-        <SeatPickerModal
+        <ChangeSeatModal
+          ticketId={ticketId}
+          leg="outbound"
           tripId={outbound.tripId}
-          exceptTicketId={ticketId}
+          fromCity={outbound.fromCity}
+          toCity={outbound.toCity}
+          initialDate={outbound.date ?? toIsoDate(new Date())}
           initialSeat={outbound.seatNumber}
           title="Нове місце (туди)"
           onClose={() => setSeatModal(null)}
-          onSave={async (seatNumber) => {
-            await patch(`/api/account/tickets/${ticketId}/seat`, {
-              seatNumber,
-              leg: "outbound",
-            });
-            setSeatModal(null);
-          }}
         />
       ) : null}
       {seatModal === "return" && returnLeg?.tripId ? (
-        <SeatPickerModal
+        <ChangeSeatModal
+          ticketId={ticketId}
+          leg="return"
           tripId={returnLeg.tripId}
-          exceptTicketId={ticketId}
+          fromCity={returnLeg.fromCity}
+          toCity={returnLeg.toCity}
+          initialDate={returnLeg.date ?? toIsoDate(new Date())}
           initialSeat={returnLeg.seatNumber}
           title="Нове місце (назад)"
           onClose={() => setSeatModal(null)}
-          onSave={async (seatNumber) => {
-            await patch(`/api/account/tickets/${ticketId}/seat`, {
-              seatNumber,
-              leg: "return",
-            });
-            setSeatModal(null);
-          }}
         />
       ) : null}
-      {dateModal === "outbound" && outbound.fromCity ? (
+      {dateModal === "outbound" && outbound.fromCity && !outbound.tripId ? (
         <TripChangeModal
           fromCity={outbound.fromCity}
           toCity={outbound.toCity}

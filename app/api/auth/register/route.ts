@@ -6,6 +6,7 @@ import {
   issueSession,
   setSessionCookie,
 } from "@/lib/auth/session";
+import { claimGuestTickets, clearGuestCookie, readGuestToken } from "@/lib/auth/guest";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -34,13 +35,13 @@ export async function POST(req: NextRequest) {
 
   if (!email || !EMAIL_RE.test(email)) {
     return NextResponse.json(
-      { error: "A valid email is required" },
+      { error: "Вкажіть коректний email" },
       { status: 400 }
     );
   }
   if (password.length < 8) {
     return NextResponse.json(
-      { error: "Password must be at least 8 characters" },
+      { error: "Пароль має містити щонайменше 8 символів" },
       { status: 400 }
     );
   }
@@ -58,9 +59,11 @@ export async function POST(req: NextRequest) {
       select: { id: true, email: true, role: true, createdAt: true },
     });
 
+    const claimed = await claimGuestTickets(user.id, readGuestToken(req));
     const token = await issueSession(user);
-    const res = NextResponse.json({ user }, { status: 201 });
+    const res = NextResponse.json({ user, claimed }, { status: 201 });
     setSessionCookie(res, token);
+    clearGuestCookie(res);
     return res;
   } catch (err) {
     if (
@@ -68,7 +71,7 @@ export async function POST(req: NextRequest) {
       err.code === "P2002"
     ) {
       return NextResponse.json(
-        { error: "An account with that email already exists" },
+        { error: "Акаунт з таким email уже існує" },
         { status: 409 }
       );
     }

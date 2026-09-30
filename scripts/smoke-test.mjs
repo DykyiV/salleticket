@@ -124,10 +124,12 @@ async function main() {
   // the price assertions below stay exact, even when the DB is reused.
   const seatsRes = await fetch(`${BASE_URL}/api/trips/${encodeURIComponent(trip.id)}/seats`);
   const seatsBody = await seatsRes.json();
-  const freeSeat = (seatsBody.layout?.decks ?? [])
+  const freeSeats = (seatsBody.layout?.decks ?? [])
     .flatMap((d) => d.rows.flat())
     .map((cell) => cell.seat)
-    .find((seat) => seat && seat.status === "AVAILABLE" && seat.mult === 1);
+    .filter((seat) => seat && seat.status === "AVAILABLE" && seat.mult === 1);
+  const freeSeat = freeSeats[1] ?? freeSeats[0];
+  const guestSeat = freeSeats[0];
   check("GET /api/trips/[id]/seats offers a free seat", seatsRes.ok && Boolean(freeSeat), `got ${seatsRes.status}`);
 
   const bookingPayload = {
@@ -148,9 +150,32 @@ async function main() {
   const noAuth = await fetch(`${BASE_URL}/api/booking`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(bookingPayload),
+    body: JSON.stringify({
+      ...bookingPayload,
+      promoCode: undefined,
+      seatNumber: guestSeat?.number ?? null,
+    }),
   });
-  check("POST /api/booking without auth returns 401", noAuth.status === 401, `got ${noAuth.status}`);
+  const noAuthBody = await noAuth.json();
+  const guestCookie = (noAuth.headers.get("set-cookie") ?? "").match(/asol_guest=[^;]+/)?.[0];
+  check(
+    "POST /api/booking without auth saves the ticket for later sign-in",
+    noAuth.status === 201 && noAuthBody.needsAccount === true && Boolean(guestCookie),
+    `got ${noAuth.status}`
+  );
+
+  const claimEmail = `claim-${Date.now()}@example.com`;
+  const claim = await fetch(`${BASE_URL}/api/auth/register`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Cookie: guestCookie ?? "" },
+    body: JSON.stringify({ email: claimEmail, password }),
+  });
+  const claimBody = await claim.json();
+  check(
+    "register attaches the guest ticket to the new account",
+    claim.status === 201 && claimBody.claimed === 1,
+    `got ${claim.status} claimed=${claimBody.claimed}`
+  );
 
   const booking = await fetch(`${BASE_URL}/api/booking`, {
     method: "POST",

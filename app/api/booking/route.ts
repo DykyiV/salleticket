@@ -1,8 +1,13 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { AgeCategory, Prisma, TicketStatus, TripKind } from "@prisma/client";
+import { AgeCategory, Prisma, TicketStatus, TripKind, type Role } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { findCarrier } from "@/lib/carriers/registry";
 import { requireAuth } from "@/lib/auth/guard";
+import {
+  ensureGuestHolder,
+  guestTokenForRequest,
+  setGuestCookie,
+} from "@/lib/auth/guest";
 import { computePrice, type AgeCategoryId } from "@/lib/pricing";
 import { PromoError, validatePromo } from "@/lib/promo";
 import { resolveCommission } from "@/lib/commission";
@@ -60,7 +65,7 @@ type CreateBookingBody = {
   returnTripId?: string;
   paymentMethod?: string;
   holdSessionId?: string;
-  contact?: { phone?: string; email?: string };
+  contact?: { phone?: string; phone2?: string; phone3?: string; email?: string };
   passengers?: PassengerInput[];
   /** Operational legs of the selected option (from search results). */
   legSegments?: LegSegmentInput[];
@@ -129,6 +134,15 @@ function resolvePassenger(p?: PassengerInput): ResolvedPassenger {
   };
 }
 
+function optionalPhone(value: string | undefined, label: string): string | null {
+  const trimmed = value?.trim() ?? "";
+  if (!trimmed) return null;
+  if (trimmed.replace(/\D/g, "").length < 7) {
+    throw new ValidationError(`${label} має містити щонайменше 7 цифр`);
+  }
+  return trimmed;
+}
+
 function hhmm(date: Date): string {
   return date.toISOString().slice(11, 16);
 }
@@ -150,21 +164,37 @@ function combineDateTime(dateStr: string | undefined, time: string): Date {
 
 export async function POST(req: NextRequest) {
   const guard = await requireAuth();
-  if (!guard.ok) return guard.response;
-  const { session } = guard;
   const meta = requestMeta(req);
 
-  const account = await prisma.user.findUnique({
-    where: { id: session.sub },
-    select: { email: true, agentRewardPercent: true },
-  });
-  if (!account) {
-    return NextResponse.json(
-      { error: "Authenticated user not found" },
-      { status: 401 }
-    );
+  let sessionSub: string;
+  let sessionRole: Role;
+  let accountEmail: string;
+  let agentRewardPercent: number | null;
+  let guestToken: string | null = null;
+
+  if (guard.ok) {
+    const account = await prisma.user.findUnique({
+      where: { id: guard.session.sub },
+      select: { email: true, agentRewardPercent: true },
+    });
+    if (!account) {
+      return NextResponse.json(
+        { error: "Authenticated user not found" },
+        { status: 401 }
+      );
+    }
+    sessionSub = guard.session.sub;
+    sessionRole = guard.session.role;
+    accountEmail = account.email;
+    agentRewardPercent = account.agentRewardPercent;
+  } else {
+    const holder = await ensureGuestHolder();
+    guestToken = guestTokenForRequest(req).token;
+    sessionSub = holder.id;
+    sessionRole = "CUSTOMER";
+    accountEmail = holder.email;
+    agentRewardPercent = null;
   }
-  const accountEmail = account.email;
 
   let body: CreateBookingBody;
   try {
@@ -175,6 +205,13 @@ export async function POST(req: NextRequest) {
 
   if (!body.tripId) {
     return NextResponse.json({ error: "`tripId` is required" }, { status: 400 });
+  }
+
+  if (guestToken) {
+    const contactEmail = body.contact?.email?.trim().toLowerCase();
+    if (contactEmail && /^\S+@\S+\.\S+$/.test(contactEmail)) {
+      accountEmail = contactEmail;
+    }
   }
 
   const storedTrip = await prisma.trip.findUnique({
@@ -197,7 +234,7 @@ export async function POST(req: NextRequest) {
   const holdSessionId = body.holdSessionId?.trim() || undefined;
   const siteSettings = await getSiteSettings();
 
-  if (!(await can({ role: session.role }, "booking.create"))) {
+  if (!(await can({ role: sessionRole }, "booking.create"))) {
     return NextResponse.json(
       { error: "Немає дозволу booking.create" },
       { status: 403 }
@@ -227,6 +264,17 @@ export async function POST(req: NextRequest) {
       { error: "Телефон має містити щонайменше 7 цифр" },
       { status: 400 }
     );
+  }
+  let phone2: string | null = null;
+  let phone3: string | null = null;
+  try {
+    phone2 = optionalPhone(body.contact?.phone2, "Другий телефон");
+    phone3 = optionalPhone(body.contact?.phone3, "Третій телефон");
+  } catch (err) {
+    if (err instanceof ValidationError) {
+      return NextResponse.json({ error: err.message }, { status: 400 });
+    }
+    throw err;
   }
 
   let passengers: ResolvedPassenger[];
@@ -358,7 +406,7 @@ export async function POST(req: NextRequest) {
         p.promoCode
           ? await validatePromo(prisma, {
               rawCode: p.promoCode,
-              currentUserId: session.sub,
+              currentUserId: sessionSub,
             })
           : null
       );
@@ -527,7 +575,8 @@ export async function POST(req: NextRequest) {
 
         const ticket = await tx.ticket.create({
           data: {
-            userId: session.sub,
+            userId: sessionSub,
+            guestClaim: guestToken,
             tripId: trip.id,
             status: ticketStatus,
             basePrice: pricing.basePrice,
@@ -536,7 +585,7 @@ export async function POST(req: NextRequest) {
             commissionAmount: commission?.commissionAmount ?? null,
             carrierAmount: commission?.carrierAmount ?? null,
             // Sales-agent reward % frozen at booking (see agent reconciliation).
-            agentRewardPercent: account.agentRewardPercent ?? null,
+            agentRewardPercent,
             seatNumber: outboundSeat,
             fromStopIndex: segmentCities ? segment.fromIndex : null,
             toStopIndex: segmentCities ? segment.toIndex : null,
@@ -640,6 +689,8 @@ export async function POST(req: NextRequest) {
             lastName: p.lastName,
             ageCategory: p.ageCategory,
             phone,
+            phone2,
+            phone3,
             email: accountEmail,
             promoCode: validatedPromos[i]?.code ?? null,
             finalPrice,
@@ -668,7 +719,7 @@ export async function POST(req: NextRequest) {
           oldStatus: null,
           newStatus: ticket.status,
           source: "BOOKING_FORM",
-          changedBy: session.sub,
+          changedBy: sessionSub,
           request: meta,
           changes: {
             reference: { from: null, to: booking.reference },
@@ -732,7 +783,7 @@ export async function POST(req: NextRequest) {
             ticketId: ticket.id,
             action: "SEAT_HELD",
             source: "BOOKING_FORM",
-            changedBy: session.sub,
+            changedBy: sessionSub,
             request: meta,
             timestamp: new Date(Date.now() + 1000),
             changes: { seatNumber: { from: null, to: outboundSeat } },
@@ -743,7 +794,7 @@ export async function POST(req: NextRequest) {
             ticketId: ticket.id,
             action: "PROMO_APPLIED",
             source: "BOOKING_FORM",
-            changedBy: session.sub,
+            changedBy: sessionSub,
             request: meta,
             timestamp: new Date(Date.now() + 2000),
             changes: { promoCode: { from: null, to: promo.code } },
@@ -804,7 +855,7 @@ export async function POST(req: NextRequest) {
           ticketId: item.ticket.id,
           action: "PAYMENT_STARTED",
           source: "BOOKING_FORM",
-          changedBy: session.sub,
+          changedBy: sessionSub,
           request: meta,
           changes: {
             amount: { from: null, to: item.ticket.finalPrice },
@@ -824,8 +875,9 @@ export async function POST(req: NextRequest) {
       100;
     const payRef = created.groupRef ?? first.booking.reference;
 
-    return NextResponse.json(
+    const res = NextResponse.json(
       {
+        needsAccount: Boolean(guestToken),
         booking: {
           id: first.booking.id,
           reference: first.booking.reference,
@@ -885,6 +937,8 @@ export async function POST(req: NextRequest) {
       },
       { status: 201 }
     );
+    if (guestToken) setGuestCookie(res, guestToken);
+    return res;
   } catch (err) {
     if (
       err instanceof SeatTakenError ||

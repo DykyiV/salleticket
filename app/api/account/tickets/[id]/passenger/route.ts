@@ -40,16 +40,10 @@ export async function PATCH(req: NextRequest, props: Params) {
   const isOwner = ticket.userId === guard.session.sub;
   const isStaff = hasRoleAtLeast(guard.session.role, "AGENT");
   if (!isOwner && !isStaff) {
-    return NextResponse.json(
-      { error: "Можна редагувати лише свої квитки" },
-      { status: 403 }
-    );
+    return NextResponse.json({ error: "Немає доступу" }, { status: 403 });
   }
-  if (isStaff && !(await can({ role: guard.session.role }, "passenger.edit"))) {
-    return NextResponse.json(
-      { error: "Немає дозволу passenger.edit" },
-      { status: 403 }
-    );
+  if (!(await can({ role: guard.session.role }, "passenger.edit"))) {
+    return NextResponse.json({ error: "Немає дозволу редагувати пасажира" }, { status: 403 });
   }
 
   try {

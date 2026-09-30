@@ -48,7 +48,9 @@ export async function PATCH(req: NextRequest) {
     );
   }
   if (emailChanged || passwordChanged) {
-    const ok = await verifyPassword(currentPassword, user.password);
+    const ok = user.password
+      ? await verifyPassword(currentPassword, user.password)
+      : false;
     if (!ok) {
       return NextResponse.json({ error: "Невірний поточний пароль" }, { status: 400 });
     }
