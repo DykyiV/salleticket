@@ -1,8 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { headers } from "next/headers";
-import { ETicketBack, ETicketFront } from "@/components/ticket/ETicket";
-import { buildETicket } from "@/lib/tickets/eTicket";
+import BoardingPassCard from "@/components/ticket/BoardingPassCard";
+import { toBoardingPass } from "@/lib/tickets/boardingPass";
 import PassengerEditor from "@/components/ticket/PassengerEditor";
 import TicketItineraryEditor from "@/components/ticket/TicketItineraryEditor";
 import TicketPaymentActions from "@/components/ticket/TicketPaymentActions";
@@ -67,7 +67,7 @@ export default async function CabinetTicketEditPage(props: {
             orderBy: { order: "asc" },
             include: {
               trip: { select: { fromCity: true, toCity: true } },
-              assignment: { include: { bus: true, leg: true } },
+              assignment: { include: { bus: true } },
             },
           },
           trip: {
@@ -119,7 +119,7 @@ export default async function CabinetTicketEditPage(props: {
   const returnTrip = ticket.returnTrip;
   const departure = trip?.departure;
   const status = ticket.status;
-  const eTicket = buildETicket(full);
+  const pass = toBoardingPass(full);
 
   const payment = ticket.payments[0] ?? null;
   const livePayment = payment && ["PENDING", "SENT", "SETTLED"].includes(payment.status) ? payment : null;
@@ -163,24 +163,6 @@ export default async function CabinetTicketEditPage(props: {
         <span className="font-mono font-semibold text-slate-900">{full.reference}</span>
       </div>
 
-      <ETicketFront ticket={eTicket} qrCode={qrCode} />
-
-      <section className="rounded-2xl bg-white p-4 ring-1 ring-slate-200">
-        <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Коментар</h2>
-        <TicketComments
-          ticketId={ticket.id}
-          comments={ticket.comments.map((c) => ({
-            id: c.id,
-            text: c.text,
-            authorEmail: c.authorEmail,
-            createdAt: c.createdAt.toISOString(),
-          }))}
-          canComment={access.canEdit}
-        />
-      </section>
-
-      <ETicketBack />
-
       <div className="grid items-start gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(300px,360px)]">
         {/* ---------------- Left: passenger + trip ---------------- */}
         <div className="space-y-3">
@@ -199,6 +181,22 @@ export default async function CabinetTicketEditPage(props: {
                 phone3: full.phone3,
                 email: full.email,
               }}
+            />
+          </section>
+
+          <BoardingPassCard pass={pass} />
+
+          <section className="rounded-2xl bg-white p-4 ring-1 ring-slate-200">
+            <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Коментар</h2>
+            <TicketComments
+              ticketId={ticket.id}
+              comments={ticket.comments.map((c) => ({
+                id: c.id,
+                text: c.text,
+                authorEmail: c.authorEmail,
+                createdAt: c.createdAt.toISOString(),
+              }))}
+              canComment={access.canEdit}
             />
           </section>
 
