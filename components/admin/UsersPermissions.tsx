@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { Role } from "@prisma/client";
 import { ROLE_LABEL } from "@/lib/auth/constants";
+import { userChangeRefusal } from "@/lib/auth/userAdmin";
 
 export type UserRow = {
   id: string;
@@ -16,9 +17,11 @@ export type UserRow = {
 
 type Props = {
   initialUsers: UserRow[];
+  /** The signed-in manager — decides which rows and roles are editable. */
+  actor: { id: string; role: Role };
 };
 
-export default function UsersPermissions({ initialUsers }: Props) {
+export default function UsersPermissions({ initialUsers, actor }: Props) {
   const [users, setUsers] = useState(initialUsers);
   const [error, setError] = useState<string | null>(null);
 
@@ -66,14 +69,25 @@ export default function UsersPermissions({ initialUsers }: Props) {
           </tr>
         </thead>
         <tbody>
-          {users.map((row) => (
-            <tr key={row.id} className="border-t border-slate-100">
-              <td className="px-4 py-3">{row.email}</td>
+          {users.map((row) => {
+            const superAdmins = users.filter((u) => u.role === "SUPER_ADMIN").length;
+            const locked = userChangeRefusal({ actor, target: row, superAdminCount: superAdmins });
+            const assignable = (Object.keys(ROLE_LABEL) as Role[]).filter(
+              (role) =>
+                role === row.role ||
+                !userChangeRefusal({ actor, target: row, newRole: role, superAdminCount: superAdmins })
+            );
+            return (
+            <tr key={row.id} className="border-t border-slate-100" title={locked ?? undefined}>
+              <td className="px-4 py-3">
+                {row.email}
+                {locked ? <span className="ml-2 text-[11px] text-slate-400">🔒 {locked}</span> : null}
+              </td>
               <td className="px-4 py-3">
                 <select
                   className="rounded border border-slate-300 bg-white px-1.5 py-1 text-xs"
                   value={row.role}
-                  disabled={row.role === "SUPER_ADMIN"}
+                  disabled={Boolean(locked)}
                   onChange={async (e) => {
                     const role = e.target.value as Role;
                     const prev = row.role;
@@ -94,7 +108,7 @@ export default function UsersPermissions({ initialUsers }: Props) {
                     }
                   }}
                 >
-                  {(Object.keys(ROLE_LABEL) as Role[]).map((role) => (
+                  {assignable.map((role) => (
                     <option key={role} value={role}>
                       {ROLE_LABEL[role]}
                     </option>
@@ -105,7 +119,7 @@ export default function UsersPermissions({ initialUsers }: Props) {
                 <input
                   type="checkbox"
                   checked={row.canEditDepartures || row.role === "ADMIN" || row.role === "SUPER_ADMIN"}
-                  disabled={row.role === "ADMIN" || row.role === "SUPER_ADMIN"}
+                  disabled={Boolean(locked) || row.role === "ADMIN" || row.role === "SUPER_ADMIN"}
                   onChange={() => toggle(row, "canEditDepartures")}
                 />
               </td>
@@ -113,7 +127,7 @@ export default function UsersPermissions({ initialUsers }: Props) {
                 <input
                   type="checkbox"
                   checked={row.canHideStops || row.role === "ADMIN" || row.role === "SUPER_ADMIN"}
-                  disabled={row.role === "ADMIN" || row.role === "SUPER_ADMIN"}
+                  disabled={Boolean(locked) || row.role === "ADMIN" || row.role === "SUPER_ADMIN"}
                   onChange={() => toggle(row, "canHideStops")}
                 />
               </td>
@@ -121,12 +135,13 @@ export default function UsersPermissions({ initialUsers }: Props) {
                 <input
                   type="checkbox"
                   checked={row.canHideSeats || row.role === "ADMIN" || row.role === "SUPER_ADMIN"}
-                  disabled={row.role === "ADMIN" || row.role === "SUPER_ADMIN"}
+                  disabled={Boolean(locked) || row.role === "ADMIN" || row.role === "SUPER_ADMIN"}
                   onChange={() => toggle(row, "canHideSeats")}
                 />
               </td>
             </tr>
-          ))}
+            );
+          })}
         </tbody>
       </table>
       <p className="px-4 py-3 text-xs text-slate-500">

@@ -104,6 +104,8 @@ export async function PATCH(req: NextRequest) {
         avatarUrl,
         notifyChannels,
         ...(passwordChanged ? { password: await hashPassword(newPassword) } : {}),
+        // New password / e-mail: every other session is signed out.
+        ...(passwordChanged || emailChanged ? { sessionVersion: { increment: 1 } } : {}),
       },
       select: {
         id: true,
@@ -112,11 +114,15 @@ export async function PATCH(req: NextRequest) {
         displayName: true,
         avatarUrl: true,
         notifyChannels: true,
+        sessionVersion: true,
       },
     });
 
-    const res = NextResponse.json({ user: updated });
-    if (emailChanged) {
+    const { sessionVersion: _v, ...publicUser } = updated;
+    void _v;
+    const res = NextResponse.json({ user: publicUser });
+    if (passwordChanged || emailChanged) {
+      // Keep this device signed in with a fresh token.
       const token = await issueSession(updated);
       setSessionCookie(res, token);
     }

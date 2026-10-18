@@ -1,4 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { recordAudit } from "@/lib/audit";
+import { requestMeta } from "@/lib/tickets/history";
 import { Role } from "@prisma/client";
 import { requireRole } from "@/lib/auth/guard";
 import { prisma } from "@/lib/db";
@@ -54,6 +56,10 @@ export async function PUT(req: NextRequest) {
     );
   }
 
+  const before = await prisma.rolePermission.findUnique({
+    where: { role_permission: { role: body.role, permission: body.permission } },
+    select: { allowed: true },
+  });
   const grant = await prisma.rolePermission.upsert({
     where: {
       role_permission: { role: body.role, permission: body.permission },
@@ -65,5 +71,16 @@ export async function PUT(req: NextRequest) {
     },
     update: { allowed: body.allowed },
   });
+  if (before?.allowed !== body.allowed) {
+    await recordAudit({
+      actorId: guard.session.sub,
+      actorEmail: guard.session.email,
+      action: "permission.set",
+      targetType: "role",
+      targetId: body.role,
+      changes: { [body.permission]: { from: before?.allowed ?? null, to: body.allowed } },
+      ipAddress: requestMeta(req).ipAddress,
+    });
+  }
   return NextResponse.json({ grant });
 }

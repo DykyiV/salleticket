@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { checkCronAuth } from "@/lib/security/cron";
 import {
   generateSettlements,
   markSettlementSent,
@@ -20,17 +21,8 @@ export const dynamic = "force-dynamic";
  * lib/settlements.ts for the integration point.
  */
 export async function POST(req: NextRequest) {
-  const secret = process.env.CRON_SECRET;
-  if (!secret) {
-    return NextResponse.json(
-      { error: "CRON_SECRET is not configured on the server" },
-      { status: 503 }
-    );
-  }
-  const auth = req.headers.get("authorization") ?? "";
-  if (auth !== `Bearer ${secret}`) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const denied = checkCronAuth(req);
+  if (denied) return denied;
 
   const period = previousPeriod();
   const generated = await generateSettlements(period, "cron");

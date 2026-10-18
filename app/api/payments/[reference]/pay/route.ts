@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { onlinePaymentMode } from "@/lib/paymentMode";
 import { PaymentStatus, TicketStatus } from "@prisma/client";
 import { requireAuth } from "@/lib/auth/guard";
 import { hasRoleAtLeast } from "@/lib/auth/constants";
@@ -13,11 +14,16 @@ export const dynamic = "force-dynamic";
 type Params = { params: Promise<{ reference: string }> };
 
 /**
- * Mock payment-system confirmation. Works for single tickets and for a
+ * Mock payment-system confirmation (development / closed test servers only). Works for single tickets and for a
  * multi-passenger group (reference = groupRef): every pending payment in the
  * group is marked SENT and settles after the configured window.
  */
 export async function POST(req: NextRequest, props: Params) {
+  // TEST provider only: "confirming" a payment without money must not exist
+  // on a live site (see lib/paymentMode.ts).
+  if (onlinePaymentMode() !== "mock") {
+    return NextResponse.json({ error: "Тестова оплата вимкнена" }, { status: 404 });
+  }
   const params = await props.params;
   const guard = await requireAuth();
   if (!guard.ok) return guard.response;

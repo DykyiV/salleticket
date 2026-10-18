@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { ONLINE_DISABLED_MESSAGE, onlinePaymentsEnabled } from "@/lib/paymentMode";
 import { requireAuth } from "@/lib/auth/guard";
 import { hasRoleAtLeast } from "@/lib/auth/constants";
 import { prisma } from "@/lib/db";
@@ -17,6 +18,9 @@ type Params = { params: Promise<{ reference: string }> };
  */
 export async function POST(_req: Request, props: Params) {
   const { reference } = await props.params;
+  if (!onlinePaymentsEnabled()) {
+    return NextResponse.json({ error: ONLINE_DISABLED_MESSAGE }, { status: 409 });
+  }
   const guard = await requireAuth();
   if (!guard.ok) return guard.response;
 

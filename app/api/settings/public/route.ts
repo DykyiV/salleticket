@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSiteSettings } from "@/lib/settings";
+import { onlinePaymentsEnabled } from "@/lib/paymentMode";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -11,5 +12,6 @@ export async function GET() {
     onlineDiscountPercent: settings.onlineDiscountPercent,
     paymentDeadlineHours: settings.paymentDeadlineHours,
     paymentSettleMinutes: settings.paymentSettleMinutes,
+    onlinePaymentEnabled: onlinePaymentsEnabled(),
   });
 }

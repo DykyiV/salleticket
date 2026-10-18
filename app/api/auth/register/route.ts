@@ -55,11 +55,14 @@ export async function POST(req: NextRequest) {
   try {
     const user = await prisma.user.create({
       data: { email, password: passwordHash, role },
-      select: { id: true, email: true, role: true, createdAt: true },
+      select: { id: true, email: true, role: true, createdAt: true, sessionVersion: true },
     });
 
     const token = await issueSession(user);
-    const res = NextResponse.json({ user }, { status: 201 });
+    const res = NextResponse.json(
+      { user: { id: user.id, email: user.email, role: user.role, createdAt: user.createdAt } },
+      { status: 201 }
+    );
     setSessionCookie(res, token);
     return res;
   } catch (err) {
