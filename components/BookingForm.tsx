@@ -136,6 +136,9 @@ export default function BookingForm({
   const [salesSettings, setSalesSettings] = useState({
     onlineDiscountPercent: 0,
     paymentDeadlineHours: 24,
+    // Off until the server says a real (or, in development, test) payment
+    // provider is live — see lib/paymentMode.ts.
+    onlinePaymentEnabled: false,
   });
 
   useEffect(() => {
@@ -145,6 +148,7 @@ export default function BookingForm({
         setSalesSettings({
           onlineDiscountPercent: Number(data.onlineDiscountPercent) || 0,
           paymentDeadlineHours: Number(data.paymentDeadlineHours) || 24,
+          onlinePaymentEnabled: data.onlinePaymentEnabled === true,
         })
       )
       .catch(() => {});
@@ -599,7 +603,7 @@ export default function BookingForm({
               €{total.toFixed(2)}
             </dd>
           </div>
-          {salesSettings.onlineDiscountPercent > 0 ? (
+          {salesSettings.onlinePaymentEnabled && salesSettings.onlineDiscountPercent > 0 ? (
             <div className="flex items-center justify-between text-emerald-700">
               <dt>Онлайн-оплата (−{salesSettings.onlineDiscountPercent}%)</dt>
               <dd className="tabular-nums font-semibold">
@@ -638,6 +642,7 @@ export default function BookingForm({
         <p className="text-xs text-slate-500">
           Оберіть спосіб завершення бронювання. Місця вже закріплені за вами.
         </p>
+        {salesSettings.onlinePaymentEnabled ? (
         <p
           data-testid="online-deadline-notice"
           className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900"
@@ -646,6 +651,11 @@ export default function BookingForm({
           оплата не надійде вчасно, бронювання автоматично скасується, а ми
           повідомимо вас SMS та e-mail.
         </p>
+        ) : (
+          <p className="text-xs text-slate-500">
+            Онлайн-оплата скоро з’явиться. Зараз — оплата в автобусі або в касі.
+          </p>
+        )}
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <button
             type="button"
@@ -664,6 +674,7 @@ export default function BookingForm({
               </>
             )}
           </button>
+          {salesSettings.onlinePaymentEnabled ? (
           <button
             type="button"
             onClick={() => submit("ONLINE")}
@@ -696,6 +707,7 @@ export default function BookingForm({
               </>
             )}
           </button>
+          ) : null}
         </div>
       </div>
     </div>

@@ -3,6 +3,9 @@ import { Role } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { requireRole } from "@/lib/auth/guard";
 import { ROLE_RANK } from "@/lib/auth/constants";
+import { userChangeRefusal } from "@/lib/auth/userAdmin";
+import { recordAudit } from "@/lib/audit";
+import { requestMeta } from "@/lib/tickets/history";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -62,15 +65,6 @@ export async function PATCH(req: NextRequest) {
     if (!(body.role in ROLE_RANK)) {
       return NextResponse.json({ error: "Unknown role" }, { status: 400 });
     }
-    if (
-      (body.role === "ADMIN" || body.role === "SUPER_ADMIN") &&
-      guard.session.role !== "SUPER_ADMIN"
-    ) {
-      return NextResponse.json(
-        { error: "Only SUPER_ADMIN can assign ADMIN / SUPER_ADMIN roles" },
-        { status: 403 }
-      );
-    }
     data.role = body.role;
   }
 
@@ -88,10 +82,47 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: "No fields to update" }, { status: 400 });
   }
 
-  const updated = await prisma.user.update({
+  const target = await prisma.user.findUnique({
     where: { id: body.userId },
-    data,
     select: userSelect,
   });
+  if (!target) {
+    return NextResponse.json({ error: "Користувача не знайдено" }, { status: 404 });
+  }
+  const refusal = userChangeRefusal({
+    actor: { id: guard.session.sub, role: guard.session.role },
+    target: { id: target.id, role: target.role },
+    newRole: data.role,
+    superAdminCount: await prisma.user.count({ where: { role: "SUPER_ADMIN" } }),
+  });
+  if (refusal) return NextResponse.json({ error: refusal }, { status: 403 });
+
+  const roleChanged = data.role !== undefined && data.role !== target.role;
+  const changes: Record<string, { from: unknown; to: unknown }> = {};
+  for (const key of Object.keys(data) as (keyof typeof data)[]) {
+    if (data[key] !== target[key]) changes[key] = { from: target[key], to: data[key] };
+  }
+
+  const updated = await prisma.user.update({
+    where: { id: body.userId },
+    data: {
+      ...data,
+      // A role change signs the user out everywhere: the new role applies
+      // from their next login, the old one stops working right now.
+      ...(roleChanged ? { sessionVersion: { increment: 1 } } : {}),
+    },
+    select: userSelect,
+  });
+  if (Object.keys(changes).length) {
+    await recordAudit({
+      actorId: guard.session.sub,
+      actorEmail: guard.session.email,
+      action: roleChanged ? "user.role" : "user.flags",
+      targetType: "user",
+      targetId: target.id,
+      changes: { email: target.email, ...changes },
+      ipAddress: requestMeta(req).ipAddress,
+    });
+  }
   return NextResponse.json({ user: updated });
 }

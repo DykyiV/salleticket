@@ -16,6 +16,7 @@ import { can } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/db";
 import { reconcileTicketPayment } from "@/lib/payments";
 import { getSiteSettings } from "@/lib/settings";
+import { onlinePaymentsEnabled } from "@/lib/paymentMode";
 import { qrCodeDataUrl } from "@/lib/tickets/qrcode";
 import { buildTimeline } from "@/lib/tickets/timeline";
 import { findStopForCity } from "@/lib/routes/boarding";
@@ -403,7 +404,7 @@ export default async function CabinetTicketEditPage(props: {
                 canCash={staff && canEditBooking}
                 canCancel={isOwner || canCancel}
                 canRefund={canRefund}
-                canPayOnline={isOwner || staff}
+                canPayOnline={(isOwner || staff) && onlinePaymentsEnabled()}
                 deadlineHours={settings.paymentDeadlineHours}
               />
             </div>

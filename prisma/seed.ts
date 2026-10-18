@@ -69,6 +69,15 @@ async function upsertUser(email: string, password: string, role: Role, flags = {
 }
 
 async function main() {
+  // Demo data only: well-known logins (admin@asolbus.local / Admin12345 …),
+  // demo promo codes, carriers and tickets must never reach a live database.
+  if (process.env.NODE_ENV === "production") {
+    console.error(
+      "Refusing to seed demo data with NODE_ENV=production.\n" +
+        "Create the first administrator instead: npm run admin:create -- --email you@company.ua"
+    );
+    process.exit(1);
+  }
   for (const p of PROMOS) {
     await prisma.promo.upsert({
       where: { code: p.code },

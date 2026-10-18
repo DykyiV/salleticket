@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { ONLINE_DISABLED_MESSAGE, onlinePaymentsEnabled } from "@/lib/paymentMode";
 import { AgeCategory, Prisma, TicketStatus, TripKind } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { findCarrier } from "@/lib/carriers/registry";
@@ -194,6 +195,9 @@ export async function POST(req: NextRequest) {
   const tripKind = parseTripKind(body.tripKind);
   const paymentMethod =
     body.paymentMethod === "ONLINE" ? "ONLINE" : "CASH_ON_BUS";
+  if (paymentMethod === "ONLINE" && !onlinePaymentsEnabled()) {
+    return NextResponse.json({ error: ONLINE_DISABLED_MESSAGE }, { status: 409 });
+  }
   const holdSessionId = body.holdSessionId?.trim() || undefined;
   const siteSettings = await getSiteSettings();
 

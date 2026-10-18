@@ -467,19 +467,69 @@ async function main() {
   });
   check("owner can cancel own reserved ticket", cancelOwn.status === 200, `got ${cancelOwn.status}`);
 
+  // --- Admin hierarchy, revocation -------------------------------------------
+  const adminCookie = await login("admin@asolbus.local", "Admin12345");
+  check("seeded admin can log in", Boolean(adminCookie));
+  if (adminCookie) {
+    const users = (await (await fetch(`${BASE_URL}/api/admin/users`, { headers: { Cookie: adminCookie } })).json()).users ?? [];
+    const self = users.find((u) => u.email === "admin@asolbus.local");
+    const selfDemote = await fetch(`${BASE_URL}/api/admin/users`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", Cookie: adminCookie },
+      body: JSON.stringify({ userId: self?.id, role: "CUSTOMER" }),
+    });
+    check("an admin cannot change their own role (403)", selfDemote.status === 403, `got ${selfDemote.status}`);
+    const grantAdmin = await fetch(`${BASE_URL}/api/admin/users`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", Cookie: adminCookie },
+      body: JSON.stringify({ userId: users.find((u) => u.email === "manager@asolbus.local")?.id, role: "ADMIN" }),
+    });
+    check("an admin cannot grant the ADMIN role (403)", grantAdmin.status === 403, `got ${grantAdmin.status}`);
+
+    // Demoting a staff member signs them out at once.
+    const managerCookie = await login("manager@asolbus.local", "Manager12345");
+    const manager = users.find((u) => u.email === "manager@asolbus.local");
+    const demote = await fetch(`${BASE_URL}/api/admin/users`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", Cookie: adminCookie },
+      body: JSON.stringify({ userId: manager?.id, role: "AGENT" }),
+    });
+    check("admin demotes the manager", demote.status === 200, `got ${demote.status}`);
+    const stale = await fetch(`${BASE_URL}/api/finance/settlements`, { headers: { Cookie: managerCookie } });
+    check("the demoted manager's old session stops working (401)", stale.status === 401, `got ${stale.status}`);
+    await fetch(`${BASE_URL}/api/admin/users`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", Cookie: adminCookie },
+      body: JSON.stringify({ userId: manager?.id, role: "MANAGER" }),
+    });
+  }
+
+  // Online payments follow the server's payment mode.
+  const pub = await (await fetch(`${BASE_URL}/api/settings/public`)).json();
+  if (pub.onlinePaymentEnabled === false) {
+    const online = await fetch(`${BASE_URL}/api/booking`, {
+      method: "POST",
+      headers: authHeaders,
+      body: JSON.stringify({ ...bookingPayload, promoCode: undefined, paymentMethod: "ONLINE" }),
+    });
+    check("with online payments off, an ONLINE booking is refused (409)", online.status === 409, `got ${online.status}`);
+    const mockPay = await fetch(`${BASE_URL}/api/payments/${reference}/pay`, { method: "POST", headers: { Cookie: cookie } });
+    check("with online payments off, the test «pay» endpoint is gone (404)", mockPay.status === 404, `got ${mockPay.status}`);
+  } else {
+    console.log("  · online payments are in TEST mode on this server — skipping the «off» checks");
+  }
+
   // --- Logout -----------------------------------------------------------------
   const logout = await fetch(`${BASE_URL}/api/auth/logout`, {
     method: "POST",
     headers: { Cookie: cookie },
   });
-  const logoutCookie = sessionCookie(logout);
   check("POST /api/auth/logout succeeds", logout.ok);
 
-  const meAfter = await fetch(`${BASE_URL}/api/auth/me`, {
-    headers: { Cookie: logoutCookie ?? cookie },
-  });
+  // The old cookie value must be dead too (server-side revocation).
+  const meAfter = await fetch(`${BASE_URL}/api/auth/me`, { headers: { Cookie: cookie } });
   const meAfterBody = await meAfter.json();
-  check("session is cleared after logout", meAfterBody.user === null);
+  check("a copied session token stops working after logout", meAfterBody.user === null);
 
   console.log(`\n${passed} passed, ${failed} failed`);
   if (failed > 0) process.exit(1);

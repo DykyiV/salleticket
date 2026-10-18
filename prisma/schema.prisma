@@ -78,6 +78,10 @@ model User {
   /// Sales-agent reward, percent of the agent's paid sales. Null = the user
   /// is not paid a reward (not listed in agent reconciliation).
   agentRewardPercent Float?
+  /// Bumped on logout, password / e-mail change and role change: every
+  /// session token carries the version it was issued with, so older tokens
+  /// stop working immediately (lib/auth/resolve.ts).
+  sessionVersion     Int      @default(0)
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 
@@ -883,4 +887,25 @@ model CounterpartyPayment {
   @@index([userId])
   @@index([settlementId])
   @@map("counterparty_payments")
+}
+
+/// Security-relevant changes made by staff: role changes, permission-matrix
+/// edits. Who did what to whom, and when.
+model AuditLog {
+  id         String   @id @default(cuid())
+  /// User id of the actor (null for system / CLI).
+  actorId    String?
+  actorEmail String?
+  /// e.g. "user.role", "user.flags", "permission.set", "admin.create"
+  action     String
+  targetType String
+  targetId   String?
+  /// JSON: { field: { from, to } } or free-form details.
+  changes    String?
+  ipAddress  String?
+  createdAt  DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([targetType, targetId])
+  @@map("audit_logs")
 }

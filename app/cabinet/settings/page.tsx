@@ -24,6 +24,8 @@ import NotificationRules, {
   type NotificationRuleRow,
 } from "@/components/admin/NotificationRules";
 import { Role } from "@prisma/client";
+import { listAudit } from "@/lib/audit";
+import AuditLogTable from "@/components/admin/AuditLogTable";
 import { getCurrentUser } from "@/lib/auth/session";
 import { isAdminRole } from "@/lib/routes/permissions";
 
@@ -59,6 +61,7 @@ export default async function CabinetSettingsPage() {
     prisma.rolePermission.findMany(),
     prisma.notificationRule.findMany({ orderBy: { kind: "asc" } }),
   ]);
+  const audit = isAdmin ? await listAudit(30) : [];
 
   const gridByCountry = new Map(grids.map((g) => [g.countryId, g]));
   const tariffCountries: TariffCountry[] = countries.map((country) => {
@@ -164,8 +167,14 @@ export default async function CabinetSettingsPage() {
       ) : null}
       <section>
         <h2 className="mb-3 text-base font-semibold text-slate-900">Користувачі</h2>
-        <UsersPermissions initialUsers={userRows} />
+        {user ? <UsersPermissions initialUsers={userRows} actor={{ id: user.id, role: user.role }} /> : null}
       </section>
+      {isAdmin ? (
+        <section>
+          <h2 className="mb-3 text-base font-semibold text-slate-900">Журнал змін ролей і дозволів</h2>
+          <AuditLogTable entries={audit} />
+        </section>
+      ) : null}
       {isAdmin ? (
         <section>
           <h2 className="mb-3 text-base font-semibold text-slate-900">

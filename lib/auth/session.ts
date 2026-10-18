@@ -5,18 +5,18 @@ import {
   SESSION_COOKIE,
   SESSION_MAX_AGE_SECONDS,
 } from "@/lib/auth/constants";
-import { signSession, verifySession, type SessionPayload } from "@/lib/auth/jwt";
+import { signSession, type SessionPayload } from "@/lib/auth/jwt";
+import { resolveSession } from "@/lib/auth/resolve";
 import { prisma } from "@/lib/db";
 import type { Role } from "@prisma/client";
 
 /**
  * Server-component / route-handler helper to read the current session.
- * Returns null if the cookie is missing or invalid.
+ * Returns null if the cookie is missing or invalid, the user is gone or the
+ * session was revoked. The role comes from the database, not the token.
  */
 export async function getSession(): Promise<SessionPayload | null> {
-  const token = (await cookies()).get(SESSION_COOKIE)?.value;
-  if (!token) return null;
-  return verifySession(token);
+  return resolveSession((await cookies()).get(SESSION_COOKIE)?.value);
 }
 
 /**
@@ -25,23 +25,19 @@ export async function getSession(): Promise<SessionPayload | null> {
 export async function getSessionFromRequest(
   req: NextRequest
 ): Promise<SessionPayload | null> {
-  const token = req.cookies.get(SESSION_COOKIE)?.value;
-  if (!token) return null;
-  return verifySession(token);
+  return resolveSession(req.cookies.get(SESSION_COOKIE)?.value);
 }
 
 /**
  * Returns the full User from the database based on the current session.
- * Returns null if the session is absent/invalid or the user no longer exists.
- *
- * If the database is unreachable, falls back to the JWT claims so protected
- * pages can still render the user's identity in degraded mode.
+ * Returns null if the session is absent/invalid/revoked, the user no longer
+ * exists, or the database is unreachable (fail closed).
  */
 export async function getCurrentUser() {
   const session = await getSession();
   if (!session) return null;
   try {
-    const user = await prisma.user.findUnique({
+    return await prisma.user.findUnique({
       where: { id: session.sub },
       select: {
         id: true,
@@ -56,21 +52,9 @@ export async function getCurrentUser() {
         createdAt: true,
       },
     });
-    if (user) return user;
   } catch {
-    // Fall through to session-only fallback below.
+    return null;
   }
-  return {
-    id: session.sub,
-    email: session.email,
-    role: session.role,
-    displayName: null,
-    avatarUrl: null,
-    canEditDepartures: false,
-    canHideStops: false,
-    canHideSeats: false,
-    createdAt: new Date(0),
-  };
 }
 
 export function setSessionCookie(res: NextResponse, token: string): void {
@@ -101,6 +85,7 @@ export async function issueSession(user: {
   id: string;
   email: string;
   role: Role;
+  sessionVersion: number;
 }): Promise<string> {
-  return signSession({ sub: user.id, email: user.email, role: user.role });
+  return signSession({ sub: user.id, email: user.email, role: user.role, v: user.sessionVersion });
 }
