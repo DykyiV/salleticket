@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { requireAuth } from "@/lib/auth/guard";
-import { hasRoleAtLeast } from "@/lib/auth/constants";
+import { ticketRights } from "@/lib/auth/access";
 import { prisma } from "@/lib/db";
 import { reconcileTicketPayment } from "@/lib/payments";
 
@@ -22,8 +22,7 @@ export async function GET(_req: NextRequest, props: Params) {
   if (!first) {
     return NextResponse.json({ error: "Квиток не знайдено" }, { status: 404 });
   }
-  const staff = hasRoleAtLeast(guard.session.role, "AGENT");
-  if (first.ticket.userId !== guard.session.sub && !staff) {
+  if (!(await ticketRights(guard.session, first.ticket)).canView) {
     return NextResponse.json({ error: "Немає доступу" }, { status: 403 });
   }
 

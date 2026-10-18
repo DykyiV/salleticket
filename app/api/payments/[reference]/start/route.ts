@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { ONLINE_DISABLED_MESSAGE, onlinePaymentsEnabled } from "@/lib/paymentMode";
 import { requireAuth } from "@/lib/auth/guard";
-import { hasRoleAtLeast } from "@/lib/auth/constants";
+import { ticketRights } from "@/lib/auth/access";
 import { prisma } from "@/lib/db";
 import { startOnlinePayment, StartPaymentError } from "@/lib/payments";
 import { VersionConflictError } from "@/lib/tickets/version";
@@ -26,11 +26,10 @@ export async function POST(_req: Request, props: Params) {
 
   const booking = await prisma.booking.findUnique({
     where: { reference },
-    select: { ticket: { select: { id: true, userId: true } } },
+    select: { ticket: { select: { id: true, userId: true, cashCollectedById: true } } },
   });
   if (!booking) return NextResponse.json({ error: "Квиток не знайдено" }, { status: 404 });
-  const staff = hasRoleAtLeast(guard.session.role, "AGENT");
-  if (booking.ticket.userId !== guard.session.sub && !staff) {
+  if (!(await ticketRights(guard.session, booking.ticket)).canView) {
     return NextResponse.json({ error: "Немає доступу" }, { status: 403 });
   }
   try {

@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { requireAuth } from "@/lib/auth/guard";
-import { hasRoleAtLeast } from "@/lib/auth/constants";
+import { ticketRights } from "@/lib/auth/access";
 import { prisma } from "@/lib/db";
 import { requestMeta } from "@/lib/tickets/history";
 import {
@@ -10,7 +10,6 @@ import {
   updatePassengerDetails,
   type PassengerDetailsInput,
 } from "@/lib/tickets/service";
-import { can } from "@/lib/auth/permissions";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -31,21 +30,22 @@ export async function PATCH(req: NextRequest, props: Params) {
 
   const ticket = await prisma.ticket.findUnique({
     where: { id: params.id },
-    select: { userId: true },
+    select: { userId: true, cashCollectedById: true },
   });
   if (!ticket) {
     return NextResponse.json({ error: "Квиток не знайдено" }, { status: 404 });
   }
 
-  const isOwner = ticket.userId === guard.session.sub;
-  const isStaff = hasRoleAtLeast(guard.session.role, "AGENT");
+  const rights = await ticketRights(guard.session, ticket);
+  const isOwner = rights.isOwner;
+  const isStaff = rights.isStaff;
   if (!isOwner && !isStaff) {
     return NextResponse.json(
       { error: "Можна редагувати лише свої квитки" },
       { status: 403 }
     );
   }
-  if (isStaff && !(await can({ role: guard.session.role }, "passenger.edit"))) {
+  if (!isOwner && !rights.canEditPassenger) {
     return NextResponse.json(
       { error: "Немає дозволу passenger.edit" },
       { status: 403 }

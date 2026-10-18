@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { requireRole } from "@/lib/auth/guard";
+import { requirePermission, requireRole } from "@/lib/auth/guard";
 import { prisma } from "@/lib/db";
 import { buildLayout, parseCoachLayout, type CoachLayoutJSON } from "@/lib/seats";
 
@@ -7,7 +7,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  const guard = await requireRole("AGENT");
+  const guard = await requirePermission("route.read");
   if (!guard.ok) return guard.response;
   const buses = await prisma.bus.findMany({ orderBy: { plate: "asc" } });
   return NextResponse.json({

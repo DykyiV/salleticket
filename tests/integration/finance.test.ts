@@ -168,8 +168,15 @@ describe("permission matrix — explicit rows win, missing rows use defaults", (
 
   it("an explicit grant beyond the defaults is honoured", async () => {
     await prisma.rolePermission.create({
+      data: { role: "MANAGER", permission: "finance.edit", allowed: true },
+    });
+    expect(await can({ role: "MANAGER" }, "finance.edit")).toBe(true);
+  });
+
+  it("finance grants never reach non-office roles (agents see only their own settlement)", async () => {
+    await prisma.rolePermission.create({
       data: { role: "AGENT", permission: "finance.read", allowed: true },
     });
-    expect(await can({ role: "AGENT" }, "finance.read")).toBe(true);
+    expect(await can({ role: "AGENT" }, "finance.read")).toBe(false);
   });
 });

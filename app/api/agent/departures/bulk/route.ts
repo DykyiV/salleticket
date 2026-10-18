@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { prisma } from "@/lib/db";
-import { requireRole } from "@/lib/auth/guard";
+import { requirePermission } from "@/lib/auth/guard";
 import { applyDepartureBulk } from "@/lib/routes/applyBulk";
 import type { BulkPayload } from "@/lib/routes/bulk";
 import {
@@ -13,7 +13,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function POST(req: NextRequest) {
-  const guard = await requireRole("AGENT");
+  const guard = await requirePermission("route.read");
   if (!guard.ok) return guard.response;
 
   const user = await prisma.user.findUnique({

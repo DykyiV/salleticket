@@ -5,8 +5,10 @@ import TicketBulkActions from "@/components/ticket/TicketBulkActions";
 import { inputClass, btnGhost } from "@/components/admin/Field";
 import { getCurrentUser } from "@/lib/auth/session";
 import { hasRoleAtLeast } from "@/lib/auth/constants";
+import { isTicketStaff, ticketListWhere } from "@/lib/auth/access";
 import { prisma } from "@/lib/db";
 import { reconcileDuePayments } from "@/lib/payments";
+import { closeNoShowReservations } from "@/lib/tickets/cashLimits";
 import {
   bookedByLabel,
   eur,
@@ -33,9 +35,10 @@ export default async function CabinetTicketsPage(
 ) {
   const searchParams = await props.searchParams;
   const user = await getCurrentUser();
-  const staff = user ? hasRoleAtLeast(user.role, "AGENT") : false;
+  const staff = user ? await isTicketStaff(user) : false;
   const admin = user ? hasRoleAtLeast(user.role, "ADMIN") : false;
   await reconcileDuePayments();
+  await closeNoShowReservations();
   const q = (searchParams.q ?? "").trim();
   const statusFilter =
     searchParams.status && STATUSES.includes(searchParams.status as TicketStatus)
@@ -43,7 +46,7 @@ export default async function CabinetTicketsPage(
       : undefined;
 
   const ticketWhere: Prisma.TicketWhereInput = {
-    ...(user && !staff ? { userId: user.id } : {}),
+    ...(user ? await ticketListWhere({ sub: user.id, role: user.role }) : {}),
     ...(statusFilter ? { status: statusFilter } : {}),
   };
   const where: Prisma.BookingWhereInput = {

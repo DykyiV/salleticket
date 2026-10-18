@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { headers } from "next/headers";
 import PrintTicketButton from "@/components/ticket/PrintTicketButton";
 import { getCurrentUser } from "@/lib/auth/session";
-import { hasRoleAtLeast } from "@/lib/auth/constants";
+import { ticketRights } from "@/lib/auth/access";
 import { prisma } from "@/lib/db";
 import { findStopForCity, boardingLabel } from "@/lib/routes/boarding";
 import { formatUkDate } from "@/lib/routes/dates";
@@ -39,7 +39,7 @@ export default async function PrintTicketPage(props: { params: Promise<{ referen
     },
   });
   if (!booking) notFound();
-  if (booking.ticket.userId !== user.id && !hasRoleAtLeast(user.role, "AGENT")) notFound();
+  if (!(await ticketRights({ sub: user.id, role: user.role }, booking.ticket)).canView) notFound();
 
   const ticket = booking.ticket;
   const trip = ticket.trip;

@@ -56,7 +56,7 @@ export async function tripAssignsSeats(
   return trip.departure.hasAssignedSeats;
 }
 
-async function tripIdsOnSameCoach(db: Db, tripId: string): Promise<string[]> {
+export async function tripIdsOnSameCoach(db: Db, tripId: string): Promise<string[]> {
   const trip = await db.trip.findUnique({
     where: { id: tripId },
     select: {

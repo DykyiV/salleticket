@@ -1,6 +1,5 @@
 import type { Role } from "@prisma/client";
-import { hasRoleAtLeast } from "@/lib/auth/constants";
-import { can } from "@/lib/auth/permissions";
+import { ticketRights, type TicketRef } from "@/lib/auth/access";
 
 export type TicketAccess = {
   isOwner: boolean;
@@ -12,25 +11,19 @@ export type TicketAccess = {
 };
 
 /**
- * What the session user may do with a ticket owned by `ticketUserId`.
- *
- * Same audience as the rest of the cabinet: the passenger who booked it, and
- * staff (AGENT and above — who can already list every ticket). Editing by
- * staff additionally needs the `booking.edit` grant from the role/permission
- * matrix (/cabinet/settings), replacing main's per-user canViewAllTickets /
- * canEditAllTickets flags with the single permission system.
+ * What the session user may do with a ticket: the passenger who booked it,
+ * and staff whose reach covers the ticket (see lib/auth/access.ts) with the
+ * matching grants from the role/permission table.
  */
 export async function ticketAccess(
   session: { sub: string; role: Role },
-  ticketUserId: string
+  ticket: TicketRef
 ): Promise<TicketAccess> {
-  const isOwner = ticketUserId === session.sub;
-  const isStaff = hasRoleAtLeast(session.role, "AGENT");
-  const staffCanEdit = isStaff && (await can({ role: session.role }, "booking.edit"));
+  const rights = await ticketRights(session, ticket);
   return {
-    isOwner,
-    isStaff,
-    canView: isOwner || isStaff,
-    canEdit: isOwner || staffCanEdit,
+    isOwner: rights.isOwner,
+    isStaff: rights.isStaff,
+    canView: rights.canView,
+    canEdit: rights.isOwner || rights.canEdit,
   };
 }

@@ -6,6 +6,14 @@ import {
   issueSession,
   setSessionCookie,
 } from "@/lib/auth/session";
+import {
+  REGISTER_PER_IP,
+  blockedFor,
+  clientIp,
+  limitKey,
+  recordHit,
+  retryMessage,
+} from "@/lib/security/rateLimit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -23,9 +31,16 @@ export async function POST(req: NextRequest) {
   try {
     body = (await req.json()) as Body;
   } catch {
+    return NextResponse.json({ error: "Некоректний запит" }, { status: 400 });
+  }
+
+  const ip = clientIp(req);
+  const ipKey = ip ? limitKey("register:ip", ip) : null;
+  const wait = ipKey ? await blockedFor(ipKey, REGISTER_PER_IP) : 0;
+  if (wait > 0) {
     return NextResponse.json(
-      { error: "Invalid JSON body" },
-      { status: 400 }
+      { error: retryMessage(wait, "реєстрацій з вашої мережі") },
+      { status: 429, headers: { "Retry-After": String(wait) } }
     );
   }
 
@@ -34,13 +49,13 @@ export async function POST(req: NextRequest) {
 
   if (!email || !EMAIL_RE.test(email)) {
     return NextResponse.json(
-      { error: "A valid email is required" },
+      { error: "Вкажіть коректний e-mail" },
       { status: 400 }
     );
   }
   if (password.length < 8) {
     return NextResponse.json(
-      { error: "Password must be at least 8 characters" },
+      { error: "Пароль має містити щонайменше 8 символів" },
       { status: 400 }
     );
   }
@@ -50,6 +65,9 @@ export async function POST(req: NextRequest) {
   // escalation by anonymous callers.
   const role: Role = "CUSTOMER";
 
+  // Every attempt counts, so the "already registered" answer below cannot
+  // be used to check a long list of e-mails.
+  if (ipKey) await recordHit(ipKey, REGISTER_PER_IP);
   const passwordHash = await hashPassword(password);
 
   try {
@@ -71,7 +89,7 @@ export async function POST(req: NextRequest) {
       err.code === "P2002"
     ) {
       return NextResponse.json(
-        { error: "An account with that email already exists" },
+        { error: "Не вдалося зареєструватися з цим e-mail. Якщо у вас уже є акаунт — увійдіть." },
         { status: 409 }
       );
     }
