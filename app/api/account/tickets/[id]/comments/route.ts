@@ -14,10 +14,10 @@ async function loadTicketWithPermissions(
 ) {
   const ticket = await prisma.ticket.findUnique({
     where: { id },
-    select: { userId: true },
+    select: { userId: true, cashCollectedById: true },
   });
   if (!ticket) return { ticket: null, perms: null };
-  const perms = await ticketAccess(session, ticket.userId);
+  const perms = await ticketAccess(session, ticket);
   return { ticket, perms };
 }
 

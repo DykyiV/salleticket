@@ -89,6 +89,9 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<Role, Permission[]> = {
 
 type Db = PrismaClient | Prisma.TransactionClient;
 
+/** Roles that may ever hold finance.* grants. */
+export const FINANCE_ROLES: readonly Role[] = ["ACCOUNTANT", "MANAGER", "ADMIN", "SUPER_ADMIN"];
+
 /** Write the default grants for roles that have no rows yet. Idempotent. */
 export async function seedRolePermissions(db: Db = prisma): Promise<void> {
   for (const [role, permissions] of Object.entries(DEFAULT_ROLE_PERMISSIONS) as [
@@ -130,6 +133,10 @@ export async function can(
   db: Db = prisma
 ): Promise<boolean> {
   if (isAdminRole(user.role)) return true;
+  // Company finances (all carriers and agents) stay with office roles even if
+  // the table grants them to someone else; agents see their own settlement
+  // in the cabinet instead (see AgentSettlementCard).
+  if (permission.startsWith("finance.") && !FINANCE_ROLES.includes(user.role)) return false;
   const row = await db.rolePermission.findUnique({
     where: { role_permission: { role: user.role, permission } },
     select: { allowed: true },

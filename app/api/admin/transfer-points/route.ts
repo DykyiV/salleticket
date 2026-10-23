@@ -1,6 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { requireAuth } from "@/lib/auth/guard";
-import { hasRoleAtLeast } from "@/lib/auth/constants";
 import { can } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/db";
 
@@ -10,8 +9,8 @@ export const dynamic = "force-dynamic";
 export async function GET() {
   const guard = await requireAuth();
   if (!guard.ok) return guard.response;
-  if (!hasRoleAtLeast(guard.session.role, "AGENT")) {
-    return NextResponse.json({ error: "Немає доступу" }, { status: 403 });
+  if (!(await can({ role: guard.session.role }, "route.read"))) {
+    return NextResponse.json({ error: "Немає дозволу route.read" }, { status: 403 });
   }
   const points = await prisma.transferPoint.findMany({
     orderBy: { city: "asc" },

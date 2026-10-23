@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { requireRole } from "@/lib/auth/guard";
+import { requirePermission } from "@/lib/auth/guard";
 import { prisma } from "@/lib/db";
 import { canEditDepartures } from "@/lib/routes/permissions";
 import { getCurrentUser } from "@/lib/auth/session";
@@ -11,7 +11,7 @@ type Params = { params: Promise<{ id: string }> };
 
 export async function PATCH(req: NextRequest, props: Params) {
   const params = await props.params;
-  const guard = await requireRole("AGENT");
+  const guard = await requirePermission("route.read");
   if (!guard.ok) return guard.response;
   const user = await getCurrentUser();
   if (!user || !canEditDepartures(user)) {

@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { setVisitorCookie, visitorId } from "@/lib/security/visitor";
 import { prisma } from "@/lib/db";
 import { emptySeatLayout } from "@/lib/seats";
 import { getTripSeatLayout } from "@/lib/tickets/inventory";
@@ -32,7 +33,11 @@ export async function GET(req: NextRequest, props: Params) {
   }
 
   const except = req.nextUrl.searchParams.get("exceptTicketId") ?? undefined;
-  const sessionId = req.nextUrl.searchParams.get("sessionId") ?? undefined;
+  // Own holds show as free — the visitor is identified by the cookie only.
+  // The cookie is issued here, before the first seat is picked, so parallel
+  // holds (outbound + return) land on the same visitor.
+  const visitor = visitorId(req);
+  const sessionId = visitor.isNew ? undefined : visitor.id;
   const assignmentId = req.nextUrl.searchParams.get("assignmentId") ?? undefined;
   const segment = parseSegment(req);
   const layout = await getTripSeatLayout(
@@ -43,5 +48,7 @@ export async function GET(req: NextRequest, props: Params) {
     segment,
     assignmentId
   );
-  return NextResponse.json({ layout });
+  const res = NextResponse.json({ layout });
+  if (visitor.isNew) setVisitorCookie(res, visitor.id);
+  return res;
 }

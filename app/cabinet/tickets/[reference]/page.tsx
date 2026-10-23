@@ -9,10 +9,9 @@ import RecalcPriceButton from "@/components/ticket/RecalcPriceButton";
 import TicketComments from "@/components/ticket/TicketComments";
 import SendSmsButton from "@/components/ticket/SendSmsButton";
 import DialogButton from "@/components/ui/DialogButton";
-import { ticketAccess } from "@/lib/tickets/permissions";
 import { getCurrentUser } from "@/lib/auth/session";
 import { hasRoleAtLeast } from "@/lib/auth/constants";
-import { can } from "@/lib/auth/permissions";
+import { ticketRights } from "@/lib/auth/access";
 import { prisma } from "@/lib/db";
 import { reconcileTicketPayment } from "@/lib/payments";
 import { getSiteSettings } from "@/lib/settings";
@@ -90,16 +89,15 @@ export default async function CabinetTicketEditPage(props: {
   if (!full) notFound();
   const ticket = full.ticket;
 
-  const staff = hasRoleAtLeast(user.role, "AGENT");
-  const isOwner = ticket.userId === user.id;
-  if (!isOwner && !staff) notFound();
-  const access = await ticketAccess({ sub: user.id, role: user.role }, ticket.userId);
-  const [canEditBooking, canCancel, canRefund, settings] = await Promise.all([
-    staff ? can(user, "booking.edit") : Promise.resolve(false),
-    staff ? can(user, "booking.cancel") : Promise.resolve(false),
-    staff ? can(user, "payment.refund") : Promise.resolve(false),
-    getSiteSettings(),
-  ]);
+  const rights = await ticketRights({ sub: user.id, role: user.role }, ticket);
+  if (!rights.canView) notFound();
+  const staff = rights.isStaff;
+  const isOwner = rights.isOwner;
+  const access = { canEdit: isOwner || rights.canEdit };
+  const canEditBooking = rights.canEdit;
+  const canCancel = rights.canCancel;
+  const canRefund = rights.canRefund;
+  const settings = await getSiteSettings();
 
   const actorIds = [...new Set(ticket.history.map((row) => row.changedBy).filter((id): id is string => Boolean(id)))];
   const actors = actorIds.length

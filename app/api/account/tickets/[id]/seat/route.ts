@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { requireAuth } from "@/lib/auth/guard";
-import { hasRoleAtLeast } from "@/lib/auth/constants";
+import { ticketRights } from "@/lib/auth/access";
 import { prisma } from "@/lib/db";
 import { requestMeta, recordTicketHistory } from "@/lib/tickets/history";
 import { updateTicketVersioned, VersionConflictError } from "@/lib/tickets/version";
@@ -15,9 +15,6 @@ export const dynamic = "force-dynamic";
 
 type Params = { params: Promise<{ id: string }> };
 
-async function canMutate(ticketUserId: string, sessionSub: string, role: string) {
-  return ticketUserId === sessionSub || hasRoleAtLeast(role as never, "AGENT");
-}
 
 export async function PATCH(req: NextRequest, props: Params) {
   const params = await props.params;
@@ -33,12 +30,13 @@ export async function PATCH(req: NextRequest, props: Params) {
 
   const ticket = await prisma.ticket.findUnique({
     where: { id: params.id },
-    select: { id: true, userId: true, tripId: true, returnTripId: true, seatNumber: true, returnSeatNumber: true, version: true },
+    select: { id: true, userId: true, cashCollectedById: true, tripId: true, returnTripId: true, seatNumber: true, returnSeatNumber: true, version: true },
   });
   if (!ticket) {
     return NextResponse.json({ error: "Квиток не знайдено" }, { status: 404 });
   }
-  if (!(await canMutate(ticket.userId, guard.session.sub, guard.session.role))) {
+  const rights = await ticketRights(guard.session, ticket);
+  if (!rights.isOwner && !rights.canEdit) {
     return NextResponse.json({ error: "Немає доступу" }, { status: 403 });
   }
 
@@ -63,7 +61,7 @@ export async function PATCH(req: NextRequest, props: Params) {
     await recordTicketHistory(prisma, {
       ticketId: ticket.id,
       action: "SEAT_CHANGED",
-      source: hasRoleAtLeast(guard.session.role, "AGENT") ? "ADMIN_PANEL" : "ACCOUNT",
+      source: rights.isStaff ? "ADMIN_PANEL" : "ACCOUNT",
       changedBy: guard.session.sub,
       request: requestMeta(req),
       changes: {

@@ -11,6 +11,9 @@ import { recordTicketHistory, requestMeta } from "@/lib/tickets/history";
 import { parseTripKind } from "@/lib/tickets/kinds";
 import { uniqueReference } from "@/lib/tickets/reference";
 import { can } from "@/lib/auth/permissions";
+import { isTicketStaff, ticketListWhere, ticketRights } from "@/lib/auth/access";
+import { CashLimitError, assertCashBookingAllowed } from "@/lib/tickets/cashLimits";
+import { readVisitorId } from "@/lib/security/visitor";
 import {
   SeatHeldError,
   SeatRequiredError,
@@ -198,7 +201,9 @@ export async function POST(req: NextRequest) {
   if (paymentMethod === "ONLINE" && !onlinePaymentsEnabled()) {
     return NextResponse.json({ error: ONLINE_DISABLED_MESSAGE }, { status: 409 });
   }
-  const holdSessionId = body.holdSessionId?.trim() || undefined;
+  // Seats this visitor holds — identified by the server-issued cookie only,
+  // never by an id from the request body (that could claim someone else's).
+  const holdSessionId = readVisitorId(req) ?? undefined;
   const siteSettings = await getSiteSettings();
 
   if (!(await can({ role: session.role }, "booking.create"))) {
@@ -241,6 +246,24 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: err.message }, { status: 400 });
     }
     throw err;
+  }
+
+  // Passengers booking "pay on the bus" themselves are limited per phone /
+  // account; agents, the cash desk and office staff are not.
+  if (paymentMethod === "CASH_ON_BUS" && !(await isTicketStaff(session))) {
+    try {
+      await assertCashBookingAllowed({
+        userId: session.sub,
+        phone,
+        tripId: storedTrip?.id ?? null,
+        seats: passengers.length,
+      });
+    } catch (err) {
+      if (err instanceof CashLimitError) {
+        return NextResponse.json({ error: err.message }, { status: 429 });
+      }
+      throw err;
+    }
   }
 
   const adapterPassenger: BookingPassenger = {
@@ -935,19 +958,14 @@ export async function GET(req: NextRequest) {
     if (!booking) {
       return NextResponse.json({ error: "Booking not found" }, { status: 404 });
     }
-    if (
-      booking.ticket.userId !== session.sub &&
-      session.role !== "ADMIN" &&
-      session.role !== "SUPER_ADMIN"
-    ) {
+    if (!(await ticketRights(session, booking.ticket)).canView) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
     return NextResponse.json({ booking });
   }
 
-  const isAdmin = session.role === "ADMIN" || session.role === "SUPER_ADMIN";
   const bookings = await prisma.booking.findMany({
-    where: isAdmin ? {} : { ticket: { userId: session.sub } },
+    where: { ticket: await ticketListWhere(session) },
     include: {
       ticket: { include: { trip: { include: { carrier: true } } } },
     },

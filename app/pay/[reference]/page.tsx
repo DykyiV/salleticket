@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import Header from "@/components/Header";
 import PaymentPanel from "@/components/payments/PaymentPanel";
 import { getCurrentUser } from "@/lib/auth/session";
-import { hasRoleAtLeast } from "@/lib/auth/constants";
+import { ticketRights } from "@/lib/auth/access";
 import { prisma } from "@/lib/db";
 import { getSiteSettings } from "@/lib/settings";
 
@@ -23,7 +23,7 @@ export default async function PayPage(
     include: { ticket: { include: { trip: true } } },
   });
   if (!booking) notFound();
-  if (booking.ticket.userId !== user.id && !hasRoleAtLeast(user.role, "AGENT")) {
+  if (!(await ticketRights({ sub: user.id, role: user.role }, booking.ticket)).canView) {
     notFound();
   }
 

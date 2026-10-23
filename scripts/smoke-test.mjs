@@ -99,7 +99,9 @@ async function main() {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ email, password }),
   });
+  const dupBody = await dup.json();
   check("duplicate register returns 409", dup.status === 409, `got ${dup.status}`);
+  check("duplicate register message does not say «already exists»", !/already exists/i.test(dupBody.error ?? ""), dupBody.error);
 
   const authHeaders = { "Content-Type": "application/json", Cookie: cookie };
 
@@ -113,6 +115,29 @@ async function main() {
     body: JSON.stringify({ email, password: "wrong-password" }),
   });
   check("login with wrong password returns 401", badLogin.status === 401, `got ${badLogin.status}`);
+
+  // Brute force: 5 wrong attempts per account, then a pause. Unknown and
+  // known e-mails get the same answer.
+  const ghost = `nobody-${Date.now()}@example.com`;
+  const tries = [];
+  for (let i = 0; i < 6; i += 1) {
+    const r = await fetch(`${BASE_URL}/api/auth/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: ghost, password: "wrong-password" }),
+    });
+    tries.push({ status: r.status, error: (await r.json()).error });
+  }
+  check(
+    "unknown e-mail gets the same 401 answer as a wrong password",
+    tries[0].status === 401 && tries[0].error === (await badLogin.json()).error,
+    JSON.stringify(tries[0])
+  );
+  check(
+    "6th failed login in a row is paused (429)",
+    tries.slice(0, 5).every((t) => t.status === 401) && tries[5].status === 429,
+    tries.map((t) => t.status).join(",")
+  );
 
   // --- Promo ---------------------------------------------------------------
   const promo = await fetch(`${BASE_URL}/api/promo/check?code=DISCOUNT10`);
@@ -159,6 +184,57 @@ async function main() {
   });
   const bookingBody = await booking.json();
   check("POST /api/booking creates a booking", booking.status === 201, `got ${booking.status}: ${JSON.stringify(bookingBody).slice(0, 200)}`);
+
+  // Pay-on-the-bus limit: max 4 seats per trip for one phone / account.
+  const bigCash = await fetch(`${BASE_URL}/api/booking`, {
+    method: "POST",
+    headers: authHeaders,
+    body: JSON.stringify({
+      ...bookingPayload,
+      seatNumber: undefined,
+      promoCode: undefined,
+      passengers: [1, 2, 3, 4, 5].map((i) => ({ name: `Group Member${i}`, phone: "+380991234567", ageCategory: "ADULT" })),
+    }),
+  });
+  const bigCashBody = await bigCash.json();
+  check(
+    "passenger cannot reserve more than 4 seats with pay-on-the-bus (429)",
+    bigCash.status === 429 && /не більше 4/.test(bigCashBody.error ?? ""),
+    `got ${bigCash.status}: ${bigCashBody.error}`
+  );
+
+  // Seat holds: the visitor id comes from a server cookie, max 6 seats.
+  // Needs a real coach with assigned seats (Київ → Берлін in the seed).
+  const coachSearch = await (await fetch(`${BASE_URL}/api/search?from=${encodeURIComponent("Київ")}&to=${encodeURIComponent("Берлін")}&date=2026-10-27`)).json();
+  const coach = coachSearch.trips?.find((t) => t.carrierId === "asol" && t.hasAssignedSeats) ?? trip;
+  const seatsForHolds = await fetch(`${BASE_URL}/api/trips/${encodeURIComponent(coach.id)}/seats`);
+  const visitor = (seatsForHolds.headers.get("set-cookie") ?? "").match(/asol_visitor=[^;]+/)?.[0];
+  check("seat map issues the visitor cookie", Boolean(visitor));
+  const holdable = ((await seatsForHolds.json()).layout?.decks ?? [])
+    .flatMap((d) => d.rows.flat())
+    .map((cell) => cell.seat)
+    .filter((seat) => seat && seat.status === "AVAILABLE")
+    .slice(0, 7)
+    .map((seat) => seat.number);
+  const holdStatuses = [];
+  for (const seatNumber of holdable) {
+    const r = await fetch(`${BASE_URL}/api/trips/${encodeURIComponent(coach.id)}/holds`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Cookie: visitor ?? "" },
+      body: JSON.stringify({ seatNumber, sessionId: "client-chosen-id" }),
+    });
+    holdStatuses.push(r.status);
+  }
+  check(
+    "one visitor holds at most 6 seats, the 7th is refused (429)",
+    holdable.length === 7 && holdStatuses.slice(0, 6).every((x) => x === 201) && holdStatuses[6] === 429,
+    holdStatuses.join(",")
+  );
+  await fetch(`${BASE_URL}/api/trips/${encodeURIComponent(coach.id)}/holds`, {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json", Cookie: visitor ?? "" },
+    body: JSON.stringify({}),
+  });
 
   const expectedFinal = Math.round(trip.price * 0.9 * 100) / 100; // DISCOUNT10 = 10%, cash on bus
   check(
@@ -332,8 +408,19 @@ async function main() {
     check("GET /api/finance/settlements as AGENT returns 403", agentFinance.status === 403, `got ${agentFinance.status}`);
     const agentRecon = await fetch(`${BASE_URL}/api/finance/reconciliation`, { headers: { Cookie: agentCookie } });
     check("GET /api/finance/reconciliation as AGENT returns 403", agentRecon.status === 403, `got ${agentRecon.status}`);
+    // Agents work only with their own sales.
     const agentBulk = await fetch(`${BASE_URL}/api/tickets/bulk-pdf?ids=${ownTicketId}`, { headers: { Cookie: agentCookie } });
-    check("GET /api/tickets/bulk-pdf as AGENT returns a PDF", agentBulk.status === 200 && agentBulk.headers.get("content-type") === "application/pdf", `got ${agentBulk.status}`);
+    check("bulk PDF as AGENT skips a passenger's own ticket (404)", agentBulk.status === 404, `got ${agentBulk.status}`);
+    const agentForeign = await fetch(`${BASE_URL}/api/booking?reference=${reference}`, { headers: { Cookie: agentCookie } });
+    check("AGENT cannot open a ticket someone else sold (403)", agentForeign.status === 403, `got ${agentForeign.status}`);
+    const agentForeignPdf = await fetch(`${BASE_URL}/api/tickets/${reference}/pdf`, { headers: { Cookie: agentCookie } });
+    check("AGENT cannot download that ticket's PDF (403)", agentForeignPdf.status === 403, `got ${agentForeignPdf.status}`);
+    const agentForeignCancel = await fetch(`${BASE_URL}/api/account/tickets/${ownTicketId}/status`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", Cookie: agentCookie },
+      body: JSON.stringify({ status: "CANCELLED" }),
+    });
+    check("AGENT cannot cancel that ticket (403)", agentForeignCancel.status === 403, `got ${agentForeignCancel.status}`);
 
     // Agent takes the passenger's cash at the desk and keeps it until the
     // mutual settlement: the reconciliation must count it against the agent.
@@ -380,6 +467,8 @@ async function main() {
       body: JSON.stringify({ status: "PAID_CASH", cashCollector: "BANK" }),
     });
     check("unknown cashCollector is rejected (400)", badCollector.status === 400, `got ${badCollector.status}`);
+    const agentOwnBulk = await fetch(`${BASE_URL}/api/tickets/bulk-pdf?ids=${agentTicket?.id}`, { headers: { Cookie: agentCookie } });
+    check("bulk PDF as AGENT prints the agent's own sale", agentOwnBulk.status === 200 && agentOwnBulk.headers.get("content-type") === "application/pdf", `got ${agentOwnBulk.status}`);
     const after = await agentRow();
     const price = agentTicket?.finalPrice ?? 0;
     check(

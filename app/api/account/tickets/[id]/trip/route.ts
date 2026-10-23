@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { requireAuth } from "@/lib/auth/guard";
-import { hasRoleAtLeast } from "@/lib/auth/constants";
+import { ticketRights } from "@/lib/auth/access";
 import { prisma } from "@/lib/db";
 import { recordTicketHistory, requestMeta } from "@/lib/tickets/history";
 import { updateTicketVersioned, VersionConflictError } from "@/lib/tickets/version";
@@ -37,8 +37,9 @@ export async function PATCH(req: NextRequest, props: Params) {
   if (!ticket) {
     return NextResponse.json({ error: "Квиток не знайдено" }, { status: 404 });
   }
-  const staff = hasRoleAtLeast(guard.session.role, "AGENT");
-  if (ticket.userId !== guard.session.sub && !staff) {
+  const rights = await ticketRights(guard.session, ticket);
+  const staff = rights.isStaff;
+  if (!rights.isOwner && !rights.canEdit) {
     return NextResponse.json({ error: "Немає доступу" }, { status: 403 });
   }
 

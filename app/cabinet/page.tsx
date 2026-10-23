@@ -1,12 +1,17 @@
 import PageHeader from "@/components/cabinet/PageHeader";
 import ProfileForm from "@/components/cabinet/ProfileForm";
+import AgentSettlementCard from "@/components/cabinet/AgentSettlementCard";
 import { getCurrentUser } from "@/lib/auth/session";
+import { getAgentReconciliation } from "@/lib/finance/reconciliation";
 
 export const dynamic = "force-dynamic";
 
 export default async function MyCabinetPage() {
   const user = await getCurrentUser();
   if (!user) return null;
+  // Agents and cash desks see their own settlement only; company-wide
+  // reconciliation stays in Фінанси for office roles.
+  const [settlement] = await getAgentReconciliation(user.id);
 
   return (
     <div className="mx-auto max-w-3xl">
@@ -28,6 +33,8 @@ export default async function MyCabinetPage() {
           />
         </div>
       </section>
+
+      {settlement ? <AgentSettlementCard row={settlement} /> : null}
 
       <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
         <ComingSoon

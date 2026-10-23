@@ -105,9 +105,9 @@ export async function getCarrierReconciliation(): Promise<ReconciliationRow[]> {
   });
 }
 
-export async function getAgentReconciliation(): Promise<ReconciliationRow[]> {
+export async function getAgentReconciliation(onlyUserId?: string): Promise<ReconciliationRow[]> {
   const agents = await prisma.user.findMany({
-    where: agentWhere,
+    where: onlyUserId ? { AND: [agentWhere, { id: onlyUserId }] } : agentWhere,
     select: { id: true, email: true, displayName: true, agentRewardPercent: true },
     orderBy: { email: "asc" },
   });

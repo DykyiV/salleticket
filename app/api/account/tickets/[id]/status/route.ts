@@ -1,12 +1,12 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { TicketStatus } from "@prisma/client";
 import { requireAuth } from "@/lib/auth/guard";
-import { hasRoleAtLeast } from "@/lib/auth/constants";
+import { ticketRights } from "@/lib/auth/access";
 import { prisma } from "@/lib/db";
 import { requestMeta } from "@/lib/tickets/history";
 import { isStatusTransitionAllowed, TICKET_STATUS_LABEL } from "@/lib/tickets/labels";
-import { TicketNotFoundError, updateTicketStatus } from "@/lib/tickets/service";import { VersionConflictError } from "@/lib/tickets/version";
-import { can } from "@/lib/auth/permissions";
+import { TicketNotFoundError, updateTicketStatus } from "@/lib/tickets/service";
+import { VersionConflictError } from "@/lib/tickets/version";
 import { notifyRefundRequested, notifySeatFreed } from "@/lib/notify";
 import { CashCollectorError, resolveCashCollector } from "@/lib/finance/cash";
 
@@ -46,31 +46,33 @@ export async function PATCH(req: NextRequest, props: Params) {
 
   const ticket = await prisma.ticket.findUnique({
     where: { id: params.id },
-    select: { userId: true, status: true },
+    select: { userId: true, cashCollectedById: true, status: true },
   });
   if (!ticket) {
     return NextResponse.json({ error: "Квиток не знайдено" }, { status: 404 });
   }
 
-  const isOwner = ticket.userId === guard.session.sub;
-  const isStaff = hasRoleAtLeast(guard.session.role, "AGENT");
-  if (!isOwner && !isStaff) {
-    return NextResponse.json({ error: "Немає доступу" }, { status: 403 });
-  }
-
-  if (isStaff) {
-    const needed =
-      nextStatus === "CANCELLED"
-        ? "booking.cancel"
-        : nextStatus === "REFUNDED"
-          ? "payment.refund"
-          : "booking.edit";
-    if (!(await can({ role: guard.session.role }, needed))) {
-      return NextResponse.json(
-        { error: `Немає дозволу ${needed}` },
-        { status: 403 }
-      );
-    }
+  const rights = await ticketRights(guard.session, ticket);
+  const needed =
+    nextStatus === "CANCELLED"
+      ? "booking.cancel"
+      : nextStatus === "REFUNDED"
+        ? "payment.refund"
+        : "booking.edit";
+  const granted =
+    needed === "booking.cancel"
+      ? rights.canCancel
+      : needed === "payment.refund"
+        ? rights.canRefund
+        : rights.canEdit;
+  // Staff acting within their reach and grants; otherwise the passenger's
+  // own (narrow) rights apply.
+  const isStaff = rights.isStaff && granted;
+  if (!isStaff && !rights.isOwner) {
+    return NextResponse.json(
+      { error: rights.isStaff ? `Немає дозволу ${needed}` : "Немає доступу" },
+      { status: 403 }
+    );
   }
 
   if (!isStaff) {
@@ -140,7 +142,8 @@ export async function PATCH(req: NextRequest, props: Params) {
       oldStatus: result.oldStatus,
       newStatus: result.newStatus,
     });
-  } catch (err) {    if (err instanceof TicketNotFoundError) {
+  } catch (err) {
+    if (err instanceof TicketNotFoundError) {
       return NextResponse.json({ error: "Квиток не знайдено" }, { status: 404 });
     }
     if (err instanceof VersionConflictError) {

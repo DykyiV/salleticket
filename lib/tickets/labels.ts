@@ -50,6 +50,7 @@ export const HISTORY_ACTION_LABEL: Record<string, string> = {
   SMS_FAILED: "SMS не відправлено",
   EMAIL_SENT: "Email відправлено",
   PRICE_RECALCED: "Перераховано ціну",
+  NO_SHOW: "Не зʼявився — неоплачену бронь закрито після рейсу",
 };
 
 export const STATUS_TRANSITIONS: Record<TicketStatus, TicketStatus[]> = {

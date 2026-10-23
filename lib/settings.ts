@@ -16,7 +16,7 @@ export const DEFAULT_SITE_SETTINGS: SiteSettings = {
   onlineDiscountPercent: 5,
   paymentSettleMinutes: 25,
   paymentDeadlineHours: 24,
-  seatHoldMinutes: 15,
+  seatHoldMinutes: 10,
 };
 
 const KEYS: Record<keyof SiteSettings, string> = {
