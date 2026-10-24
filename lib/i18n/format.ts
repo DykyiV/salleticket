@@ -36,3 +36,16 @@ export function shortDate(iso: string, lang: Lang): string {
   if (Number.isNaN(d.getTime())) return iso;
   return new Intl.DateTimeFormat(LOCALE[lang], { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" }).format(d);
 }
+
+/** «вівторок, 27 жовтня 2026 р.» from a YYYY-MM-DD… string (calendar day, no zone shift). */
+export function longDate(iso: string, lang: Lang, opts: { year?: boolean; weekday?: "long" | "short" } = {}): string {
+  const d = new Date(`${iso.slice(0, 10)}T12:00:00Z`);
+  if (Number.isNaN(d.getTime())) return iso;
+  return new Intl.DateTimeFormat(LOCALE[lang], {
+    weekday: opts.weekday ?? "long",
+    day: "numeric",
+    month: "long",
+    ...(opts.year === false ? {} : { year: "numeric" }),
+    timeZone: "UTC",
+  }).format(d);
+}

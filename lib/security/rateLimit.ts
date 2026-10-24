@@ -9,6 +9,9 @@ export const LOGIN_PER_IP: RateLimitRule = { limit: 20, windowMs: 15 * 60_000 };
 export const REGISTER_PER_IP: RateLimitRule = { limit: 10, windowMs: 60 * 60_000 };
 /** Guest checkouts (new accounts + «is this e-mail known?» answers) per IP. */
 export const GUEST_PER_IP: RateLimitRule = { limit: 20, windowMs: 60 * 60_000 };
+/** «Send the ticket by e-mail» presses: per order and per account. */
+export const TICKET_MAIL_PER_ORDER: RateLimitRule = { limit: 3, windowMs: 60 * 60_000 };
+export const TICKET_MAIL_PER_USER: RateLimitRule = { limit: 10, windowMs: 60 * 60_000 };
 
 /**
  * Client address as reported by the reverse proxy, or null when the request

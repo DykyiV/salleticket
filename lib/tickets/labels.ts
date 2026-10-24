@@ -49,6 +49,7 @@ export const HISTORY_ACTION_LABEL: Record<string, string> = {
   SMS_SENT: "SMS відправлено",
   SMS_FAILED: "SMS не відправлено",
   EMAIL_SENT: "Email відправлено",
+  EMAIL_FAILED: "Email не відправлено",
   PRICE_RECALCED: "Перераховано ціну",
   NO_SHOW: "Не зʼявився — неоплачену бронь закрито після рейсу",
 };

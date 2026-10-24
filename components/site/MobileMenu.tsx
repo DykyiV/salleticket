@@ -88,7 +88,7 @@ export default function MobileMenu({ nav, signedIn }: { nav: SiteNavItem[]; sign
                 <Icon name="ticket" />
                 {t.common.buyTicket}
               </Link>
-              <Link href="/cabinet/tickets" onClick={close} className="btn-secondary w-full">
+              <Link href="/tickets" onClick={close} className="btn-secondary w-full">
                 {t.common.myTickets}
               </Link>
               {signedIn ? (
