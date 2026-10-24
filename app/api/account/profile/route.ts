@@ -41,13 +41,22 @@ export async function PATCH(req: NextRequest) {
 
   const emailChanged = emailRaw !== user.email;
   const passwordChanged = newPassword.length > 0;
-  if ((emailChanged || passwordChanged) && !currentPassword) {
+  // Account made at a guest checkout: the first password is set without the
+  // (unknown, random) current one. The e-mail stays fixed until then.
+  const firstPassword = !user.passwordSet && passwordChanged && !emailChanged;
+  if (!user.passwordSet && emailChanged) {
+    return NextResponse.json(
+      { error: "Спершу задайте пароль, потім можна змінити e-mail" },
+      { status: 400 }
+    );
+  }
+  if (!firstPassword && (emailChanged || passwordChanged) && !currentPassword) {
     return NextResponse.json(
       { error: "Щоб змінити логін або пароль, введіть поточний пароль" },
       { status: 400 }
     );
   }
-  if (emailChanged || passwordChanged) {
+  if (!firstPassword && (emailChanged || passwordChanged)) {
     const ok = await verifyPassword(currentPassword, user.password);
     if (!ok) {
       return NextResponse.json({ error: "Невірний поточний пароль" }, { status: 400 });
@@ -103,7 +112,7 @@ export async function PATCH(req: NextRequest) {
         email: emailRaw,
         avatarUrl,
         notifyChannels,
-        ...(passwordChanged ? { password: await hashPassword(newPassword) } : {}),
+        ...(passwordChanged ? { password: await hashPassword(newPassword), passwordSet: true } : {}),
         // New password / e-mail: every other session is signed out.
         ...(passwordChanged || emailChanged ? { sessionVersion: { increment: 1 } } : {}),
       },

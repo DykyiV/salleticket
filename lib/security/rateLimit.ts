@@ -7,6 +7,8 @@ export type RateLimitRule = { limit: number; windowMs: number };
 export const LOGIN_PER_ACCOUNT: RateLimitRule = { limit: 5, windowMs: 15 * 60_000 };
 export const LOGIN_PER_IP: RateLimitRule = { limit: 20, windowMs: 15 * 60_000 };
 export const REGISTER_PER_IP: RateLimitRule = { limit: 10, windowMs: 60 * 60_000 };
+/** Guest checkouts (new accounts + «is this e-mail known?» answers) per IP. */
+export const GUEST_PER_IP: RateLimitRule = { limit: 20, windowMs: 60 * 60_000 };
 
 /**
  * Client address as reported by the reverse proxy, or null when the request

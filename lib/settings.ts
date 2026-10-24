@@ -10,6 +10,8 @@ export type SiteSettings = {
   paymentDeadlineHours: number;
   /** Minutes a selected seat stays locked for the booking session. */
   seatHoldMinutes: number;
+  /** Service fee per passenger, EUR; 0 = no fee (not shown at all). */
+  serviceFeePerPassenger: number;
 };
 
 export const DEFAULT_SITE_SETTINGS: SiteSettings = {
@@ -17,6 +19,7 @@ export const DEFAULT_SITE_SETTINGS: SiteSettings = {
   paymentSettleMinutes: 25,
   paymentDeadlineHours: 24,
   seatHoldMinutes: 10,
+  serviceFeePerPassenger: 0,
 };
 
 const KEYS: Record<keyof SiteSettings, string> = {
@@ -24,6 +27,7 @@ const KEYS: Record<keyof SiteSettings, string> = {
   paymentSettleMinutes: "paymentSettleMinutes",
   paymentDeadlineHours: "paymentDeadlineHours",
   seatHoldMinutes: "seatHoldMinutes",
+  serviceFeePerPassenger: "serviceFeePerPassenger",
 };
 
 type Db = PrismaClient | Prisma.TransactionClient;
@@ -54,6 +58,10 @@ export async function getSiteSettings(db: Db = prisma): Promise<SiteSettings> {
     seatHoldMinutes: toNumber(
       map.get(KEYS.seatHoldMinutes),
       DEFAULT_SITE_SETTINGS.seatHoldMinutes
+    ),
+    serviceFeePerPassenger: Math.min(
+      100,
+      toNumber(map.get(KEYS.serviceFeePerPassenger), DEFAULT_SITE_SETTINGS.serviceFeePerPassenger)
     ),
   };
 }

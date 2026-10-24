@@ -9,6 +9,7 @@ export type SaleSettingsValues = {
   paymentSettleMinutes: number;
   paymentDeadlineHours: number;
   seatHoldMinutes: number;
+  serviceFeePerPassenger: number;
 };
 
 export default function SaleSettings({
@@ -51,7 +52,7 @@ export default function SaleSettings({
 
   return (
     <div className="rounded-2xl bg-white p-5 ring-1 ring-slate-200">
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <label className="block text-xs">
           <span className="mb-1 block font-medium text-slate-600">
             Знижка за онлайн-оплату, %
@@ -115,6 +116,23 @@ export default function SaleSettings({
           />
           <span className="mt-1 block text-[11px] text-slate-400">
             Скільки місце триматиметься за пасажиром під час бронювання.
+          </span>
+        </label>
+        <label className="block text-xs">
+          <span className="mb-1 block font-medium text-slate-600">
+            Сервісний збір за пасажира, €
+          </span>
+          <input
+            type="number"
+            min={0}
+            max={100}
+            step={0.5}
+            className={inputClass}
+            value={values.serviceFeePerPassenger}
+            onChange={set("serviceFeePerPassenger")}
+          />
+          <span className="mt-1 block text-[11px] text-slate-400">
+            0 — без збору (рядка в підсумку немає). Інакше збір додається до кожного квитка.
           </span>
         </label>
       </div>

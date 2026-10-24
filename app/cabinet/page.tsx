@@ -25,6 +25,7 @@ export default async function MyCabinetPage() {
         <div className="mt-4">
           <ProfileForm
             email={user.email}
+            passwordSet={user.passwordSet}
             displayName={user.displayName ?? ""}
             avatarUrl={user.avatarUrl}
             notifyChannels={JSON.parse(

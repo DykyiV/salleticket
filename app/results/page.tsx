@@ -141,6 +141,9 @@ export default async function ResultsPage(props: { searchParams: Promise<SearchP
           ) : (
             <ResultsView
               trips={trips}
+              from={from}
+              to={to}
+              pax={{ adults: pax.adults, children: pax.children, seniors: pax.seniors }}
               initialFilters={filters}
               initialSort={sort}
               passengers={pax.total}

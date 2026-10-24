@@ -13,5 +13,7 @@ export async function GET() {
     paymentDeadlineHours: settings.paymentDeadlineHours,
     paymentSettleMinutes: settings.paymentSettleMinutes,
     onlinePaymentEnabled: onlinePaymentsEnabled(),
+    serviceFeePerPassenger: settings.serviceFeePerPassenger,
+    seatHoldMinutes: Math.min(settings.seatHoldMinutes, 10),
   });
 }

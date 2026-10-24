@@ -30,6 +30,10 @@ export async function PATCH(req: NextRequest) {
     paymentSettleMinutes: num(body.paymentSettleMinutes),
     paymentDeadlineHours: num(body.paymentDeadlineHours),
     seatHoldMinutes: num(body.seatHoldMinutes),
+    serviceFeePerPassenger:
+      num(body.serviceFeePerPassenger) !== undefined
+        ? Math.min(100, Math.round(num(body.serviceFeePerPassenger)! * 100) / 100)
+        : undefined,
   });
   return NextResponse.json({ settings });
 }

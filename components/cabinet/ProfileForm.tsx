@@ -24,7 +24,8 @@ export default function ProfileForm({
   displayName,
   avatarUrl,
   notifyChannels = ["email", "push"],
-}: Props) {
+  passwordSet = true,
+}: Props & { passwordSet?: boolean }) {
   const router = useRouter();
   const [name, setName] = useState(displayName);
   const [login, setLogin] = useState(email);
@@ -120,25 +121,33 @@ export default function ProfileForm({
             placeholder="Як до вас звертатись"
           />
         </Field>
+        {!passwordSet ? (
+          <p className="rounded-xl bg-warn-50 px-3 py-2 text-sm text-warn-700 ring-1 ring-warn-100 sm:col-span-2">
+            Кабінет створено під час купівлі квитка. Задайте пароль, щоб заходити з інших пристроїв.
+          </p>
+        ) : null}
         <Field label="Логін (email)">
           <input
             type="email"
             required
+            readOnly={!passwordSet}
             className={inputClass}
             value={login}
             onChange={(e) => setLogin(e.target.value)}
           />
         </Field>
-        <Field label="Поточний пароль" hint="Потрібен, щоб змінити логін або пароль">
-          <input
-            type="password"
-            className={inputClass}
-            value={currentPassword}
-            onChange={(e) => setCurrentPassword(e.target.value)}
-            autoComplete="current-password"
-          />
-        </Field>
-        <Field label="Новий пароль" hint="Мінімум 8 символів, порожнє — без змін">
+        {passwordSet ? (
+          <Field label="Поточний пароль" hint="Потрібен, щоб змінити логін або пароль">
+            <input
+              type="password"
+              className={inputClass}
+              value={currentPassword}
+              onChange={(e) => setCurrentPassword(e.target.value)}
+              autoComplete="current-password"
+            />
+          </Field>
+        ) : null}
+        <Field label={passwordSet ? "Новий пароль" : "Пароль"} hint={passwordSet ? "Мінімум 8 символів, порожнє — без змін" : "Мінімум 8 символів"}>
           <input
             type="password"
             className={inputClass}

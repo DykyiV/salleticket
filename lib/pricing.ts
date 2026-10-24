@@ -58,8 +58,6 @@ export function applyAgeDiscount(
   return { basePrice: bp, discount, finalPrice };
 }
 
-export const SERVICE_FEE_EUR = 1.5;
-
 export type PriceBreakdown = {
   basePrice: number;
   ageDiscount: number;
@@ -78,13 +76,14 @@ export type PriceBreakdown = {
 export function computePrice(
   basePrice: number,
   ageId: AgeCategoryId,
-  promo?: Promo | null
+  promo?: Promo | null,
+  /** Per-passenger service fee from Settings (0 = none). */
+  serviceFee = 0
 ): PriceBreakdown {
   const { basePrice: bp, discount: ageDiscount, finalPrice: afterAge } =
     applyAgeDiscount(basePrice, ageId);
   const promoDiscount = promoDiscountAmount(afterAge, promo ?? null);
   const finalPrice = round2(afterAge - promoDiscount);
-  const serviceFee = SERVICE_FEE_EUR;
   const total = round2(finalPrice + serviceFee);
   return {
     basePrice: bp,

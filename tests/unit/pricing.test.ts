@@ -26,12 +26,13 @@ function promo(partial: Partial<Promo>): Promo {
 }
 
 describe("computePrice", () => {
-  it("adult pays full price plus service fee", () => {
+  it("adult pays full price; the service fee (Settings) is added on top", () => {
     const p = computePrice(100, "ADULT", null);
     expect(p.basePrice).toBe(100);
     expect(p.ageDiscount).toBe(0);
     expect(p.finalPrice).toBe(100);
-    expect(p.total).toBe(101.5);
+    expect(p.total).toBe(100);
+    expect(computePrice(100, "ADULT", null, 1.5).total).toBe(101.5);
   });
 
   it("applies age discounts", () => {
