@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import Header from "@/components/Header";
+import SiteFooter from "@/components/site/SiteFooter";
 import PaymentPanel from "@/components/payments/PaymentPanel";
 import { getCurrentUser } from "@/lib/auth/session";
 import { ticketRights } from "@/lib/auth/access";
@@ -52,6 +53,7 @@ export default async function PayPage(
           </Link>
         </p>
       </main>
+      <SiteFooter />
     </div>
   );
 }

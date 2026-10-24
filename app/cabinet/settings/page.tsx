@@ -6,6 +6,8 @@ import DiscountsAdmin, {
   type DiscountRow,
 } from "@/components/admin/DiscountsAdmin";
 import SaleSettings from "@/components/admin/SaleSettings";
+import ContactSettings from "@/components/admin/ContactSettings";
+import { getSiteContacts } from "@/lib/siteContacts";
 import TariffGrids, { type TariffCountry } from "@/components/admin/TariffGrids";
 import RolePermissionsMatrix from "@/components/admin/RolePermissionsMatrix";
 import { prisma } from "@/lib/db";
@@ -121,6 +123,14 @@ export default async function CabinetSettingsPage() {
             Продаж квитків
           </h2>
           <SaleSettings initial={siteSettings} />
+        </section>
+      ) : null}
+      {isAdmin ? (
+        <section>
+          <h2 className="mb-3 text-base font-semibold text-slate-900">
+            Контакти на сайті
+          </h2>
+          <ContactSettings initial={await getSiteContacts()} />
         </section>
       ) : null}
       {isAdmin ? (
