@@ -4,6 +4,14 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { btnGhost, btnPrimary, inputClass } from "@/components/admin/Field";
 import {
+  BUS_CATEGORIES,
+  BUS_CATEGORY_LABEL_UK,
+  BUS_FEATURES,
+  BUS_FEATURE_LABEL_UK,
+  type BusCategory,
+  type BusFeature,
+} from "@/lib/buses/features";
+import {
   defaultCoachLayoutJSON,
   type CoachCellJSON,
   type CoachLayoutJSON,
@@ -15,6 +23,9 @@ export type BusRow = {
   model: string | null;
   decks: number;
   isActive: boolean;
+  category: BusCategory;
+  amenities: BusFeature[];
+  luggagePieces: number;
   seatCount: number;
   layout: CoachLayoutJSON;
 };
@@ -38,6 +49,9 @@ export default function BusesAdmin({ initialBuses }: { initialBuses: BusRow[] })
   const [layout, setLayout] = useState<CoachLayoutJSON | null>(null);
   const [plate, setPlate] = useState("");
   const [model, setModel] = useState("");
+  const [category, setCategory] = useState<BusCategory>("STANDARD");
+  const [amenities, setAmenities] = useState<BusFeature[]>([]);
+  const [luggagePieces, setLuggagePieces] = useState(1);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -46,6 +60,9 @@ export default function BusesAdmin({ initialBuses }: { initialBuses: BusRow[] })
     setLayout(JSON.parse(JSON.stringify(bus.layout)) as CoachLayoutJSON);
     setPlate(bus.plate);
     setModel(bus.model ?? "");
+    setCategory(bus.category);
+    setAmenities(bus.amenities);
+    setLuggagePieces(bus.luggagePieces);
     setError(null);
   };
 
@@ -126,7 +143,7 @@ export default function BusesAdmin({ initialBuses }: { initialBuses: BusRow[] })
       const res = await fetch(`/api/admin/buses/${editing.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ plate, model, layout }),
+        body: JSON.stringify({ plate, model, layout, category, amenities, luggagePieces }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error ?? "Не вдалося зберегти");
@@ -171,7 +188,7 @@ export default function BusesAdmin({ initialBuses }: { initialBuses: BusRow[] })
               {bus.plate}
             </span>
             <span className="text-xs text-slate-500">
-              {bus.model ?? "модель не вказана"} · {bus.seatCount} місць
+              {bus.model ?? "модель не вказана"} · {BUS_CATEGORY_LABEL_UK[bus.category]} · {bus.seatCount} місць
               {bus.decks > 1 ? " · двоповерховий" : ""}
               {!bus.isActive ? " · вимкнено" : ""}
             </span>
@@ -180,7 +197,7 @@ export default function BusesAdmin({ initialBuses }: { initialBuses: BusRow[] })
               className={`${btnGhost} ml-auto`}
               onClick={() => (editing?.id === bus.id ? setEditing(null) : openEditor(bus))}
             >
-              {editing?.id === bus.id ? "Згорнути" : "Схема місць"}
+              {editing?.id === bus.id ? "Згорнути" : "Редагувати"}
             </button>
           </div>
 
@@ -195,7 +212,46 @@ export default function BusesAdmin({ initialBuses }: { initialBuses: BusRow[] })
                   <span className="mb-1 block font-medium text-slate-600">Модель</span>
                   <input className={inputClass} value={model} onChange={(e) => setModel(e.target.value)} />
                 </label>
+                <label className="block text-xs">
+                  <span className="mb-1 block font-medium text-slate-600">Тип для пасажирів</span>
+                  <select className={inputClass} value={category} onChange={(e) => setCategory(e.target.value as BusCategory)}>
+                    {BUS_CATEGORIES.map((c) => (
+                      <option key={c} value={c}>
+                        {BUS_CATEGORY_LABEL_UK[c]}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="block text-xs">
+                  <span className="mb-1 block font-medium text-slate-600">Валіз на пасажира</span>
+                  <input
+                    type="number"
+                    min={0}
+                    max={5}
+                    className={inputClass}
+                    value={luggagePieces}
+                    onChange={(e) => setLuggagePieces(Math.max(0, Math.min(5, Number(e.target.value) || 0)))}
+                  />
+                </label>
               </div>
+
+              <fieldset>
+                <legend className="mb-1 text-xs font-medium text-slate-600">Послуги на борту (бачать пасажири і фільтри пошуку)</legend>
+                <div className="flex flex-wrap gap-2">
+                  {BUS_FEATURES.map((f) => (
+                    <label key={f} className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={amenities.includes(f)}
+                        onChange={(e) =>
+                          setAmenities((prev) => (e.target.checked ? [...prev, f] : prev.filter((x) => x !== f)))
+                        }
+                      />
+                      {BUS_FEATURE_LABEL_UK[f]}
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
 
               <p className="text-xs text-slate-500">
                 Клік по комірці — тип (місце → пусто → WC → двері → сходи).

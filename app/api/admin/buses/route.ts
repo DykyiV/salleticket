@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { requirePermission, requireRole } from "@/lib/auth/guard";
 import { prisma } from "@/lib/db";
 import { buildLayout, parseCoachLayout, type CoachLayoutJSON } from "@/lib/seats";
+import { parseBusFeatures } from "@/lib/buses/features";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -19,6 +20,9 @@ export async function GET() {
         model: bus.model,
         decks: bus.decks,
         isActive: bus.isActive,
+        category: bus.category,
+        amenities: parseBusFeatures(bus.amenities),
+        luggagePieces: bus.luggagePieces,
         seatCount: buildLayout(layout).seatCount,
         layout,
       };

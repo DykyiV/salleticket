@@ -1,318 +1,223 @@
-import { headers } from "next/headers";
+import type { Metadata } from "next";
 import Link from "next/link";
 import Header from "@/components/Header";
 import SiteFooter from "@/components/site/SiteFooter";
-import TripCard from "@/components/TripCard";
-import type { Trip } from "@/lib/carriers/types";
+import Icon from "@/components/site/Icon";
+import ResultsView from "@/components/results/ResultsView";
+import SearchSummary from "@/components/results/SearchSummary";
+import { searchAllCarriers } from "@/lib/carriers/registry";
+import type { Trip, TransportType } from "@/lib/carriers/types";
+import { getDict } from "@/lib/i18n/server";
+import { fmt, plural, shortDate } from "@/lib/i18n/format";
+import type { Lang } from "@/lib/i18n/config";
 import { parseTripKind } from "@/lib/tickets/kinds";
-import { TRIP_KIND_LABEL } from "@/lib/tickets/labels";
 import { getSiteSettings } from "@/lib/settings";
-
-type SearchParams = {
-  from?: string;
-  to?: string;
-  date?: string;
-  tripKind?: string;
-  returnDate?: string;
-  transport?: string;
-};
-
-const TRANSPORT_LABELS: Record<string, string> = {
-  BUS: "Автобус",
-  FLIGHT: "Літак",
-  TRAIN: "Потяг",
-};
-
-type SearchApiResponse = {
-  query: { from: string; to: string; date?: string; passengers?: number };
-  carriers: { id: string; name: string; tripCount: number; error?: string }[];
-  trips: Trip[];
-  errors: { carrierId: string; error: string }[];
-  meta: { total: number; cheapest: number | null };
-};
-
-/**
- * Build a same-origin absolute URL for server-side fetch from request headers.
- * This keeps the frontend talking to the backend through /api/* rather than
- * importing server code directly.
- */
-async function getBaseUrl(): Promise<string> {
-  const h = await headers();
-  const host = h.get("x-forwarded-host") ?? h.get("host");
-  const proto = h.get("x-forwarded-proto") ?? "http";
-  if (host) return `${proto}://${host}`;
-  return process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
-}
-
-function formatDate(dateStr?: string): string {
-  if (!dateStr) return "Any date";
-  const d = new Date(dateStr);
-  if (Number.isNaN(d.getTime())) return dateStr;
-  return d.toLocaleDateString("en-GB", {
-    weekday: "short",
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  });
-}
+import { onlinePaymentsEnabled } from "@/lib/paymentMode";
+import { cityLabel, knownCities } from "@/lib/trips/cities";
+import { filtersFromParams } from "@/lib/results/filter";
 
 export const dynamic = "force-dynamic";
 
-export default async function ResultsPage(
-  props: {
-    searchParams: Promise<SearchParams>;
-  }
-) {
-  const searchParams = await props.searchParams;
-  const from = searchParams.from || "Kyiv";
-  const to = searchParams.to || "Lviv";
-  const date = searchParams.date;
-  const tripKind = parseTripKind(searchParams.tripKind);
-  const returnDate = searchParams.returnDate;
-  const siteSettings = await getSiteSettings();
+type SearchParams = Record<string, string | undefined>;
 
-  const transport = searchParams.transport?.toUpperCase();
-  const transportLabel = transport ? TRANSPORT_LABELS[transport] ?? null : null;
+const MAX_PASSENGERS = 6;
+const TRANSPORTS: TransportType[] = ["BUS", "FLIGHT", "TRAIN"];
 
-  const params = new URLSearchParams({ from, to });
-  if (date) params.set("date", date);
-  if (transportLabel) params.set("transport", transport as string);
+function todayInEurope(): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Madrid" }).format(new Date());
+}
+
+function addDays(iso: string, days: number): string {
+  const d = new Date(`${iso}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+function count(v: string | undefined): number {
+  const n = Number.parseInt(v ?? "", 10);
+  return Number.isFinite(n) && n > 0 ? n : 0;
+}
+
+function passengerCounts(sp: SearchParams) {
+  const adults = count(sp.adults);
+  const children = count(sp.children);
+  const seniors = count(sp.seniors);
+  const sum = adults + children + seniors;
+  const total = Math.min(MAX_PASSENGERS, Math.max(1, sum || count(sp.passengers) || 1));
+  return sum ? { adults, children, seniors, total } : { adults: total, children: 0, seniors: 0, total };
+}
+
+export async function generateMetadata(props: { searchParams: Promise<SearchParams> }): Promise<Metadata> {
+  const sp = await props.searchParams;
+  const { t, lang } = await getDict();
+  if (!sp.from || !sp.to) return { title: `${t.nav.trips} — Asol BUS` };
+  return {
+    title: `${fmt(t.results.metaTitle, { from: cityLabel(sp.from, lang), to: cityLabel(sp.to, lang) })} — Asol BUS`,
+  };
+}
+
+export default async function ResultsPage(props: { searchParams: Promise<SearchParams> }) {
+  const sp = await props.searchParams;
+  const [{ t, lang }, settings] = await Promise.all([getDict(), getSiteSettings()]);
+  const r = t.results;
+
+  const from = sp.from?.trim() || "";
+  const to = sp.to?.trim() || "";
+  const date = sp.date && /^\d{4}-\d{2}-\d{2}$/.test(sp.date) ? sp.date : undefined;
+  const tripKind = parseTripKind(sp.tripKind);
+  const returnDate = sp.returnDate && /^\d{4}-\d{2}-\d{2}$/.test(sp.returnDate) ? sp.returnDate : undefined;
+  const pax = passengerCounts(sp);
+  const transportRaw = sp.transport?.toUpperCase() as TransportType | undefined;
+  const transport = transportRaw && TRANSPORTS.includes(transportRaw) ? transportRaw : "BUS";
+  const today = todayInEurope();
+  const { filters, sort } = filtersFromParams(sp);
 
   let trips: Trip[] = [];
-  let failedCarriers: { carrierId: string; carrierName: string; error: string }[] = [];
-  let fetchError: string | null = null;
-
-  try {
-    const res = await fetch(`${await getBaseUrl()}/api/search?${params.toString()}`, {
-      cache: "no-store",
-    });
-    if (!res.ok) {
-      const data = (await res.json().catch(() => ({}))) as { error?: string };
-      fetchError = data.error ?? `Search failed with status ${res.status}`;
-    } else {
-      const data = (await res.json()) as SearchApiResponse;
-      trips = data.trips;
-      failedCarriers = data.carriers
-        .filter((c) => c.error)
-        .map((c) => ({
-          carrierId: c.id,
-          carrierName: c.name,
-          error: c.error as string,
-        }));
-    }
-  } catch (err) {
-    fetchError =
-      err instanceof Error ? err.message : "Unable to reach search API";
+  let partial = false;
+  if (from && to) {
+    const results = await searchAllCarriers({ from, to, date, passengers: pax.total, transport });
+    trips = results.flatMap((x) => x.trips);
+    partial = results.some((x) => x.error);
   }
 
-  const cheapest =
-    trips.length > 0
-      ? trips.reduce((min, t) => (t.price < min ? t.price : min), Infinity)
-      : Infinity;
+  const routeTitle = from && to ? `${cityLabel(from, lang)} → ${cityLabel(to, lang)}` : t.nav.trips;
+  const hasRoute = Boolean(from && to);
+  const details = !hasRoute ? r.pickRoute : [
+    date ? shortDate(date, lang) : r.anyDate,
+    tripKind === "ROUND_TRIP" && returnDate
+      ? fmt(r.returnOn, { date: shortDate(returnDate, lang) })
+      : tripKind !== "ONE_WAY"
+        ? r.openReturn
+        : null,
+    plural(lang, pax.total, t.search.passengersCount),
+  ]
+    .filter(Boolean)
+    .join(" · ");
+
+  const onlineDiscount = onlinePaymentsEnabled() ? settings.onlineDiscountPercent : 0;
 
   return (
     <div className="flex min-h-screen flex-col">
       <Header />
-
-      <section className="border-b border-slate-200 bg-white">
-        <div className="mx-auto flex max-w-6xl flex-col gap-4 px-4 py-6 sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:px-8">
-          <div className="flex items-center gap-3">
-            <Link
-              href="/"
-              className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 text-slate-500 transition hover:bg-slate-50 hover:text-slate-900"
-              aria-label="Back to search"
-            >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                className="h-4 w-4"
-                aria-hidden="true"
-              >
-                <path d="m15 18-6-6 6-6" />
-              </svg>
-            </Link>
-            <div>
-              <h1 className="flex flex-wrap items-center gap-2 text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">
-                <span>{from}</span>
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  className="h-5 w-5 text-brand-500"
-                  aria-hidden="true"
-                >
-                  <path d="M5 12h14" />
-                  <path d="m12 5 7 7-7 7" />
-                </svg>
-                <span>{to}</span>
-              </h1>
-              <p className="mt-0.5 text-sm text-slate-500">
-                {transportLabel ? `${transportLabel} · ` : ""}
-                {formatDate(date)} · {TRIP_KIND_LABEL[tripKind]}
-                {tripKind === "ROUND_TRIP" && returnDate
-                  ? ` · назад ${formatDate(returnDate)}`
-                  : ""}{" "}
-                · {trips.length} trips found
-                {trips.length > 0 ? (
-                  <>
-                    {" "}
-                    · from{" "}
-                    <span className="font-semibold text-slate-900">
-                      €{cheapest.toFixed(2)}
-                    </span>
-                  </>
-                ) : null}
-              </p>
-            </div>
-          </div>
-
-          <Link
-            href="/"
-            className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-brand-300 hover:text-brand-700"
-          >
-            Edit search
-          </Link>
+      <section className="bg-navy">
+        <div className="container-site py-5 sm:py-6">
+          <SearchSummary
+            title={routeTitle}
+            details={details}
+            cities={knownCities()}
+            today={today}
+            initiallyOpen={!hasRoute}
+            defaults={{
+              from,
+              to,
+              date,
+              returnDate,
+              roundTrip: tripKind !== "ONE_WAY",
+              pax: { adults: pax.adults, children: pax.children, seniors: pax.seniors },
+            }}
+          />
+          {date && hasRoute ? <DateStrip sp={sp} date={date} today={today} lang={lang} prev={r.prevDay} next={r.nextDay} /> : null}
         </div>
       </section>
 
-      <main className="flex-1 bg-slate-50">
-        <div className="mx-auto grid max-w-6xl grid-cols-1 gap-6 px-4 py-8 sm:px-6 lg:grid-cols-[240px_1fr] lg:px-8">
-          <aside className="hidden lg:block">
-            <div className="sticky top-20 rounded-2xl border border-slate-200 bg-white p-5">
-              <h2 className="text-sm font-semibold text-slate-900">Filters</h2>
-              <div className="mt-4 space-y-4 text-sm">
-                <FilterGroup title="Departure">
-                  {["Morning", "Afternoon", "Evening", "Night"].map((l) => (
-                    <CheckboxRow key={l} label={l} />
-                  ))}
-                </FilterGroup>
-                <FilterGroup title="Carrier">
-                  {["Grandes Tour", "Asol Express", "EuroLines Plus", "FlixBus"].map(
-                    (l) => (
-                      <CheckboxRow key={l} label={l} />
-                    )
-                  )}
-                </FilterGroup>
-                <FilterGroup title="Amenities">
-                  {["Wi-Fi", "USB", "WC", "A/C"].map((l) => (
-                    <CheckboxRow key={l} label={l} />
-                  ))}
-                </FilterGroup>
-              </div>
-              <p className="mt-5 text-xs text-slate-400">
-                Filters are visual only — no backend yet.
-              </p>
+      <main className="flex-1">
+        <div className="container-site py-6 sm:py-8">
+          {partial ? (
+            <p role="status" className="mb-4 rounded-xl bg-warn-50 px-4 py-3 text-sm text-warn-700 ring-1 ring-warn-100">
+              {r.carriersFailed}
+            </p>
+          ) : null}
+          {!hasRoute ? null : trips.length === 0 ? (
+            <div className="mx-auto max-w-xl rounded-2xl bg-white p-8 text-center shadow-soft ring-1 ring-slate-200/70">
+              <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-brand-50 text-brand-600">
+                <Icon name="bus" className="h-6 w-6" />
+              </span>
+              <h2 className="mt-4 text-lg font-semibold text-navy">{r.noResults}</h2>
+              <p className="mt-2 text-sm text-ink-muted">{r.noResultsHint}</p>
+              <Link href="/#search" className="btn-primary mt-5 px-5 py-2.5 text-sm">
+                {r.editSearch}
+              </Link>
             </div>
-          </aside>
-
-          <div className="flex flex-col gap-4">
-            <div className="flex items-center justify-between">
-              <p className="text-sm text-slate-500">
-                Sorted by <span className="font-medium text-slate-700">departure time</span>
-              </p>
-              <div className="hidden items-center gap-2 text-xs sm:flex">
-                {["Cheapest", "Fastest", "Earliest"].map((s, i) => (
-                  <button
-                    key={s}
-                    type="button"
-                    className={`rounded-full px-3 py-1.5 font-medium transition ${
-                      i === 2
-                        ? "bg-brand-600 text-white"
-                        : "bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-slate-100"
-                    }`}
-                  >
-                    {s}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {fetchError ? (
-              <div
-                role="alert"
-                className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700"
-              >
-                {fetchError}
-              </div>
-            ) : null}
-
-            {failedCarriers.length > 0 ? (
-              <div
-                role="status"
-                className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800"
-              >
-                Some carriers didn&apos;t respond:{" "}
-                {failedCarriers
-                  .map((c) => `${c.carrierName} (${c.error})`)
-                  .join(", ")}
-                .
-              </div>
-            ) : null}
-
-            {trips.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-10 text-center">
-                <p className="text-base font-semibold text-slate-900">
-                  No trips found
-                </p>
-                <p className="mt-1 text-sm text-slate-500">
-                  Try a different route or date.
-                </p>
-              </div>
-            ) : (
-              trips.map((trip) => (
-                <TripCard
-                  key={trip.id}
-                  trip={trip}
-                  date={date}
-                  tripKind={tripKind}
-                  returnDate={returnDate}
-                  onlineDiscountPercent={siteSettings.onlineDiscountPercent}
-                />
-              ))
-            )}
-          </div>
+          ) : (
+            <ResultsView
+              trips={trips}
+              initialFilters={filters}
+              initialSort={sort}
+              passengers={pax.total}
+              onlineDiscountPercent={onlineDiscount}
+              date={date}
+              tripKind={tripKind}
+              returnDate={returnDate}
+            />
+          )}
         </div>
       </main>
-
       <SiteFooter />
     </div>
   );
 }
 
-function FilterGroup({
-  title,
-  children,
+/** Previous / next day and a week of dates around the chosen one. */
+function DateStrip({
+  sp,
+  date,
+  today,
+  lang,
+  prev,
+  next,
 }: {
-  title: string;
-  children: React.ReactNode;
+  sp: SearchParams;
+  date: string;
+  today: string;
+  lang: Lang;
+  prev: string;
+  next: string;
 }) {
+  const hrefFor = (d: string) => {
+    const params = new URLSearchParams(
+      Object.entries(sp).filter((e): e is [string, string] => typeof e[1] === "string")
+    );
+    params.set("date", d);
+    if (params.get("returnDate") && params.get("returnDate")! < d) params.delete("returnDate");
+    return `/results?${params.toString()}`;
+  };
+  const start = addDays(date, -3) < today ? today : addDays(date, -3);
+  const days = Array.from({ length: 7 }, (_, i) => addDays(start, i));
+  const prevDay = addDays(date, -1);
   return (
-    <div>
-      <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
-        {title}
-      </p>
-      <div className="space-y-1.5">{children}</div>
-    </div>
-  );
-}
-
-function CheckboxRow({ label }: { label: string }) {
-  return (
-    <label className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1 text-slate-700 transition hover:bg-slate-50">
-      <input
-        type="checkbox"
-        className="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
-      />
-      <span>{label}</span>
-    </label>
+    <nav aria-label="dates" className="mt-4 flex items-center gap-2">
+      {prevDay >= today ? (
+        <Link href={hrefFor(prevDay)} aria-label={prev} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white/10 text-white ring-1 ring-white/15 hover:bg-white/20">
+          <Icon name="chevronRight" className="h-5 w-5 rotate-180" />
+        </Link>
+      ) : (
+        <span className="h-11 w-11 shrink-0" />
+      )}
+      <ul className="flex flex-1 justify-center gap-2 overflow-x-auto [scrollbar-width:none] sm:justify-start">
+        {days.map((d, i) => {
+          const current = d === date;
+          // Phones show the chosen day and its neighbours; wider screens the week.
+          const near = Math.abs(i - days.indexOf(date)) <= 1;
+          const [weekday, ...rest] = shortDate(d, lang).split(/,?\s+/);
+          return (
+            <li key={d} className={`shrink-0 ${near ? "" : "hidden sm:block"}`}>
+              <Link
+                href={hrefFor(d)}
+                aria-current={current ? "date" : undefined}
+                className={`flex min-w-[4.5rem] flex-col items-center rounded-xl px-3 py-1.5 text-sm transition ${
+                  current ? "bg-white font-semibold text-navy" : "bg-white/5 text-blue-100 ring-1 ring-white/10 hover:bg-white/15"
+                }`}
+              >
+                <span className="text-xs capitalize opacity-80">{weekday}</span>
+                <span className="whitespace-nowrap">{rest.join(" ")}</span>
+              </Link>
+            </li>
+          );
+        })}
+      </ul>
+      <Link href={hrefFor(addDays(date, 1))} aria-label={next} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white/10 text-white ring-1 ring-white/15 hover:bg-white/20">
+        <Icon name="chevronRight" className="h-5 w-5" />
+      </Link>
+    </nav>
   );
 }

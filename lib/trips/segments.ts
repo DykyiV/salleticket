@@ -80,6 +80,8 @@ export type SegmentTripOption = {
   departureTime: string;
   arrivalTime: string;
   hasAssignedSeats: boolean;
+  fromStation?: string;
+  toStation?: string;
 };
 
 /** All runs on a date where from→to is a sellable segment. */
@@ -151,6 +153,8 @@ export async function findSegmentTrips(options: {
         departureTime: departureTime.toISOString(),
         arrivalTime: arrivalTime.toISOString(),
         hasAssignedSeats: departure.hasAssignedSeats,
+        fromStation: fromStop.addressLabel ?? undefined,
+        toStation: toStop.addressLabel ?? undefined,
       });
     }
   }
