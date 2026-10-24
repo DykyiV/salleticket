@@ -1,5 +1,6 @@
 import Link from "next/link";
 import Header from "@/components/Header";
+import SiteFooter from "@/components/site/SiteFooter";
 import BookingForm from "@/components/BookingForm";
 import LegalLinks from "@/components/booking/LegalLinks";
 import { formatDuration } from "@/lib/mockTrips";
@@ -261,11 +262,7 @@ export default async function BookingPage(
         </div>
       </main>
 
-      <footer className="border-t border-slate-200 bg-white">
-        <div className="mx-auto max-w-6xl px-4 py-6 text-center text-sm text-slate-500 sm:px-6 lg:px-8">
-          © {new Date().getFullYear()} Asol BUS. Demo booking — no real payment.
-        </div>
-      </footer>
+      <SiteFooter />
     </div>
   );
 }

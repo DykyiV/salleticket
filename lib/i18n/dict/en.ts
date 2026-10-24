@@ -1,0 +1,207 @@
+import type { Dict } from "@/lib/i18n/dict/uk";
+
+const en: Dict = {
+  meta: {
+    title: "Asol BUS — bus tickets across Europe and Ukraine",
+    description:
+      "Bus tickets between Spain, Ukraine, Poland, Germany and other EU countries. Pick a trip and a seat, pay, and get an e-ticket with a QR code.",
+  },
+  common: {
+    buyTicket: "Buy a ticket",
+    myTickets: "My tickets",
+    cabinet: "My account",
+    signIn: "Sign in",
+    signOut: "Sign out",
+    menu: "Menu",
+    close: "Close",
+    language: "Language",
+    priceFrom: "from",
+    home: "Home",
+    example: "example",
+  },
+  nav: {
+    trips: "Trips",
+    directions: "Destinations",
+    baggage: "Baggage",
+    rules: "Terms",
+    support: "Support",
+  },
+  hero: {
+    badge: "Scheduled coaches Spain — Ukraine — Europe",
+    title: "Your bus ticket in 3 minutes",
+    subtitle:
+      "Find a trip, pick your seat, pay — and get an e-ticket with a QR code on your phone.",
+    busAlt: "Grandes Tour double-decker coach",
+  },
+  search: {
+    title: "Search trips",
+    oneWay: "One way",
+    roundTrip: "Return",
+    from: "From",
+    to: "To",
+    cityPlaceholder: "City or station",
+    swap: "Swap origin and destination",
+    departDate: "Departure date",
+    returnDate: "Return date",
+    returnHint: "Optional — you can choose it later",
+    passengers: "Passengers",
+    adults: "Adults",
+    adultsHint: "Aged 13–59",
+    children: "Children",
+    childrenHint: "Aged 0–12, up to 30% off",
+    seniors: "Concession",
+    seniorsHint: "Aged 60+, 10% off",
+    decrease: "Fewer",
+    increase: "More",
+    done: "Done",
+    passengersCount: { one: "{n} passenger", other: "{n} passengers" },
+    submit: "Search trips",
+    popular: "Popular:",
+    errorCities: "Tell us where you are travelling from and to",
+    errorSameCity: "Origin and destination are the same city",
+    errorReturn: "The return date can’t be before the departure date",
+    maxPassengers: "Up to {n} passengers per booking",
+  },
+  benefits: {
+    title: "Why travel with us",
+    items: [
+      { icon: "route", title: "Scheduled international routes", text: "Spain, Ukraine, Poland, Germany, France, Italy and other EU countries on a fixed timetable." },
+      { icon: "price", title: "Clear pricing", text: "The amount you see is the amount you pay. Discounts and surcharges are shown before you press “Pay”." },
+      { icon: "qr", title: "E-ticket with a QR code", text: "Show the QR code to the driver on your phone — no printing needed." },
+      { icon: "luggage", title: "Baggage included", text: "Hand luggage up to 5 kg and one suitcase up to 20 kg are included. Simple, clear rules." },
+      { icon: "pin", title: "Convenient stops", text: "Bus stations and stops in city centres. The exact address and time are on your ticket." },
+      { icon: "chat", title: "Support in three languages", text: "Ukrainian, Spanish and English — before, during and after your trip." },
+    ],
+  },
+  routes: {
+    title: "Popular destinations",
+    subtitle: "“From” prices and frequency are based on the timetable for the next 2 months.",
+    duration: "≈ {h} h journey",
+    daily: "Daily",
+    perWeek: { one: "{n} time a week", other: "{n} times a week" },
+    noSchedule: "See the timetable on the trips page",
+    view: "View trips",
+  },
+  how: {
+    title: "How it works",
+    steps: [
+      { title: "Choose route and date", text: "Where from, where to, when, and how many of you." },
+      { title: "Compare trips", text: "Times, duration, transfers, coach type and price — all on one card." },
+      { title: "Pick your seat", text: "Interactive seat map with the price of every seat shown upfront." },
+      { title: "Pay", text: "By card online or on the bus — whichever suits you." },
+      { title: "Get your e-ticket", text: "A QR code on your phone and a copy in “My tickets”." },
+    ],
+  },
+  buses: {
+    title: "Coach types",
+    subtitle: "The coach type and on-board services are listed for every trip.",
+    amenities: {
+      wifi: "Wi-Fi",
+      sockets: "Power sockets",
+      ac: "Air conditioning",
+      wc: "Toilet",
+      water: "Water",
+      luggage: "Luggage hold",
+    },
+    items: [
+      { id: "standard", name: "Standard", text: "A touring coach with reclining seats and a spacious luggage hold.", amenities: ["ac", "luggage", "wc"] },
+      { id: "comfort", name: "Comfort", text: "More legroom, sockets at every row and Wi-Fi on the road.", amenities: ["wifi", "sockets", "ac", "wc", "luggage"] },
+      { id: "vip", name: "VIP / sleeper", text: "Wide seats with a deep recline and fewer seats on board — made for overnight journeys.", amenities: ["wifi", "sockets", "ac", "wc", "water", "luggage"] },
+      { id: "minibus", name: "Minibus", text: "Up to 20 seats — for shorter routes and small groups.", amenities: ["ac", "sockets", "luggage"] },
+    ],
+  },
+  reviews: {
+    title: "What passengers say",
+  },
+  faq: {
+    title: "Frequently asked questions",
+    items: [
+      {
+        q: "What documents do I need?",
+        a: "An identity document that lets you enter the destination country: a passport, an EU national ID card or a residence permit. Children need their own document. Showing the ticket on your phone is enough.",
+      },
+      {
+        q: "How much baggage can I bring?",
+        a: "The fare includes hand luggage up to 5 kg and one suitcase up to 20 kg in the hold. Extra or oversized baggage (a bike, skis, a suitcase over 20 kg) must be agreed in advance and may cost extra.",
+      },
+      {
+        q: "How do I get a refund?",
+        a: "More than 24 hours before departure we refund the full fare; less than 24 hours before, 20% is retained. You can cancel an unpaid booking yourself in “My tickets”; to refund a paid ticket, contact support.",
+      },
+      {
+        q: "How does a trip with a transfer work?",
+        a: "Trips with a transfer are marked in the search results. Your ticket shows the city, stop and time of the transfer; the connection time is already built into the timetable.",
+      },
+      {
+        q: "Can I travel with children?",
+        a: "Yes. Every child gets their own seat and a discounted ticket: aged 0–4, 30% off; aged 5–12, 20% off. Enter the age when you book.",
+      },
+      {
+        q: "Can I bring a pet?",
+        a: "Small animals only, in a carrier and agreed with the carrier in advance. Call us before booking so we can confirm.",
+      },
+    ],
+  },
+  footer: {
+    about: "Tickets for scheduled coach routes between Ukraine, Spain and EU countries.",
+    contacts: "Contact",
+    phoneUa: "Ukraine",
+    phoneEs: "Spain",
+    phoneDe: "Germany",
+    email: "Email",
+    website: "Website",
+    follow: "Follow us",
+    documents: "Documents",
+    terms: "Conditions of carriage",
+    privacy: "Privacy policy",
+    baggage: "Baggage rules",
+    rights: "Passenger rights",
+    offer: "Public offer",
+    rightsReserved: "All rights reserved.",
+  },
+  pages: {
+    baggageTitle: "Baggage",
+    baggageIntro: "What you can bring and how to get your baggage ready for the trip.",
+    rulesTitle: "Conditions of carriage",
+    rulesIntro: "The terms on which we carry passengers and baggage. By booking a ticket you accept them.",
+    privacyTitle: "Personal data",
+    privacyText:
+      "Your personal data is used only to organise your journey: issuing the ticket, contacting you about the trip and processing refunds.",
+    questions: "Still have questions?",
+    callUs: "Call us — we answer in Ukrainian, Spanish or English.",
+  },
+  legal: {
+    baggage: {
+      title: "Baggage rules",
+      body: [
+        "Free of charge: one piece of hand luggage up to 5 kg and one suitcase up to 20 kg in the hold.",
+        "Extra or oversized baggage (over 20 kg, bikes, skis) must be agreed with the carrier and may cost extra.",
+        "Keep valuables, documents, money and keys with you on board.",
+        "Not allowed: dangerous substances, weapons, animals without a carrier.",
+        "The carrier is not liable for the loss of baggage checked in without a tag.",
+      ],
+    },
+    rights: {
+      title: "Passenger rights and obligations",
+      body: [
+        "Passengers are entitled to the seat on their ticket, carriage of baggage under these rules and information about the route.",
+        "Passengers must carry an identity document and show their ticket when boarding.",
+        "Boarding closes 5 minutes before departure; arriving late does not entitle you to a refund.",
+        "Smoking and drinking alcohol on board are not allowed.",
+        "The carrier announces timetable changes via the contact details given when booking.",
+      ],
+    },
+    offer: {
+      title: "Public offer",
+      body: [
+        "By making a booking, the passenger accepts the terms of the public contract of carriage.",
+        "The ticket confirms the contract between the passenger and the carrier.",
+        "Refunds: more than 24 h before departure — full fare; less than 24 h — 20% is retained.",
+        "The online discount applies only if payment is made within the set time.",
+        "Personal data is used only to organise the journey.",
+      ],
+    },
+  },
+};
+
+export default en;

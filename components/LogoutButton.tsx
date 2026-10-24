@@ -5,8 +5,10 @@ import { useState } from "react";
 
 export default function LogoutButton({
   className,
+  label = "Вийти",
 }: {
   className?: string;
+  label?: string;
 }) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
@@ -32,7 +34,7 @@ export default function LogoutButton({
         "ml-auto rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:opacity-60"
       }
     >
-        {loading ? "Вихід…" : "Вийти"}
+      {loading ? "…" : label}
     </button>
   );
 }

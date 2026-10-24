@@ -1,0 +1,207 @@
+import type { Dict } from "@/lib/i18n/dict/uk";
+
+const es: Dict = {
+  meta: {
+    title: "Asol BUS — billetes de autobús por Europa y Ucrania",
+    description:
+      "Billetes de autobús entre España, Ucrania, Polonia, Alemania y otros países de la UE. Elige el viaje y el asiento, paga y recibe tu billete electrónico con código QR.",
+  },
+  common: {
+    buyTicket: "Comprar billete",
+    myTickets: "Mis billetes",
+    cabinet: "Mi cuenta",
+    signIn: "Iniciar sesión",
+    signOut: "Cerrar sesión",
+    menu: "Menú",
+    close: "Cerrar",
+    language: "Idioma",
+    priceFrom: "desde",
+    home: "Inicio",
+    example: "ejemplo",
+  },
+  nav: {
+    trips: "Viajes",
+    directions: "Destinos",
+    baggage: "Equipaje",
+    rules: "Condiciones",
+    support: "Atención al cliente",
+  },
+  hero: {
+    badge: "Líneas regulares España — Ucrania — Europa",
+    title: "Tu billete de autobús en 3 minutos",
+    subtitle:
+      "Busca el viaje, elige tu asiento, paga y recibe en el móvil el billete electrónico con código QR.",
+    busAlt: "Autobús de dos pisos de Grandes Tour",
+  },
+  search: {
+    title: "Buscar viajes",
+    oneWay: "Solo ida",
+    roundTrip: "Ida y vuelta",
+    from: "Origen",
+    to: "Destino",
+    cityPlaceholder: "Ciudad o estación",
+    swap: "Intercambiar origen y destino",
+    departDate: "Fecha de ida",
+    returnDate: "Fecha de vuelta",
+    returnHint: "Opcional — puedes elegirla más tarde",
+    passengers: "Pasajeros",
+    adults: "Adultos",
+    adultsHint: "13–59 años",
+    children: "Niños",
+    childrenHint: "0–12 años, hasta un 30% de descuento",
+    seniors: "Tarifa reducida",
+    seniorsHint: "60+ años, 10% de descuento",
+    decrease: "Menos",
+    increase: "Más",
+    done: "Listo",
+    passengersCount: { one: "{n} pasajero", other: "{n} pasajeros" },
+    submit: "Buscar viajes",
+    popular: "Populares:",
+    errorCities: "Indica el origen y el destino",
+    errorSameCity: "El origen y el destino son la misma ciudad",
+    errorReturn: "La fecha de vuelta no puede ser anterior a la de ida",
+    maxPassengers: "Máximo {n} pasajeros por reserva",
+  },
+  benefits: {
+    title: "Por qué viajar con nosotros",
+    items: [
+      { icon: "route", title: "Líneas internacionales regulares", text: "España, Ucrania, Polonia, Alemania, Francia, Italia y otros países de la UE con horarios fijos." },
+      { icon: "price", title: "Precio transparente", text: "El importe que ves es el que pagas. Los descuentos y suplementos se muestran antes de pulsar «Pagar»." },
+      { icon: "qr", title: "Billete electrónico con QR", text: "Enseña el código QR al conductor desde el móvil: no hace falta imprimir nada." },
+      { icon: "luggage", title: "Equipaje incluido", text: "Equipaje de mano de hasta 5 kg y una maleta de hasta 20 kg ya incluidos. Normas claras y sencillas." },
+      { icon: "pin", title: "Paradas cómodas", text: "Estaciones y paradas en el centro de las ciudades. La dirección y la hora exactas figuran en tu billete." },
+      { icon: "chat", title: "Atención en tres idiomas", text: "En ucraniano, español e inglés: antes, durante y después del viaje." },
+    ],
+  },
+  routes: {
+    title: "Destinos populares",
+    subtitle: "Precios «desde» y frecuencia según el horario de los próximos 2 meses.",
+    duration: "≈ {h} h de viaje",
+    daily: "Diario",
+    perWeek: { one: "{n} vez por semana", other: "{n} veces por semana" },
+    noSchedule: "Consulta el horario en la página de viajes",
+    view: "Ver viajes",
+  },
+  how: {
+    title: "Cómo funciona",
+    steps: [
+      { title: "Elige ruta y fecha", text: "Origen, destino, cuándo y cuántos viajáis." },
+      { title: "Compara viajes", text: "Horario, duración, transbordos, tipo de autobús y precio en una sola tarjeta." },
+      { title: "Elige tu asiento", text: "Plano interactivo del autobús con el precio de cada asiento a la vista." },
+      { title: "Paga", text: "Con tarjeta online o en el autobús, como prefieras." },
+      { title: "Recibe tu billete", text: "Código QR en el móvil y una copia en «Mis billetes»." },
+    ],
+  },
+  buses: {
+    title: "Tipos de autobús",
+    subtitle: "El tipo de autobús y los servicios a bordo se indican en cada viaje.",
+    amenities: {
+      wifi: "Wi-Fi",
+      sockets: "Enchufes",
+      ac: "Aire acondicionado",
+      wc: "Aseo",
+      water: "Agua",
+      luggage: "Maletero",
+    },
+    items: [
+      { id: "standard", name: "Estándar", text: "Autocar de turismo con asientos reclinables y un amplio maletero.", amenities: ["ac", "luggage", "wc"] },
+      { id: "comfort", name: "Confort", text: "Más espacio para las piernas, enchufes en cada fila y Wi-Fi durante el viaje.", amenities: ["wifi", "sockets", "ac", "wc", "luggage"] },
+      { id: "vip", name: "VIP / sleeper", text: "Asientos anchos con gran inclinación y menos plazas: ideal para viajes nocturnos.", amenities: ["wifi", "sockets", "ac", "wc", "water", "luggage"] },
+      { id: "minibus", name: "Minibús", text: "Hasta 20 plazas, para rutas más cortas y grupos pequeños.", amenities: ["ac", "sockets", "luggage"] },
+    ],
+  },
+  reviews: {
+    title: "Opiniones de pasajeros",
+  },
+  faq: {
+    title: "Preguntas frecuentes",
+    items: [
+      {
+        q: "¿Qué documentos necesito?",
+        a: "Un documento de identidad que te permita entrar en el país de destino: pasaporte, DNI de un país de la UE o permiso de residencia. Los niños necesitan su propio documento. Basta con mostrar el billete en el móvil.",
+      },
+      {
+        q: "¿Cuánto equipaje puedo llevar?",
+        a: "El precio incluye equipaje de mano de hasta 5 kg y una maleta de hasta 20 kg en el maletero. El equipaje adicional o voluminoso (bicicleta, esquís, maleta de más de 20 kg) se acuerda previamente y puede tener suplemento.",
+      },
+      {
+        q: "¿Cómo devuelvo un billete?",
+        a: "Con más de 24 horas de antelación devolvemos el importe íntegro; con menos de 24 horas se retiene el 20%. Una reserva sin pagar puedes cancelarla tú mismo en «Mis billetes»; para devolver un billete pagado, contacta con atención al cliente.",
+      },
+      {
+        q: "¿Cómo funciona un viaje con transbordo?",
+        a: "Los viajes con transbordo están marcados en los resultados. El billete indica la ciudad, la parada y la hora del transbordo; el tiempo necesario ya está incluido en el horario.",
+      },
+      {
+        q: "¿Puedo viajar con niños?",
+        a: "Sí. Cada niño tiene su propio asiento y billete con descuento: 0–4 años, 30%; 5–12 años, 20%. Indica la edad al hacer la reserva.",
+      },
+      {
+        q: "¿Se admiten mascotas?",
+        a: "Solo animales pequeños, en transportín y con acuerdo previo del transportista. Llámanos antes de reservar para confirmar la plaza.",
+      },
+    ],
+  },
+  footer: {
+    about: "Billetes para líneas regulares de autobús entre Ucrania, España y los países de la UE.",
+    contacts: "Contacto",
+    phoneUa: "Ucrania",
+    phoneEs: "España",
+    phoneDe: "Alemania",
+    email: "E-mail",
+    website: "Web",
+    follow: "Síguenos",
+    documents: "Documentos",
+    terms: "Condiciones de transporte",
+    privacy: "Política de privacidad",
+    baggage: "Normas de equipaje",
+    rights: "Derechos del pasajero",
+    offer: "Contrato de oferta",
+    rightsReserved: "Todos los derechos reservados.",
+  },
+  pages: {
+    baggageTitle: "Equipaje",
+    baggageIntro: "Qué puedes llevar contigo y cómo preparar el equipaje para el viaje.",
+    rulesTitle: "Condiciones de transporte",
+    rulesIntro: "Las condiciones en las que transportamos pasajeros y equipaje. Al comprar un billete, las aceptas.",
+    privacyTitle: "Datos personales",
+    privacyText:
+      "Tus datos personales se utilizan únicamente para organizar el transporte: emitir el billete, contactarte sobre el viaje y tramitar devoluciones.",
+    questions: "¿Tienes más preguntas?",
+    callUs: "Llámanos: te atendemos en ucraniano, español o inglés.",
+  },
+  legal: {
+    baggage: {
+      title: "Normas de transporte de equipaje",
+      body: [
+        "Gratis: un bulto de mano de hasta 5 kg y una maleta de hasta 20 kg en el maletero.",
+        "El equipaje adicional o voluminoso (más de 20 kg, bicicletas, esquís) se acuerda con el transportista y puede tener suplemento.",
+        "Lleva contigo en el autobús los objetos de valor, documentos, dinero y llaves.",
+        "Prohibido: sustancias peligrosas, armas y animales sin transportín.",
+        "El transportista no se hace responsable de la pérdida de equipaje entregado sin etiqueta.",
+      ],
+    },
+    rights: {
+      title: "Derechos y obligaciones del pasajero",
+      body: [
+        "El pasajero tiene derecho al asiento indicado en el billete, al transporte de equipaje según las normas y a información sobre la ruta.",
+        "El pasajero debe llevar un documento de identidad y mostrar el billete al embarcar.",
+        "El embarque termina 5 minutos antes de la salida; llegar tarde no da derecho a devolución.",
+        "Está prohibido fumar y consumir alcohol a bordo.",
+        "El transportista informa de los cambios de horario a través de los datos de contacto indicados en la reserva.",
+      ],
+    },
+    offer: {
+      title: "Contrato de oferta",
+      body: [
+        "Al hacer la reserva, el pasajero acepta las condiciones del contrato público de transporte.",
+        "El billete confirma el contrato entre el pasajero y el transportista.",
+        "Devoluciones: con más de 24 h antes de la salida, importe íntegro; con menos de 24 h se retiene el 20%.",
+        "El descuento online solo es válido si el pago se realiza en el plazo establecido.",
+        "Los datos personales se utilizan únicamente para organizar el transporte.",
+      ],
+    },
+  },
+};
+
+export default es;

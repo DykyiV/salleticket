@@ -87,11 +87,13 @@ export async function findSegmentTrips(options: {
   fromCity: string;
   toCity: string;
   date: string;
+  /** Exclusive end date (YYYY-MM-DD) to search a range; default: that day only. */
+  until?: string;
   db?: Db;
 }): Promise<SegmentTripOption[]> {
   const db = options.db ?? prisma;
   const day = utcDateOnly(options.date);
-  const next = addUtcDays(day, 1);
+  const next = options.until ? utcDateOnly(options.until) : addUtcDays(day, 1);
 
   const departures = await db.departure.findMany({
     where: {

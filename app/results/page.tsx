@@ -1,6 +1,7 @@
 import { headers } from "next/headers";
 import Link from "next/link";
 import Header from "@/components/Header";
+import SiteFooter from "@/components/site/SiteFooter";
 import TripCard from "@/components/TripCard";
 import type { Trip } from "@/lib/carriers/types";
 import { parseTripKind } from "@/lib/tickets/kinds";
@@ -282,12 +283,7 @@ export default async function ResultsPage(
         </div>
       </main>
 
-      <footer className="border-t border-slate-200 bg-white">
-        <div className="mx-auto max-w-6xl px-4 py-6 text-center text-sm text-slate-500 sm:px-6 lg:px-8">
-          © {new Date().getFullYear()} Asol BUS. Results fetched from{" "}
-          <code className="rounded bg-slate-100 px-1.5 py-0.5">/api/search</code>.
-        </div>
-      </footer>
+      <SiteFooter />
     </div>
   );
 }

@@ -1,105 +1,77 @@
 import Link from "next/link";
 import { getCurrentUser } from "@/lib/auth/session";
-import LogoutButton from "@/components/LogoutButton";
-import LanguageToggle from "@/components/LanguageToggle";
+import { getDict } from "@/lib/i18n/server";
+import Icon from "@/components/site/Icon";
+import LangSwitcher from "@/components/site/LangSwitcher";
+import MobileMenu from "@/components/site/MobileMenu";
+import { siteNav } from "@/components/site/nav";
 
-const NAV_LINKS = [
-  { href: "#", label: "Routes" },
-  { href: "#", label: "Carriers" },
-  { href: "#", label: "Help" },
-  { href: "#", label: "Contacts" },
-];
-
-export default async function Header() {
-  const user = await getCurrentUser();
+export function Logo() {
   return (
-    <header className="sticky top-0 z-40 w-full border-b border-slate-200/70 bg-white/80 backdrop-blur">
-      <div className="mx-auto flex h-16 w-full max-w-6xl items-center justify-between px-4 sm:px-6 lg:px-8">
-        <Link href="/" className="flex items-center gap-2">
-          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-600 text-white shadow-sm ring-1 ring-brand-700/20">
-            <BusIcon className="h-5 w-5" />
-          </span>
-          <span className="text-lg font-semibold tracking-tight text-slate-900">
-            Asol<span className="text-brand-600"> BUS</span>
-          </span>
-        </Link>
+    <Link href="/" className="flex shrink-0 items-center gap-2 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500">
+      <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-navy text-white">
+        <Icon name="bus" className="h-5 w-5" />
+      </span>
+      <span className="text-lg font-bold tracking-tight text-navy">
+        Asol<span className="text-brand-600"> BUS</span>
+      </span>
+    </Link>
+  );
+}
 
-        <nav className="hidden items-center gap-1 md:flex">
-          {NAV_LINKS.map((link) => (
+/** Public site header: logo, menu, language, «Мої квитки», «Купити квиток». */
+export default async function Header() {
+  const [user, { t }] = await Promise.all([getCurrentUser().catch(() => null), getDict()]);
+  const nav = siteNav(t);
+  return (
+    <header className="sticky top-0 z-40 w-full border-b border-slate-200/80 bg-white/90 backdrop-blur supports-[backdrop-filter]:bg-white/75">
+      <div className="container-site flex h-16 items-center gap-3">
+        <Logo />
+
+        <nav aria-label={t.common.menu} className="ml-6 hidden items-center gap-1 lg:flex">
+          {nav.map((item) => (
             <Link
-              key={link.label}
-              href={link.href}
-              className="rounded-lg px-3 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-100 hover:text-slate-900"
+              key={item.href}
+              href={item.href}
+              className="rounded-lg px-3 py-2 text-sm font-medium text-ink-muted transition hover:bg-slate-100 hover:text-navy"
             >
-              {link.label}
+              {item.label}
             </Link>
           ))}
         </nav>
 
-        <div className="flex items-center gap-2">
-          <LanguageToggle />
+        <div className="ml-auto flex items-center gap-2">
+          <LangSwitcher className="hidden sm:inline-flex" />
+          <Link
+            href="/cabinet/tickets"
+            className="hidden items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-navy transition hover:bg-slate-100 md:inline-flex"
+          >
+            <Icon name="ticket" className="h-4 w-4" />
+            {t.common.myTickets}
+          </Link>
           {user ? (
-            <>
-              <Link
-                href="/cabinet"
-                className="hidden items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100 sm:inline-flex"
-              >
-                <span className="hidden max-w-[140px] truncate md:inline">
-                  {user.email}
-                </span>
-                <span className="rounded-full bg-brand-50 px-2 py-0.5 text-[11px] font-semibold text-brand-700 ring-1 ring-inset ring-brand-100">
-                  {user.role}
-                </span>
-              </Link>
-              <Link
-                href="/cabinet"
-                className="hidden rounded-lg px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100 md:inline-flex"
-              >
-                Кабінет
-              </Link>
-              <LogoutButton className="inline-flex items-center rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white transition hover:bg-slate-700" />
-            </>
+            <Link
+              href="/cabinet"
+              aria-label={t.common.cabinet}
+              title={user.email}
+              className="hidden h-10 w-10 items-center justify-center rounded-full bg-brand-50 text-brand-700 ring-1 ring-brand-100 transition hover:bg-brand-100 lg:inline-flex"
+            >
+              <Icon name="user" className="h-5 w-5" />
+            </Link>
           ) : (
-            <>
-              <Link
-                href="/login"
-                className="hidden rounded-lg px-3 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-100 hover:text-slate-900 sm:inline-flex"
-              >
-                Sign in
-              </Link>
-              <Link
-                href="/register"
-                className="inline-flex items-center rounded-lg bg-brand-600 px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2"
-              >
-                Register
-              </Link>
-            </>
+            <Link
+              href="/login"
+              className="hidden rounded-xl px-3 py-2 text-sm font-semibold text-ink-muted transition hover:bg-slate-100 hover:text-navy lg:inline-flex"
+            >
+              {t.common.signIn}
+            </Link>
           )}
+          <Link href="/#search" className="btn-primary hidden px-4 py-2.5 text-sm sm:inline-flex">
+            {t.common.buyTicket}
+          </Link>
+          <MobileMenu nav={nav} signedIn={Boolean(user)} />
         </div>
       </div>
     </header>
-  );
-}
-
-function BusIcon({ className }: { className?: string }) {
-  return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className={className}
-      aria-hidden="true"
-    >
-      <path d="M8 6v6" />
-      <path d="M16 6v6" />
-      <path d="M2 12h19.6" />
-      <path d="M18 18h3s.5-1.7.8-2.8c.1-.4.2-.8.2-1.2V6c0-1.1-.9-2-2-2H4a2 2 0 0 0-2 2v8c0 .5.2 1 .6 1.4L4 18" />
-      <circle cx="7" cy="18" r="2" />
-      <circle cx="17" cy="18" r="2" />
-    </svg>
   );
 }
