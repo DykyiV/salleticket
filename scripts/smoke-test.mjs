@@ -357,6 +357,16 @@ async function main() {
   );
   const myTickets = await fetch(`${BASE_URL}/tickets`, { headers: { Cookie: cookie } });
   check("«Мої квитки» lists the order", myTickets.status === 200 && (await myTickets.text()).includes(reference), `got ${myTickets.status}`);
+  // --- Sign-in return address (?next=) ---------------------------------------
+  const evilLogin = await (await fetch(`${BASE_URL}/login?next=${encodeURIComponent("https://evil.example/x")}`)).text();
+  check(
+    "login page drops a foreign ?next= (register link has no next)",
+    evilLogin.includes('href="/register"') && !evilLogin.includes('href="/register?next='),
+    "register link"
+  );
+  const okLogin = await (await fetch(`${BASE_URL}/login?next=%2Ftickets`)).text();
+  check("login page keeps an on-site ?next= for the register link", okLogin.includes('href="/register?next=%2Ftickets"'));
+
   const ticketPageAnon = await fetch(`${BASE_URL}/tickets/${reference}`, { redirect: "manual" });
   check("e-ticket page asks a visitor to sign in", [303, 307, 308].includes(ticketPageAnon.status) && (ticketPageAnon.headers.get("location") ?? "").includes("/login"), `got ${ticketPageAnon.status}`);
 
