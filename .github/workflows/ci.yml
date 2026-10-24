@@ -29,6 +29,8 @@ jobs:
           cp .env.example .env
           sed -i "s|^JWT_SECRET=.*|JWT_SECRET=\"$(openssl rand -base64 48)\"|" .env
           sed -i "s|^CRON_SECRET=.*|CRON_SECRET=\"$(openssl rand -base64 48)\"|" .env
+          # Smoke tests book on the demo carriers.
+          sed -i "s|^ENABLE_DEMO_CARRIERS=.*|ENABLE_DEMO_CARRIERS=\"1\"|" .env
 
       - name: Apply database schema
         run: npm run db:push

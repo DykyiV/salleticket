@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { requireRole } from "@/lib/auth/guard";
 import { prisma } from "@/lib/db";
 import { parseCoachLayout, type CoachLayoutJSON } from "@/lib/seats";
+import { busFeaturesPatch } from "@/lib/buses/features";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -18,6 +19,9 @@ export async function PATCH(req: NextRequest, props: Params) {
     model?: string;
     isActive?: boolean;
     layout?: CoachLayoutJSON;
+    category?: unknown;
+    amenities?: unknown;
+    luggagePieces?: unknown;
   };
   try {
     body = (await req.json()) as typeof body;
@@ -25,7 +29,12 @@ export async function PATCH(req: NextRequest, props: Params) {
     return NextResponse.json({ error: "Некоректний JSON" }, { status: 400 });
   }
 
-  const data: Record<string, unknown> = {};
+  let data: Record<string, unknown>;
+  try {
+    data = { ...busFeaturesPatch(body) };
+  } catch (err) {
+    return NextResponse.json({ error: (err as Error).message }, { status: 400 });
+  }
   if (body.plate?.trim()) data.plate = body.plate.trim();
   if (body.model !== undefined) data.model = body.model?.trim() || null;
   if (typeof body.isActive === "boolean") data.isActive = body.isActive;

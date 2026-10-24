@@ -289,15 +289,37 @@ async function main() {
       },
     ],
   };
-  const busSeeder = async (plate: string, model: string, layout: unknown, decks: number) => {
+  const busSeeder = async (
+    plate: string,
+    model: string,
+    layout: unknown,
+    decks: number,
+    passenger: { category: string; amenities: string[]; luggagePieces: number }
+  ) => {
     const existing = await prisma.bus.findUnique({ where: { plate } });
     if (existing) return existing;
     return prisma.bus.create({
-      data: { plate, model, decks, layout: JSON.stringify(layout) },
+      data: {
+        plate,
+        model,
+        decks,
+        layout: JSON.stringify(layout),
+        category: passenger.category,
+        amenities: JSON.stringify(passenger.amenities),
+        luggagePieces: passenger.luggagePieces,
+      },
     });
   };
-  const bus1 = await busSeeder("AA 1234 XX", "Mercedes Tourismo", coachLayout, 1);
-  await busSeeder("BB 5678 YY", "Setra S 431 DT (двоповерховий)", doubleDeck, 2);
+  const bus1 = await busSeeder("AA 1234 XX", "Mercedes Tourismo", coachLayout, 1, {
+    category: "COMFORT",
+    amenities: ["wifi", "sockets", "ac", "wc"],
+    luggagePieces: 1,
+  });
+  await busSeeder("BB 5678 YY", "Setra S 431 DT (двоповерховий)", doubleDeck, 2, {
+    category: "VIP",
+    amenities: ["wifi", "sockets", "ac", "wc", "water"],
+    luggagePieces: 2,
+  });
   // Assign the coach to all Київ — Берлін departures without a bus.
   await prisma.departure.updateMany({
     where: { template: { name: "Київ — Берлін" }, busId: null },
@@ -1117,6 +1139,19 @@ async function seedPartnerSales() {
       },
     });
     console.log("  recorded demo agent payment €5.00");
+  }
+
+  // Demo fleet on the generated runs: Берлін — coach, Марбелья — double-decker.
+  for (const [plate, route] of [
+    ["AA 1234 XX", "Київ — Берлін"],
+    ["BB 5678 YY", "Київ — Марбелья"],
+  ] as const) {
+    const bus = await prisma.bus.findUnique({ where: { plate } });
+    if (!bus) continue;
+    await prisma.departure.updateMany({
+      where: { template: { name: route }, busId: null },
+      data: { busId: bus.id },
+    });
   }
 }
 

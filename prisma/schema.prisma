@@ -380,6 +380,12 @@ model Bus {
   decks     Int      @default(1)
   /// JSON CoachLayout — see lib/seats.ts. Empty = default 46-seat coach.
   layout    String   @default("")
+  /// Class shown to passengers: STANDARD | COMFORT | VIP | MINIBUS.
+  category  String   @default("STANDARD")
+  /// JSON list of on-board services: wifi, sockets, ac, wc, water.
+  amenities String   @default("[\"ac\",\"wc\"]")
+  /// Checked suitcases included per passenger.
+  luggagePieces Int  @default(1)
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

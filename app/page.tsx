@@ -5,7 +5,7 @@ import SiteFooter from "@/components/site/SiteFooter";
 import SearchPanel from "@/components/home/SearchPanel";
 import Icon, { isIconName, type IconName } from "@/components/site/Icon";
 import { getDict } from "@/lib/i18n/server";
-import { fmt, plural } from "@/lib/i18n/format";
+import { fmt, money, plural } from "@/lib/i18n/format";
 import type { Lang } from "@/lib/i18n/config";
 import type { Dict } from "@/lib/i18n/dict";
 import { cityLabel, knownCities } from "@/lib/trips/cities";
@@ -23,14 +23,6 @@ function icon(name: string, fallback: IconName = "check"): IconName {
   return isIconName(name) ? name : fallback;
 }
 
-function eur(n: number, lang: Lang): string {
-  return new Intl.NumberFormat(lang === "uk" ? "uk-UA" : lang === "es" ? "es-ES" : "en-GB", {
-    style: "currency",
-    currency: "EUR",
-    currencyDisplay: "narrowSymbol",
-    maximumFractionDigits: n % 1 === 0 ? 0 : 2,
-  }).format(n);
-}
 
 export default async function Home() {
   const [{ lang, t }, stats] = await Promise.all([getDict(), getPopularRouteStats().catch(() => [] as RouteStats[])]);
@@ -153,7 +145,7 @@ function PopularRoutes({ t, lang, stats }: { t: Dict; lang: Lang; stats: RouteSt
                   {r.priceFrom != null ? (
                     <p className="text-sm text-ink-soft">
                       {t.common.priceFrom}{" "}
-                      <span className="text-2xl font-bold text-navy">{eur(r.priceFrom, lang)}</span>
+                      <span className="text-2xl font-bold text-navy">{money(r.priceFrom, lang)}</span>
                     </p>
                   ) : (
                     <span />

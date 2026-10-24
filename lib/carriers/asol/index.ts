@@ -11,6 +11,66 @@ import { prisma } from "@/lib/db";
 import { findSegmentTrips, type SegmentTripOption } from "@/lib/trips/segments";
 import { coverSegment } from "@/lib/ops/coverage";
 import { upcomingInternalTrips } from "@/lib/trips/internal";
+import {
+  commonFeatures,
+  isBusCategory,
+  parseBusFeatures,
+  type BusCategory,
+} from "@/lib/buses/features";
+
+const LEGACY_AMENITY_LABEL: Record<string, string> = {
+  wifi: "Wi-Fi",
+  sockets: "USB",
+  ac: "A/C",
+  wc: "WC",
+  water: "Water",
+};
+
+type BusInfo = { model: string | null; category: string; amenities: string; luggagePieces: number };
+
+/** Carrier and bus(es) behind a sold segment: the leg buses, else the run's bus. */
+async function vehicleInfo(tripId: string, assignmentIds: string[]) {
+  const [trip, assignments] = await Promise.all([
+    prisma.trip.findUnique({
+      where: { id: tripId },
+      select: {
+        carrier: { select: { name: true } },
+        departure: {
+          select: {
+            defaultBus: true,
+            bus: { select: { model: true, category: true, amenities: true, luggagePieces: true } },
+          },
+        },
+      },
+    }),
+    assignmentIds.length
+      ? prisma.vehicleAssignment.findMany({
+          where: { id: { in: assignmentIds } },
+          select: { bus: { select: { model: true, category: true, amenities: true, luggagePieces: true } } },
+        })
+      : Promise.resolve([] as { bus: BusInfo }[]),
+  ]);
+  const buses: BusInfo[] = assignments.length
+    ? assignments.map((a) => a.bus)
+    : trip?.departure?.bus
+      ? [trip.departure.bus]
+      : [];
+  const first = buses[0];
+  const category: BusCategory | undefined =
+    first && isBusCategory(first.category) ? first.category : undefined;
+  return {
+    carrier: trip?.carrier.name ?? "Asol BUS",
+    busModel: first?.model ?? trip?.departure?.defaultBus ?? null,
+    category,
+    features: buses.length ? commonFeatures(buses.map((b) => parseBusFeatures(b.amenities))) : undefined,
+    luggagePieces: buses.length ? Math.min(...buses.map((b) => b.luggagePieces)) : undefined,
+  };
+}
+
+function shortName(name: string): string {
+  const words = name.trim().split(/\s+/);
+  return (words.length > 1 ? words[0][0] + words[1][0] : name.slice(0, 2)).toUpperCase();
+}
 
 function hhmm(iso: string): string {
   return new Date(iso).toISOString().slice(11, 16);
@@ -44,12 +104,17 @@ async function toSearchTrip(option: SegmentTripOption): Promise<Trip> {
     toIndex: option.toStopIndex,
     destinationLabel: option.toCity,
   });
+  const vehicle = await vehicleInfo(
+    option.tripId,
+    coverage.legs.map((l) => l.assignment?.id).filter((id): id is string => Boolean(id))
+  );
+  const legCount = Math.max(1, coverage.legs.length);
   return {
     id: option.tripId,
     carrierId: "asol",
-    carrier: "Asol BUS",
-    carrierShort: "AB",
-    busType: "Setra S 516 HD",
+    carrier: vehicle.carrier,
+    carrierShort: shortName(vehicle.carrier),
+    busType: vehicle.busModel ?? "",
     transportType: "BUS",
     from: option.fromCity,
     to: option.toCity,
@@ -59,7 +124,7 @@ async function toSearchTrip(option: SegmentTripOption): Promise<Trip> {
     price: priced.price,
     currency: "EUR",
     seatsLeft,
-    amenities: ["Wi-Fi", "USB", "A/C", "WC"],
+    amenities: (vehicle.features ?? []).map((f) => LEGACY_AMENITY_LABEL[f] ?? f),
     rating: 4.8,
     hasAssignedSeats: option.hasAssignedSeats,
     priceTier: priced.breakdown ? priced.breakdown.tierIndex + 1 : undefined,
@@ -67,6 +132,14 @@ async function toSearchTrip(option: SegmentTripOption): Promise<Trip> {
     fromStopIndex: option.fromStopIndex,
     toStopIndex: option.toStopIndex,
     transferCity: coverage.transferCity ?? undefined,
+    departureAt: option.departureTime,
+    arrivalAt: option.arrivalTime,
+    fromStation: option.fromStation,
+    toStation: option.toStation,
+    busCategory: vehicle.category,
+    features: vehicle.features,
+    luggagePieces: vehicle.luggagePieces,
+    transfers: coverage.transferCity ? Math.max(1, legCount - 1) : 0,
     legSegments: coverage.legs.map((leg) => ({
       legId: leg.legId,
       label: leg.label,

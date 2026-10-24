@@ -1,3 +1,4 @@
+import type { BusCategory, BusFeature } from "@/lib/buses/features";
 export type TransportType = "BUS" | "FLIGHT" | "TRAIN";
 
 export type Trip = {
@@ -38,6 +39,19 @@ export type Trip = {
     isDirect?: boolean;
   }[];
   transferCity?: string;
+  /** ISO timestamps of the sold segment (day change, filters). */
+  departureAt?: string;
+  arrivalAt?: string;
+  /** Boarding / drop-off point names, when known. */
+  fromStation?: string;
+  toStation?: string;
+  /** Passenger-facing class and services of the bus(es). */
+  busCategory?: BusCategory;
+  features?: BusFeature[];
+  /** Checked suitcases included per passenger. */
+  luggagePieces?: number;
+  /** Number of changes (0 = direct). */
+  transfers?: number;
 };
 
 const BUS_CARRIERS = [
@@ -93,6 +107,15 @@ type TripSeed = {
   amen: number[];
 };
 
+const MOCK_FEATURE: Record<string, BusFeature> = {
+  "Wi-Fi": "wifi",
+  USB: "sockets",
+  Outlets: "sockets",
+  "A/C": "ac",
+  WC: "wc",
+};
+const MOCK_CATEGORY: BusCategory[] = ["COMFORT", "STANDARD", "STANDARD", "VIP", "COMFORT", "MINIBUS"];
+
 function buildTrips(
   idPrefix: string,
   carrierId: string,
@@ -122,6 +145,15 @@ function buildTrips(
       seatsLeft: b.seats,
       amenities: b.amen.map((idx) => amenities[idx]),
       rating: b.rating,
+      ...(transportType === "BUS"
+        ? {
+            busCategory: MOCK_CATEGORY[i % MOCK_CATEGORY.length],
+            features: [...new Set(b.amen.map((idx) => MOCK_FEATURE[amenities[idx]]).filter(Boolean))],
+            luggagePieces: i % 3 === 0 ? 2 : 1,
+            transfers: i === 2 ? 1 : 0,
+            transferCity: i === 2 ? "Львів" : undefined,
+          }
+        : {}),
     };
   });
 }
