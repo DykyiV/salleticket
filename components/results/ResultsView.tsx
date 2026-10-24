@@ -24,6 +24,10 @@ import type { Trip } from "@/lib/mockTrips";
 
 type Props = {
   trips: Trip[];
+  /** The searched cities (as typed) — the seat step searches them again. */
+  from: string;
+  to: string;
+  pax: { adults: number; children: number; seniors: number };
   initialFilters: Filters;
   initialSort: SortKey;
   passengers: number;
@@ -55,6 +59,17 @@ export default function ResultsView(props: Props) {
   }, [filters, sort]);
 
   const reset = () => setFilters(EMPTY_FILTERS);
+
+  const seatHref = (trip: Trip) => {
+    const q = new URLSearchParams({ carrierId: trip.carrierId, tripId: trip.id, from: props.from, to: props.to, tripKind: props.tripKind });
+    if (props.date) q.set("date", props.date);
+    if (trip.fromStopIndex != null) q.set("fi", String(trip.fromStopIndex));
+    if (trip.toStopIndex != null) q.set("ti", String(trip.toStopIndex));
+    if (props.returnDate) q.set("returnDate", props.returnDate);
+    q.set("passengers", String(props.passengers));
+    for (const [k, v] of Object.entries(props.pax)) if (v) q.set(k, String(v));
+    return `/trip?${q.toString()}`;
+  };
 
   const panel = <FilterPanel facets={facets} filters={filters} setFilters={setFilters} />;
 
@@ -131,9 +146,7 @@ export default function ResultsView(props: Props) {
                   trip={trip}
                   passengers={props.passengers}
                   onlineDiscountPercent={props.onlineDiscountPercent}
-                  date={props.date}
-                  tripKind={props.tripKind}
-                  returnDate={props.returnDate}
+                  seatHref={seatHref(trip)}
                 />
               </li>
             ))}

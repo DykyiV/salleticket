@@ -13,6 +13,7 @@ import { uniqueReference } from "@/lib/tickets/reference";
 import { can } from "@/lib/auth/permissions";
 import { isTicketStaff, ticketListWhere, ticketRights } from "@/lib/auth/access";
 import { CashLimitError, assertCashBookingAllowed } from "@/lib/tickets/cashLimits";
+import { ageCategoryFor, birthDateProblem, parseBirthDate } from "@/lib/age";
 import { readVisitorId } from "@/lib/security/visitor";
 import {
   SeatHeldError,
@@ -37,6 +38,8 @@ type PassengerPayload = Partial<BookingPassenger> & {
   firstName?: string;
   lastName?: string;
   ageCategory?: AgeCategory | string;
+  /** YYYY-MM-DD; when given, the fare category is derived from it. */
+  birthDate?: string;
 };
 
 type PassengerInput = PassengerPayload & {
@@ -75,7 +78,6 @@ type CreateBookingBody = {
   returnSeatNumber?: number | null;
 };
 
-const SERVICE_FEE_EUR = 1.5;
 const MAX_PASSENGERS = 6;
 
 class ValidationError extends Error {
@@ -95,13 +97,14 @@ type ResolvedPassenger = {
   firstName: string;
   lastName: string;
   ageCategory: AgeCategory;
+  birthDate: Date | null;
   promoCode?: string;
   seatNumber?: number | null;
   returnSeatNumber?: number | null;
   legSeats?: (number | null)[];
 };
 
-function resolvePassenger(p?: PassengerInput): ResolvedPassenger {
+function resolvePassenger(p: PassengerInput | undefined, travelDate: Date): ResolvedPassenger {
   if (!p) throw new ValidationError("Пасажир обовʼязковий");
 
   let firstName = p.firstName?.trim() ?? "";
@@ -114,7 +117,17 @@ function resolvePassenger(p?: PassengerInput): ResolvedPassenger {
   if (firstName.length < 1) throw new ValidationError("Вкажіть імʼя");
   if (lastName.length < 1) throw new ValidationError("Вкажіть прізвище");
 
-  const ageCategory = p.ageCategory;
+  // Date of birth (new checkout) decides the fare category on the travel
+  // date; the explicit category is kept for older clients and staff tools.
+  let birthDate: Date | null = null;
+  let ageCategory = p.ageCategory;
+  if (p.birthDate) {
+    birthDate = parseBirthDate(p.birthDate);
+    if (!birthDate) throw new ValidationError("Дата народження: РРРР-ММ-ДД");
+    const problem = birthDateProblem(birthDate);
+    if (problem) throw new ValidationError(problem);
+    ageCategory = ageCategoryFor(birthDate, travelDate);
+  }
   if (!ageCategory) throw new ValidationError("Вкажіть вікову категорію");
   if (!(ageCategory in AgeCategory)) {
     throw new ValidationError(
@@ -126,7 +139,8 @@ function resolvePassenger(p?: PassengerInput): ResolvedPassenger {
     firstName,
     lastName,
     ageCategory: ageCategory as AgeCategory,
-        promoCode: p.promoCode?.trim() || undefined,
+    birthDate,
+    promoCode: p.promoCode?.trim() || undefined,
     seatNumber: p.seatNumber ?? null,
     returnSeatNumber: p.returnSeatNumber ?? null,
     legSeats: p.legSeats,
@@ -240,7 +254,10 @@ export async function POST(req: NextRequest) {
 
   let passengers: ResolvedPassenger[];
   try {
-    passengers = rawPassengers.map(resolvePassenger);
+    const travelDate =
+      storedTrip?.departureTime ??
+      (body.tripSnapshot?.date ? new Date(`${body.tripSnapshot.date}T12:00:00Z`) : new Date());
+    passengers = rawPassengers.map((p) => resolvePassenger(p, travelDate));
   } catch (err) {
     if (err instanceof Error) {
       return NextResponse.json({ error: err.message }, { status: 400 });
@@ -513,10 +530,14 @@ export async function POST(req: NextRequest) {
           validatedPromos[i]
         );
         const fullPrice = pricing.finalPrice;
-        const finalPrice =
+        const farePrice =
           paymentMethod === "ONLINE"
             ? applyOnlineDiscount(fullPrice, siteSettings)
             : fullPrice;
+        // Service fee (Settings, 0 = none) is charged on top of the fare and
+        // is the agency's income — it never goes into the carrier's share.
+        const serviceFee = siteSettings.serviceFeePerPassenger;
+        const finalPrice = Math.round((farePrice + serviceFee) * 100) / 100;
 
         const outboundSeat = await assertSeatAvailable(
           tx,
@@ -549,7 +570,7 @@ export async function POST(req: NextRequest) {
               carrier.id,
               segmentCities?.fromCity ?? trip.fromCity,
               segmentCities?.toCity ?? trip.toCity,
-              finalPrice
+              farePrice
             );
 
         const ticket = await tx.ticket.create({
@@ -560,8 +581,11 @@ export async function POST(req: NextRequest) {
             basePrice: pricing.basePrice,
             finalPrice,
             commissionPercent: commission?.percent ?? null,
-            commissionAmount: commission?.commissionAmount ?? null,
+            commissionAmount: commission
+              ? Math.round((commission.commissionAmount + serviceFee) * 100) / 100
+              : null,
             carrierAmount: commission?.carrierAmount ?? null,
+            serviceFee,
             // Sales-agent reward % frozen at booking (see agent reconciliation).
             agentRewardPercent: account.agentRewardPercent ?? null,
             seatNumber: outboundSeat,
@@ -666,6 +690,7 @@ export async function POST(req: NextRequest) {
             firstName: p.firstName,
             lastName: p.lastName,
             ageCategory: p.ageCategory,
+            birthDate: p.birthDate,
             phone,
             email: accountEmail,
             promoCode: validatedPromos[i]?.code ?? null,
@@ -846,9 +871,7 @@ export async function POST(req: NextRequest) {
       (sum, item) => sum + item.ticket.finalPrice,
       0
     );
-    const totalPaid =
-      Math.round((totalTickets + SERVICE_FEE_EUR * created.items.length) * 100) /
-      100;
+    const totalPaid = Math.round(totalTickets * 100) / 100;
     const payRef = created.groupRef ?? first.booking.reference;
 
     return NextResponse.json(
@@ -908,7 +931,7 @@ export async function POST(req: NextRequest) {
           totalPaid,
         },
         carrierReference: adapterResult.carrierReference,
-        fees: { service: SERVICE_FEE_EUR, currency: "EUR" },
+        fees: { service: siteSettings.serviceFeePerPassenger, currency: "EUR" },
       },
       { status: 201 }
     );

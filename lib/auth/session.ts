@@ -49,6 +49,7 @@ export async function getCurrentUser() {
         canHideStops: true,
         canHideSeats: true,
         notifyChannels: true,
+        passwordSet: true,
         createdAt: true,
       },
     });

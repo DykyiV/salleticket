@@ -560,6 +560,65 @@ async function main() {
   const adminCookie = await login("admin@asolbus.local", "Admin12345");
   check("seeded admin can log in", Boolean(adminCookie));
   if (adminCookie) {
+    // --- Guest checkout + service fee ----------------------------------------
+    const guestEmail = `guest-${Date.now()}@example.com`;
+    const guestNew = await fetch(`${BASE_URL}/api/auth/guest`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: guestEmail }),
+    });
+    const guestCookie = sessionCookie(guestNew);
+    check("guest checkout: new e-mail creates an account and signs in", guestNew.status === 200 && Boolean(guestCookie), `got ${guestNew.status}`);
+    const guestAgain = await fetch(`${BASE_URL}/api/auth/guest`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: guestEmail }),
+    });
+    check("guest checkout: known e-mail asks for the password (409)", guestAgain.status === 409, `got ${guestAgain.status}`);
+    const guestWrong = await fetch(`${BASE_URL}/api/auth/guest`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: "agent@asolbus.local", password: "wrong-password-1" }),
+    });
+    check("guest checkout: wrong password for an existing account (401)", guestWrong.status === 401, `got ${guestWrong.status}`);
+
+    const setFee = async (fee) =>
+      fetch(`${BASE_URL}/api/admin/settings`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", Cookie: adminCookie },
+        body: JSON.stringify({ serviceFeePerPassenger: fee }),
+      });
+    await setFee(2);
+    const feeSeats = await (await fetch(`${BASE_URL}/api/trips/${encodeURIComponent(trip.id)}/seats`)).json();
+    const feeSeat = (feeSeats.layout?.decks ?? [])
+      .flatMap((d) => d.rows.flat())
+      .map((cell) => cell.seat)
+      .find((seat) => seat && seat.status === "AVAILABLE" && seat.mult === 1);
+    const feeBooking = await fetch(`${BASE_URL}/api/booking`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Cookie: guestCookie ?? "" },
+      body: JSON.stringify({
+        ...bookingPayload,
+        seatNumber: undefined,
+        promoCode: undefined,
+        passenger: undefined,
+        contact: { phone: "+380661112233" },
+        passengers: [{ firstName: "Діана", lastName: "Тест", birthDate: "2016-05-20", seatNumber: feeSeat?.number ?? null }],
+      }),
+    });
+    const feeBody = await feeBooking.json();
+    const childFare = Math.round(trip.price * 0.8 * 100) / 100;
+    check(
+      "date of birth decides the fare (child 5–12, −20%) and the service fee is charged",
+      feeBooking.status === 201 &&
+        feeBody.booking?.passengers?.[0]?.ageCategory === "CHILD_5_12" &&
+        Math.abs(feeBody.booking.passengers[0].finalPrice - (childFare + 2)) < 0.01 &&
+        Math.abs(feeBody.booking.totalPaid - (childFare + 2)) < 0.01 &&
+        feeBody.fees?.service === 2,
+      `got ${feeBooking.status}: ${JSON.stringify(feeBody).slice(0, 220)}`
+    );
+    await setFee(0);
+
     const users = (await (await fetch(`${BASE_URL}/api/admin/users`, { headers: { Cookie: adminCookie } })).json()).users ?? [];
     const self = users.find((u) => u.email === "admin@asolbus.local");
     const selfDemote = await fetch(`${BASE_URL}/api/admin/users`, {

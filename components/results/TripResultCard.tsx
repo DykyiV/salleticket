@@ -1,7 +1,6 @@
 "use client";
 
-import { useState } from "react";
-import SeatSelectModal from "@/components/booking/SeatSelectModal";
+import Link from "next/link";
 import Icon, { type IconName } from "@/components/site/Icon";
 import { fmt, plural, useI18n } from "@/lib/i18n/client";
 import { money } from "@/lib/i18n/format";
@@ -33,22 +32,18 @@ export default function TripResultCard({
   trip,
   passengers,
   onlineDiscountPercent,
-  date,
-  tripKind,
-  returnDate,
+  seatHref,
 }: {
   trip: Trip;
   passengers: number;
   /** 0 when online payment is off — then no online price is shown. */
   onlineDiscountPercent: number;
-  date?: string;
-  tripKind: string;
-  returnDate?: string;
+  /** Link to the seat step for this trip. */
+  seatHref: string;
 }) {
   const { t, lang } = useI18n();
   const r = t.results;
   const c = r.card;
-  const [open, setOpen] = useState(false);
 
   const hours = Math.floor(trip.durationMinutes / 60);
   const minutes = trip.durationMinutes % 60;
@@ -154,28 +149,20 @@ export default function TripResultCard({
                       : plural(lang, trip.seatsLeft, c.seatsLeft)}
             </p>
           </div>
-          <button
-            type="button"
-            onClick={() => setOpen(true)}
-            disabled={soldOut || notEnough}
-            className="btn-primary shrink-0 px-4 py-3 text-sm sm:px-5"
-          >
-            <Icon name="seat" className="h-4 w-4" />
-            {c.choose}
-          </button>
+          {soldOut || notEnough ? (
+            <span aria-disabled="true" className="btn-primary shrink-0 cursor-not-allowed px-4 py-3 text-sm opacity-50 sm:px-5">
+              <Icon name="seat" className="h-4 w-4" />
+              {c.choose}
+            </span>
+          ) : (
+            <Link href={seatHref} className="btn-primary shrink-0 px-4 py-3 text-sm sm:px-5">
+              <Icon name="seat" className="h-4 w-4" />
+              {c.choose}
+            </Link>
+          )}
         </div>
       </div>
 
-      {open ? (
-        <SeatSelectModal
-          trip={trip}
-          date={date}
-          tripKind={tripKind}
-          returnDate={returnDate}
-          onlineDiscountPercent={onlineDiscountPercent}
-          onClose={() => setOpen(false)}
-        />
-      ) : null}
     </article>
   );
 }
