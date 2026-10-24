@@ -70,6 +70,26 @@ from the payment system (`PAID_ONLINE`). A booking not paid online within
 by SMS and e-mail (`lib/payments.ts`, swept hourly by
 `POST /api/cron/payments` and whenever tickets are opened).
 
+### E-ticket, PDF and ticket e-mail
+
+After checkout the passenger lands on `/tickets/<reference>?new=1` (step 5):
+one card per passenger of the order with the boarding QR (opens
+`/check/<reference>` for the driver), boarding / drop-off addresses with map
+links, seat, bus and price, the «come 30–45 min early» reminder, «Download
+PDF» and «Send by e-mail». `/tickets` is «My tickets» for passengers (staff
+are sent to the cabinet list). The page, the A4 PDF (`lib/tickets/pdf.ts`,
+UA/ES/EN, one page per passenger) and the e-mail (`lib/tickets/ticketMail.ts`)
+share one model, `lib/tickets/eTicket.ts`.
+
+The e-mail goes only to the address given in the order: right after a
+pay-on-boarding booking, after the whole order is paid for online ones, and
+on the button (3 per order / 10 per account an hour). Providers are set by
+env (`lib/mail.ts`): `MAIL_PROVIDER=resend|brevo`, `MAIL_API_KEY`,
+`MAIL_FROM` (a sender on a domain verified with the provider), optional
+`MAIL_REPLY_TO` and `SITE_URL` for links. Without them nothing is sent, the
+button says mail is not connected and the ticket history records
+«Email не відправлено».
+
 ### Carriers and transport types
 
 `lib/carriers/registry.ts` fans a search out to every adapter in parallel:
@@ -111,8 +131,8 @@ page exposes it as tabs. A new integration implements `CarrierAdapter`
   month (1–28), e-mail, agent reward %. `.github/workflows/settlements.yml`
   calls `POST /api/cron/auto-reports` (Bearer `CRON_SECRET`) daily; due rows
   get last month's report once per period. Ships **off** behind a global
-  switch; mail delivery is a stub (`lib/finance/mailer.ts`) until a provider
-  is configured. The workflow is skipped until `APP_URL` / `CRON_SECRET` are
+  switch; mail goes through the same provider as ticket e-mails
+  (`lib/mail.ts`) once one is configured. The workflow is skipped until `APP_URL` / `CRON_SECRET` are
   set.
 
 ### Roles and permissions

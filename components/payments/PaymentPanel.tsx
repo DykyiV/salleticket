@@ -134,7 +134,7 @@ export default function PaymentPanel({
             : `Квиток ${state.items[0]?.reference ?? reference} оплачено онлайн.`}
         </p>
         <a
-          href={`/cabinet/tickets/${state.items[0]?.reference ?? reference}`}
+          href={`/tickets/${state.items[0]?.reference ?? reference}?new=1`}
           className="mt-4 inline-block rounded-xl bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white"
         >
           Відкрити квиток
@@ -152,7 +152,7 @@ export default function PaymentPanel({
           Ми надіслали вам SMS та e-mail. Можна оформити новий квиток.
         </p>
         <a
-          href={`/cabinet/tickets/${state.items[0]?.reference ?? reference}`}
+          href={`/tickets/${state.items[0]?.reference ?? reference}`}
           className="mt-4 inline-block rounded-xl bg-amber-600 px-5 py-2.5 text-sm font-semibold text-white"
         >
           До квитка

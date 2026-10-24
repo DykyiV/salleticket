@@ -46,7 +46,6 @@ export type CheckoutTrip = {
 type Promo = { code: string; type?: "PERCENT" | "FIXED"; percent: number; amount?: number | null; label: string | null };
 type PromoState = { status: "empty" } | { status: "checking" } | { status: "valid"; promo: Promo } | { status: "invalid"; message: string };
 type Passenger = { firstName: string; lastName: string; birthDate: string };
-type Done = { references: string[]; totalPaid: number; created: boolean };
 type Method = "CASH_ON_BUS" | "ONLINE";
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
@@ -85,7 +84,6 @@ export default function CheckoutForm({
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<{ message: string; seat: boolean } | null>(null);
-  const [done, setDone] = useState<Done | null>(null);
 
   const travelDate = useMemo(() => new Date(`${trip.date ?? new Date().toISOString().slice(0, 10)}T12:00:00Z`), [trip.date]);
 
@@ -218,8 +216,8 @@ export default function CheckoutForm({
       return;
     }
     setSubmitting(true);
+    let leaving = false;
     try {
-      const wasGuest = !user;
       if ((await ensureAccount()) === "stop") return;
       const res = await fetch("/api/booking", {
         method: "POST",
@@ -273,70 +271,24 @@ export default function CheckoutForm({
         return;
       }
       if (method === "ONLINE" && data.booking.payment?.payUrl) {
+        leaving = true;
         router.push(data.booking.payment.payUrl);
         return;
       }
-      setDone({
-        references: (data.booking.passengers ?? []).map((p) => p.reference),
-        totalPaid: data.booking.totalPaid,
-        created: wasGuest && !accountExists,
-      });
-      window.scrollTo({ top: 0, behavior: "smooth" });
-      router.refresh();
+      // The e-ticket page is step 5: QR, PDF, e-mail and «My tickets».
+      const first = data.booking.passengers?.[0]?.reference;
+      if (first) {
+        leaving = true;
+        router.push(`/tickets/${encodeURIComponent(first)}?new=1`);
+        return;
+      }
+      setSubmitError({ message: c.errorGeneric, seat: false });
     } catch {
       setSubmitError({ message: c.errorGeneric, seat: false });
     } finally {
-      setSubmitting(false);
+      if (!leaving) setSubmitting(false);
     }
   };
-
-  if (done) {
-    return (
-      <div className="mx-auto max-w-2xl rounded-2xl bg-white p-6 shadow-soft ring-1 ring-slate-200/70 sm:p-8" role="status">
-        <div className="flex items-center gap-3">
-          <span className="flex h-12 w-12 items-center justify-center rounded-full bg-ok-50 text-ok ring-1 ring-ok-100">
-            <Icon name="check" className="h-6 w-6" />
-          </span>
-          <div>
-            <h2 className="text-xl font-bold text-navy">{c.doneTitle}</h2>
-            <p className="text-sm text-ink-muted">{c.doneCash}</p>
-          </div>
-        </div>
-        <ul className="mt-6 space-y-2 rounded-xl bg-slate-50 p-4 text-sm">
-          {done.references.map((ref, i) => (
-            <li key={ref} className="flex items-center justify-between">
-              <span className="text-ink-muted">
-                {passengers[i] ? `${passengers[i].firstName} ${passengers[i].lastName}` : fmt(c.passengerN, { n: i + 1 })}
-                {trip.seats[i] != null ? ` · ${fmt(c.seatN, { n: trip.seats[i] })}` : ""}
-              </span>
-              <span className="font-mono font-semibold tracking-wider text-navy">{ref}</span>
-            </li>
-          ))}
-          <li className="flex items-center justify-between border-t border-slate-200 pt-2">
-            <span className="font-semibold text-navy">{c.doneToPay}</span>
-            <span className="text-lg font-bold tabular-nums text-navy">{money(done.totalPaid, lang)}</span>
-          </li>
-        </ul>
-        {done.created ? (
-          <p className="mt-4 rounded-xl bg-brand-50 px-4 py-3 text-sm text-brand-800 ring-1 ring-brand-100">
-            {c.doneSetPassword}{" "}
-            <Link href="/cabinet" className="font-semibold underline">
-              {t.common.cabinet}
-            </Link>
-          </p>
-        ) : null}
-        <div className="mt-6 flex flex-wrap gap-2">
-          <Link href={`/cabinet/tickets/${done.references[0] ?? ""}`} className="btn-primary">
-            <Icon name="ticket" className="h-4 w-4" />
-            {c.doneOpen}
-          </Link>
-          <Link href="/" className="btn-secondary">
-            {c.doneAnother}
-          </Link>
-        </div>
-      </div>
-    );
-  }
 
   const err = (key: string) =>
     errors[key] ? (

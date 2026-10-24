@@ -570,6 +570,8 @@ model Booking {
   ageCategory AgeCategory @default(ADULT)
   /// Passenger date of birth when given at checkout (age category is derived from it).
   birthDate   DateTime?
+  /// Language the order was placed in (uk | es | en) — for e-mails and PDFs.
+  lang        String?
   phone       String
   email       String?
   promoCode   String?

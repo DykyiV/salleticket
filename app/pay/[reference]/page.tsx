@@ -48,7 +48,7 @@ export default async function PayPage(
           />
         </div>
         <p className="mt-4 text-center text-xs text-slate-400">
-          <Link href="/cabinet/tickets" className="underline">
+          <Link href="/tickets" className="underline">
             До списку квитків
           </Link>
         </p>

@@ -5,6 +5,7 @@ import { updateTicketVersioned } from "@/lib/tickets/version";
 import { notifyPaymentReceived, notifySeatFreed } from "@/lib/notify";
 import { notifyPassenger } from "@/lib/tickets/passengerNotify";
 import { applyOnlineDiscount, getSiteSettings } from "@/lib/settings";
+import { later, mailOrderWhenPaid } from "@/lib/tickets/ticketMail";
 
 /** Reconciliation runs against the top-level client (opens transactions). */
 type Db = PrismaClient;
@@ -58,12 +59,6 @@ export async function reconcileTicketPayment(
           payment: { from: payment.status, to: PaymentStatus.SETTLED },
         },
       });
-      await recordTicketHistory(tx, {
-        ticketId: ticket.id,
-        action: "EMAIL_SENT",
-        source: "SYSTEM",
-        changes: { email: { from: null, to: "квиток надіслано" } },
-      });
     });
     const booking = await db.booking.findFirst({
       where: { ticketId: payment.ticketId },
@@ -72,6 +67,8 @@ export async function reconcileTicketPayment(
     if (booking) {
       await notifyPaymentReceived(booking.reference, payment.amount);
     }
+    // The ticket e-mail (with the PDF) goes out once the whole order is paid.
+    later(() => mailOrderWhenPaid(payment.ticketId));
     return;
   }
 

@@ -30,6 +30,9 @@ import { FULL_ROUTE, resolveSegment, type Segment } from "@/lib/trips/segments";
 import { pickAssignment } from "@/lib/ops/legs";
 import { cityNames } from "@/lib/trips/cities";
 import type { BookingPassenger, Trip } from "@/lib/carriers/types";
+import { getLang } from "@/lib/i18n/server";
+import { loadGroupBookings, requestOrigin } from "@/lib/tickets/eTicket";
+import { later, sendTicketsEmail } from "@/lib/tickets/ticketMail";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -170,6 +173,7 @@ export async function POST(req: NextRequest) {
   const guard = await requireAuth();
   if (!guard.ok) return guard.response;
   const { session } = guard;
+  const lang = await getLang();
   const meta = requestMeta(req);
 
   const account = await prisma.user.findUnique({
@@ -691,6 +695,7 @@ export async function POST(req: NextRequest) {
             lastName: p.lastName,
             ageCategory: p.ageCategory,
             birthDate: p.birthDate,
+            lang,
             phone,
             email: accountEmail,
             promoCode: validatedPromos[i]?.code ?? null,
@@ -821,14 +826,11 @@ export async function POST(req: NextRequest) {
       firstRef,
       `${created.trip.fromCity} → ${created.trip.toCity} · ${created.items.length} пас.`,
     );
-    for (const item of created.items) {
-      await recordTicketHistory(prisma, {
-        ticketId: item.ticket.id,
-        action: "EMAIL_SENT",
-        source: "SYSTEM",
-        timestamp: new Date(Date.now() + 3000),
-        changes: { email: { from: null, to: item.booking.email ?? accountEmail } },
-      });
+    // Ticket e-mail with the PDF: now for pay-on-boarding orders, after the
+    // payment settles for online ones (lib/payments.ts).
+    if (paymentMethod !== "ONLINE") {
+      const origin = requestOrigin(req);
+      later(async () => sendTicketsEmail(await loadGroupBookings(firstRef), { lang, origin }));
     }
     const soldNow = await soldSeatCount(prisma, created.trip.id);
     const gridCapacity = outboundPricing.breakdown ? 46 : 46;

@@ -341,6 +341,12 @@ export default async function CabinetTicketEditPage(props: {
               />
             </div>
             <div className="mt-3 flex flex-wrap gap-1.5">
+              <Link
+                href={`/tickets/${full.reference}`}
+                className="rounded-lg bg-brand-600 px-2.5 py-1.5 text-xs font-medium text-white hover:bg-brand-700"
+              >
+                Е-квиток
+              </Link>
               <a
                 href={`/api/tickets/${full.reference}/pdf`}
                 className="rounded-lg bg-slate-900 px-2.5 py-1.5 text-xs font-medium text-white hover:bg-slate-700"

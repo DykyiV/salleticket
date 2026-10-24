@@ -340,6 +340,37 @@ async function main() {
     `got ${ownPdf.status} ${ownPdf.headers.get("content-type")}`
   );
 
+  const groupPdf = await fetch(`${BASE_URL}/api/tickets/${reference}/pdf?all=1&lang=es`, { headers: { Cookie: cookie } });
+  check(
+    "owner can download the whole order as one PDF (?all=1)",
+    groupPdf.status === 200 && Buffer.from(await groupPdf.arrayBuffer()).subarray(0, 5).toString() === "%PDF-",
+    `got ${groupPdf.status}`
+  );
+
+  // --- E-ticket page and «Мої квитки» --------------------------------------
+  const ticketPage = await fetch(`${BASE_URL}/tickets/${reference}?new=1`, { headers: { Cookie: cookie } });
+  const ticketHtml = await ticketPage.text();
+  check(
+    "owner sees the e-ticket page with QR and the reminder",
+    ticketPage.status === 200 && ticketHtml.includes(reference) && ticketHtml.includes("QR") && ticketHtml.includes("30–45"),
+    `got ${ticketPage.status}`
+  );
+  const myTickets = await fetch(`${BASE_URL}/tickets`, { headers: { Cookie: cookie } });
+  check("«Мої квитки» lists the order", myTickets.status === 200 && (await myTickets.text()).includes(reference), `got ${myTickets.status}`);
+  const ticketPageAnon = await fetch(`${BASE_URL}/tickets/${reference}`, { redirect: "manual" });
+  check("e-ticket page asks a visitor to sign in", [303, 307, 308].includes(ticketPageAnon.status) && (ticketPageAnon.headers.get("location") ?? "").includes("/login"), `got ${ticketPageAnon.status}`);
+
+  // --- «Надіслати на e-mail» ---------------------------------------------------
+  const mailNoAuth = await fetch(`${BASE_URL}/api/tickets/${reference}/email`, { method: "POST" });
+  check("POST /api/tickets/[reference]/email without auth returns 401", mailNoAuth.status === 401, `got ${mailNoAuth.status}`);
+  const mailOwn = await fetch(`${BASE_URL}/api/tickets/${reference}/email`, { method: "POST", headers: { Cookie: cookie } });
+  const mailOwnBody = await mailOwn.json().catch(() => ({}));
+  check(
+    "e-mail button says honestly when mail is not connected (503)",
+    process.env.MAIL_PROVIDER ? mailOwn.status === 200 : mailOwn.status === 503 && mailOwnBody.status === "not_configured",
+    `got ${mailOwn.status} ${JSON.stringify(mailOwnBody)}`
+  );
+
   const bulkPdfAsCustomer = await fetch(`${BASE_URL}/api/tickets/bulk-pdf?ids=${ownTicketId}`, {
     headers: { Cookie: cookie },
   });
@@ -414,7 +445,12 @@ async function main() {
     const agentForeign = await fetch(`${BASE_URL}/api/booking?reference=${reference}`, { headers: { Cookie: agentCookie } });
     check("AGENT cannot open a ticket someone else sold (403)", agentForeign.status === 403, `got ${agentForeign.status}`);
     const agentForeignPdf = await fetch(`${BASE_URL}/api/tickets/${reference}/pdf`, { headers: { Cookie: agentCookie } });
-    check("AGENT cannot download that ticket's PDF (403)", agentForeignPdf.status === 403, `got ${agentForeignPdf.status}`);
+    check("AGENT cannot download that ticket's PDF (404)", agentForeignPdf.status === 404, `got ${agentForeignPdf.status}`);
+    const agentForeignMail = await fetch(`${BASE_URL}/api/tickets/${reference}/email`, { method: "POST", headers: { Cookie: agentCookie } });
+    check("AGENT cannot e-mail that ticket (404)", agentForeignMail.status === 404, `got ${agentForeignMail.status}`);
+    const agentForeignPage = await fetch(`${BASE_URL}/tickets/${reference}`, { headers: { Cookie: agentCookie } });
+    const agentForeignHtml = await agentForeignPage.text();
+    check("AGENT sees «not found» on that e-ticket page", agentForeignHtml.includes("Квиток не знайдено") && !agentForeignHtml.includes(`>${reference}<`), `got ${agentForeignPage.status}`);
     const agentForeignCancel = await fetch(`${BASE_URL}/api/account/tickets/${ownTicketId}/status`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json", Cookie: agentCookie },
