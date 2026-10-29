@@ -55,3 +55,36 @@ jobs:
 
       - name: Smoke tests
         run: npm run test:smoke
+
+  mobile-app:
+    # The Grandes Tour app in mobile/ (Expo). Native builds run separately
+    # (EAS / TestFlight); here: types, lint and that iOS, Android and web bundle.
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type check
+        run: npx tsc --noEmit
+
+      - name: Lint
+        run: npx expo lint
+
+      - name: Bundle iOS, Android and web
+        env:
+          EXPO_PUBLIC_API_URL: https://example.invalid
+        run: npx expo export --platform ios --platform android --platform web --output-dir /tmp/app-bundle

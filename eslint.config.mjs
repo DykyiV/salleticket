@@ -11,5 +11,7 @@ export default defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // The mobile app has its own toolchain (npx expo lint in mobile/).
+    "mobile/**",
   ]),
 ]);
