@@ -2,6 +2,8 @@ import type { Role } from "@prisma/client";
 
 export const SESSION_COOKIE = "asol_session";
 export const SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 7;
+/** The mobile app keeps its token longer and renews it on every launch. */
+export const APP_SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 30;
 
 /**
  * Role hierarchy: a user with a higher-ranked role can do anything a lower

@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { prisma } from "@/lib/db";
 import { verifyPassword } from "@/lib/auth/password";
-import { issueSession, setSessionCookie } from "@/lib/auth/session";
+import { issueAppSession, issueSession, setSessionCookie, wantsAppToken } from "@/lib/auth/session";
 import {
   LOGIN_PER_ACCOUNT,
   LOGIN_PER_IP,
@@ -19,6 +19,8 @@ export const dynamic = "force-dynamic";
 type Body = {
   email?: string;
   password?: string;
+  /** "app" — the mobile app wants a bearer token in the body, not a cookie. */
+  client?: string;
 };
 
 /** Compared when the e-mail is unknown, so both cases take the same time. */
@@ -63,15 +65,18 @@ export async function POST(req: NextRequest) {
   }
 
   await clearHits(accountKey);
+  const publicUser = {
+    id: user.id,
+    email: user.email,
+    role: user.role,
+    createdAt: user.createdAt,
+  };
+  if (wantsAppToken(body)) {
+    const { token, expiresAt } = await issueAppSession(user);
+    return NextResponse.json({ user: publicUser, token, expiresAt }, { headers: { "Cache-Control": "no-store" } });
+  }
   const token = await issueSession(user);
-  const res = NextResponse.json({
-    user: {
-      id: user.id,
-      email: user.email,
-      role: user.role,
-      createdAt: user.createdAt,
-    },
-  });
+  const res = NextResponse.json({ user: publicUser });
   setSessionCookie(res, token);
   return res;
 }

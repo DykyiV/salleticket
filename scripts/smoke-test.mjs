@@ -47,6 +47,8 @@ function sessionCookie(res) {
 }
 
 async function main() {
+  /** Mobile app bearer header, set once the app has signed in. */
+  let bearer = {};
   console.log(`Smoke tests against ${BASE_URL}\n`);
   await waitForServer();
 
@@ -205,8 +207,14 @@ async function main() {
 
   // Seat holds: the visitor id comes from a server cookie, max 6 seats.
   // Needs a real coach with assigned seats (Київ → Берлін in the seed).
-  const coachSearch = await (await fetch(`${BASE_URL}/api/search?from=${encodeURIComponent("Київ")}&to=${encodeURIComponent("Берлін")}&date=2026-10-27`)).json();
-  const coach = coachSearch.trips?.find((t) => t.carrierId === "asol" && t.hasAssignedSeats) ?? trip;
+  // The seed schedules it weekly from today, so look up the next run.
+  let coach = null;
+  for (let day = 1; day <= 14 && !coach; day += 1) {
+    const date = new Date(Date.now() + day * 86_400_000).toISOString().slice(0, 10);
+    const coachSearch = await (await fetch(`${BASE_URL}/api/search?from=${encodeURIComponent("Київ")}&to=${encodeURIComponent("Берлін")}&date=${date}`)).json();
+    coach = coachSearch.trips?.find((t) => t.carrierId === "asol" && t.hasAssignedSeats) ?? null;
+  }
+  coach = coach ?? trip;
   const seatsForHolds = await fetch(`${BASE_URL}/api/trips/${encodeURIComponent(coach.id)}/seats`);
   const visitor = (seatsForHolds.headers.get("set-cookie") ?? "").match(/asol_visitor=[^;]+/)?.[0];
   check("seat map issues the visitor cookie", Boolean(visitor));
@@ -357,6 +365,75 @@ async function main() {
   );
   const myTickets = await fetch(`${BASE_URL}/tickets`, { headers: { Cookie: cookie } });
   check("«Мої квитки» lists the order", myTickets.status === 200 && (await myTickets.text()).includes(reference), `got ${myTickets.status}`);
+
+  // --- Mobile app: bearer token, «Мої квитки» and ticket JSON ---------------
+  const appLogin = await fetch(`${BASE_URL}/api/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password, client: "app" }),
+  });
+  const appLoginBody = await appLogin.json();
+  check(
+    "app login returns a bearer token and sets no cookie",
+    appLogin.ok && typeof appLoginBody.token === "string" && Boolean(appLoginBody.expiresAt) && !sessionCookie(appLogin),
+    `got ${appLogin.status}`
+  );
+  bearer = { Authorization: `Bearer ${appLoginBody.token}` };
+
+  const appMe = await (await fetch(`${BASE_URL}/api/auth/me`, { headers: bearer })).json();
+  check("the bearer token signs the app in (/api/auth/me)", appMe.user?.email === email);
+
+  const appOrdersRes = await fetch(`${BASE_URL}/api/me/tickets`, { headers: bearer });
+  const appOrders = await appOrdersRes.json();
+  const appOrderList = [...(appOrders.upcoming ?? []), ...(appOrders.past ?? [])];
+  check(
+    "GET /api/me/tickets lists the order for the app",
+    appOrdersRes.ok && appOrderList.some((o) => o.tickets.some((t) => t.reference === reference)),
+    `got ${appOrdersRes.status}`
+  );
+  check("GET /api/me/tickets is never cached", (appOrdersRes.headers.get("cache-control") ?? "").includes("no-store"));
+
+  const anonOrders = await fetch(`${BASE_URL}/api/me/tickets`);
+  check("GET /api/me/tickets without sign-in returns 401", anonOrders.status === 401, `got ${anonOrders.status}`);
+
+  const appTicketRes = await fetch(`${BASE_URL}/api/tickets/${reference}`, { headers: bearer });
+  const appTicket = await appTicketRes.json();
+  check(
+    "GET /api/tickets/[reference] returns the e-ticket with its QR link",
+    appTicketRes.ok && appTicket.tickets?.some((t) => t.reference === reference && t.checkUrl.endsWith(`/check/${reference}`)),
+    `got ${appTicketRes.status}`
+  );
+
+  const appPdf = await fetch(`${BASE_URL}/api/tickets/${reference}/pdf`, { headers: bearer });
+  check(
+    "the app downloads the ticket PDF with its token",
+    appPdf.status === 200 && Buffer.from(await appPdf.arrayBuffer()).subarray(0, 5).toString() === "%PDF-",
+    `got ${appPdf.status}`
+  );
+
+  const strangerRes = await fetch(`${BASE_URL}/api/auth/register`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email: `stranger-${Date.now()}@example.com`, password, client: "app" }),
+  });
+  const stranger = await strangerRes.json();
+  check("app registration returns a token", strangerRes.status === 201 && typeof stranger.token === "string", `got ${strangerRes.status}`);
+  const strangerBearer = { Authorization: `Bearer ${stranger.token}` };
+  const strangerTicket = await fetch(`${BASE_URL}/api/tickets/${reference}`, { headers: strangerBearer });
+  check("someone else's ticket is 404 for the app", strangerTicket.status === 404, `got ${strangerTicket.status}`);
+  const strangerOrders = await (await fetch(`${BASE_URL}/api/me/tickets`, { headers: strangerBearer })).json();
+  check(
+    "another passenger's «Мої квитки» does not show the order",
+    [...(strangerOrders.upcoming ?? []), ...(strangerOrders.past ?? [])].every((o) => o.tickets.every((t) => t.reference !== reference))
+  );
+
+  const refreshRes = await fetch(`${BASE_URL}/api/auth/refresh`, { method: "POST", headers: bearer });
+  const refreshed = await refreshRes.json();
+  check("POST /api/auth/refresh gives the app a fresh token", refreshRes.ok && typeof refreshed.token === "string", `got ${refreshRes.status}`);
+  const refreshAnon = await fetch(`${BASE_URL}/api/auth/refresh`, { method: "POST" });
+  check("POST /api/auth/refresh without a token returns 401", refreshAnon.status === 401, `got ${refreshAnon.status}`);
+  const badBearer = await (await fetch(`${BASE_URL}/api/auth/me`, { headers: { Authorization: "Bearer not.a.token" } })).json();
+  check("a forged bearer token is ignored", badBearer.user === null);
   // --- Sign-in return address (?next=) ---------------------------------------
   const evilLogin = await (await fetch(`${BASE_URL}/login?next=${encodeURIComponent("https://evil.example/x")}`)).text();
   check(
@@ -724,6 +801,8 @@ async function main() {
   const meAfter = await fetch(`${BASE_URL}/api/auth/me`, { headers: { Cookie: cookie } });
   const meAfterBody = await meAfter.json();
   check("a copied session token stops working after logout", meAfterBody.user === null);
+  const appAfter = await (await fetch(`${BASE_URL}/api/auth/me`, { headers: bearer })).json();
+  check("logout on the site also signs the app out (same revocation)", appAfter.user === null);
 
   console.log(`\n${passed} passed, ${failed} failed`);
   if (failed > 0) process.exit(1);

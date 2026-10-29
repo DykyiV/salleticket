@@ -27,17 +27,20 @@ function getSecret(): Uint8Array {
   return new TextEncoder().encode(raw);
 }
 
-export async function signSession(payload: {
-  sub: string;
-  email: string;
-  role: Role;
-  v: number;
-}): Promise<string> {
+export async function signSession(
+  payload: {
+    sub: string;
+    email: string;
+    role: Role;
+    v: number;
+  },
+  ttlSeconds: number = SESSION_MAX_AGE_SECONDS
+): Promise<string> {
   return await new SignJWT({ email: payload.email, role: payload.role, v: payload.v })
     .setProtectedHeader({ alg: ALG })
     .setSubject(payload.sub)
     .setIssuedAt()
-    .setExpirationTime(`${SESSION_MAX_AGE_SECONDS}s`)
+    .setExpirationTime(`${ttlSeconds}s`)
     .sign(getSecret());
 }
 

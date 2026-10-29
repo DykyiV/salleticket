@@ -1,10 +1,12 @@
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import {
+  APP_SESSION_MAX_AGE_SECONDS,
   SESSION_COOKIE,
   SESSION_MAX_AGE_SECONDS,
 } from "@/lib/auth/constants";
+import { sessionTokenFrom } from "@/lib/auth/bearer";
 import { signSession, type SessionPayload } from "@/lib/auth/jwt";
 import { resolveSession } from "@/lib/auth/resolve";
 import { prisma } from "@/lib/db";
@@ -12,11 +14,13 @@ import type { Role } from "@prisma/client";
 
 /**
  * Server-component / route-handler helper to read the current session.
- * Returns null if the cookie is missing or invalid, the user is gone or the
- * session was revoked. The role comes from the database, not the token.
+ * Returns null if the cookie (site) or bearer token (mobile app) is missing
+ * or invalid, the user is gone or the session was revoked. The role comes
+ * from the database, not the token.
  */
 export async function getSession(): Promise<SessionPayload | null> {
-  return resolveSession((await cookies()).get(SESSION_COOKIE)?.value);
+  const [jar, h] = await Promise.all([cookies(), headers()]);
+  return resolveSession(sessionTokenFrom(jar.get(SESSION_COOKIE)?.value, h));
 }
 
 /**
@@ -25,7 +29,7 @@ export async function getSession(): Promise<SessionPayload | null> {
 export async function getSessionFromRequest(
   req: NextRequest
 ): Promise<SessionPayload | null> {
-  return resolveSession(req.cookies.get(SESSION_COOKIE)?.value);
+  return resolveSession(sessionTokenFrom(req.cookies.get(SESSION_COOKIE)?.value, req.headers));
 }
 
 /**
@@ -89,4 +93,23 @@ export async function issueSession(user: {
   sessionVersion: number;
 }): Promise<string> {
   return signSession({ sub: user.id, email: user.email, role: user.role, v: user.sessionVersion });
+}
+
+/** A session token for the mobile app: same checks, longer life, no cookie. */
+export async function issueAppSession(user: {
+  id: string;
+  email: string;
+  role: Role;
+  sessionVersion: number;
+}): Promise<{ token: string; expiresAt: string }> {
+  const token = await signSession(
+    { sub: user.id, email: user.email, role: user.role, v: user.sessionVersion },
+    APP_SESSION_MAX_AGE_SECONDS
+  );
+  return { token, expiresAt: new Date(Date.now() + APP_SESSION_MAX_AGE_SECONDS * 1000).toISOString() };
+}
+
+/** The app asks for a token in the body instead of a cookie. */
+export function wantsAppToken(body: unknown): boolean {
+  return Boolean(body && typeof body === "object" && (body as { client?: unknown }).client === "app");
 }

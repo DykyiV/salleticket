@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import type { Role } from "@prisma/client";
 import { resolveSession } from "@/lib/auth/resolve";
+import { sessionTokenFrom } from "@/lib/auth/bearer";
 import {
   SESSION_COOKIE,
   hasRoleAtLeast,
@@ -43,7 +44,7 @@ export async function proxy(req: NextRequest) {
 
   // Role checked against the database, so a demoted / removed user or a
   // revoked session is stopped here already (proxy runs on Node.js).
-  const session = await resolveSession(req.cookies.get(SESSION_COOKIE)?.value);
+  const session = await resolveSession(sessionTokenFrom(req.cookies.get(SESSION_COOKIE)?.value, req.headers));
 
   if (!session) {
     if (rule.mode === "json") {

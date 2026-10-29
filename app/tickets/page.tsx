@@ -7,12 +7,12 @@ import Icon from "@/components/site/Icon";
 import { StatePill } from "@/components/ticket/ETicketCard";
 import { isTicketStaff } from "@/lib/auth/access";
 import { getCurrentUser } from "@/lib/auth/session";
-import { prisma } from "@/lib/db";
 import type { Lang } from "@/lib/i18n/config";
 import type { Dict } from "@/lib/i18n/dict";
 import { getDict } from "@/lib/i18n/server";
 import { longDate, money, plural } from "@/lib/i18n/format";
-import { ETICKET_INCLUDE, siteOrigin, toETicket, type ETicket, type ETicketState } from "@/lib/tickets/eTicket";
+import { siteOrigin } from "@/lib/tickets/eTicket";
+import { loadMyOrders, type MyOrder } from "@/lib/tickets/myOrders";
 import { cityLabel } from "@/lib/trips/cities";
 
 export const dynamic = "force-dynamic";
@@ -22,13 +22,7 @@ export async function generateMetadata(): Promise<Metadata> {
   return { title: `${t.ticket.listTitle} — Asol BUS`, robots: { index: false } };
 }
 
-type Order = { key: string; tickets: ETicket[]; departAt: string | null; state: ETicketState; total: number };
-
-const RANK: Record<ETicketState, number> = { due: 0, pending: 1, paid: 2, refunded: 3, cancelled: 4 };
-
-function todayInEurope(): string {
-  return new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Madrid" }).format(new Date());
-}
+type Order = MyOrder;
 
 /** «Мої квитки» for passengers: orders grouped, upcoming first. Staff use the cabinet list. */
 export default async function MyTicketsPage() {
@@ -37,35 +31,9 @@ export default async function MyTicketsPage() {
 
   if (user && (await isTicketStaff({ role: user.role }))) redirect("/cabinet/tickets");
 
-  let upcoming: Order[] = [];
-  let past: Order[] = [];
-  if (user) {
-    const rows = await prisma.booking.findMany({
-      where: { ticket: { userId: user.id } },
-      include: ETICKET_INCLUDE,
-      orderBy: { createdAt: "desc" },
-      take: 200,
-    });
-    const origin = siteOrigin(null);
-    const byKey = new Map<string, ETicket[]>();
-    for (const b of rows) {
-      const key = b.groupRef ?? b.reference;
-      byKey.set(key, [...(byKey.get(key) ?? []), toETicket(b, origin)]);
-    }
-    const today = todayInEurope();
-    for (const [key, tickets] of byKey) {
-      tickets.sort((a, b) => a.reference.localeCompare(b.reference));
-      const live = tickets.filter((e) => e.state !== "cancelled" && e.state !== "refunded");
-      const departAt = tickets[0].journeys[0]?.departAt ?? null;
-      const state = (live.length ? live : tickets).reduce<ETicketState>((s, e) => (RANK[e.state] < RANK[s] ? e.state : s), "cancelled");
-      const order: Order = { key, tickets, departAt, state, total: live.reduce((sum, e) => sum + e.price, 0) };
-      const lastDay = tickets[0].journeys.at(-1)?.departAt?.slice(0, 10) ?? departAt?.slice(0, 10) ?? today;
-      if (live.length && lastDay >= today) upcoming.push(order);
-      else past.push(order);
-    }
-    upcoming = upcoming.sort((a, b) => (a.departAt ?? "").localeCompare(b.departAt ?? ""));
-    past = past.sort((a, b) => (b.departAt ?? "").localeCompare(a.departAt ?? ""));
-  }
+  const { upcoming, past }: { upcoming: Order[]; past: Order[] } = user
+    ? await loadMyOrders(user.id, siteOrigin(null))
+    : { upcoming: [], past: [] };
 
   return (
     <div className="flex min-h-screen flex-col">

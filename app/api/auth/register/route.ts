@@ -3,8 +3,10 @@ import { Prisma, Role } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { hashPassword } from "@/lib/auth/password";
 import {
+  issueAppSession,
   issueSession,
   setSessionCookie,
+  wantsAppToken,
 } from "@/lib/auth/session";
 import {
   REGISTER_PER_IP,
@@ -22,6 +24,8 @@ type Body = {
   email?: string;
   password?: string;
   role?: Role;
+  /** "app" — the mobile app wants a bearer token in the body, not a cookie. */
+  client?: string;
 };
 
 const EMAIL_RE = /^\S+@\S+\.\S+$/;
@@ -76,11 +80,13 @@ export async function POST(req: NextRequest) {
       select: { id: true, email: true, role: true, createdAt: true, sessionVersion: true },
     });
 
+    const publicUser = { id: user.id, email: user.email, role: user.role, createdAt: user.createdAt };
+    if (wantsAppToken(body)) {
+      const { token, expiresAt } = await issueAppSession(user);
+      return NextResponse.json({ user: publicUser, token, expiresAt }, { status: 201, headers: { "Cache-Control": "no-store" } });
+    }
     const token = await issueSession(user);
-    const res = NextResponse.json(
-      { user: { id: user.id, email: user.email, role: user.role, createdAt: user.createdAt } },
-      { status: 201 }
-    );
+    const res = NextResponse.json({ user: publicUser }, { status: 201 });
     setSessionCookie(res, token);
     return res;
   } catch (err) {
