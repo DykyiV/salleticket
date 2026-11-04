@@ -143,7 +143,14 @@ export default async function TicketPage(props: Props) {
                     <TicketActions reference={head.reference} email={email} mailOn={mailOn} />
                   </div>
                   {tickets.map((e, i) => (
-                    <ETicketCard key={e.reference} e={e} qr={qrs[i]} t={t} lang={lang} />
+                    <ETicketCard
+                      key={e.reference}
+                      e={e}
+                      qr={qrs[i]}
+                      t={t}
+                      lang={lang}
+                      contacts={contacts ? { phone, email: contacts.email, website: contacts.website } : null}
+                    />
                   ))}
                 </div>
 

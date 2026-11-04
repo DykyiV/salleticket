@@ -100,6 +100,11 @@ export type ETicket = {
   openReturn: boolean;
   journeys: ETicketJourney[];
   checkUrl: string;
+  /** The carrier's own ticket number (Grandes Tour), when it keeps one. */
+  carrierTicket: string | null;
+  carrierName: string | null;
+  /** Carrier contacts as the carrier gives them (bus / office phones). */
+  carrierPhones: string | null;
 };
 
 export function ticketState(status: TicketStatus): ETicketState {
@@ -218,6 +223,10 @@ export function toETicket(b: ETicketBooking, origin: string): ETicket {
     openReturn: t.tripKind === "OPEN_RETURN",
     journeys,
     checkUrl: `${origin.replace(/\/$/, "")}/check/${b.reference}`,
+    // "GT:<order>:<ticket>" → "<ticket>"
+    carrierTicket: t.carrierRef?.split(":").pop() || null,
+    carrierName: t.trip?.carrier?.name ?? null,
+    carrierPhones: t.trip?.carrierPhones ?? t.returnTrip?.carrierPhones ?? null,
   };
 }
 

@@ -45,6 +45,8 @@ export type Trip = {
   /** Boarding / drop-off point names, when known. */
   fromStation?: string;
   toStation?: string;
+  /** Carrier contacts for this run, as the carrier gives them (bus / office phones). */
+  carrierPhones?: string;
   /** Passenger-facing class and services of the bus(es). */
   busCategory?: BusCategory;
   features?: BusFeature[];

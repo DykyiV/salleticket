@@ -166,8 +166,9 @@ async function drawTicketPage(pdf: PDFDocument, e: ETicket, fonts: Fonts, lang: 
   pen.rect(0, 0, W, 86, C.navy);
   const kw = pen.text("Kaufmann", M, 48, 20, { bold: true, color: C.white });
   pen.text(" Reisen", M + kw, 48, 20, { bold: true, color: C.brandLight });
-  pen.text(tt.pdfTitle, M, 68, 10, { color: C.whiteDim });
-  pen.text(tt.reference, W - M, 36, 9, { color: C.whiteDim, right: true });
+  // Not paid yet = a reservation: the passenger gets a boarding pass.
+  pen.text((e.state === "paid" ? tt.pdfTitle : tt.boardingPass).toUpperCase(), M, 70, 11, { bold: true, color: C.brandLight });
+  pen.text(tt.referenceSite, W - M, 36, 9, { color: C.whiteDim, right: true });
   pen.text(e.reference, W - M, 64, 24, { bold: true, color: C.white, right: true });
 
   // Status and issue date.
@@ -179,11 +180,21 @@ async function drawTicketPage(pdf: PDFDocument, e: ETicket, fonts: Fonts, lang: 
   const qrSize = 150;
   const qrX = W - M - qrSize;
   const qrTop = 136;
-  pen.rect(qrX - 8, qrTop - 8, qrSize + 16, qrSize + 58, C.soft, C.line);
+  const carrierBox = e.carrierTicket ? 38 : 0;
+  pen.rect(qrX - 8, qrTop - 8, qrSize + 16, qrSize + 58 + carrierBox, C.soft, C.line);
   const qr = await pdf.embedPng(await qrCodePngBuffer(e.checkUrl));
   page.drawImage(qr, { x: qrX, y: H - qrTop - qrSize, width: qrSize, height: qrSize });
   pen.text(e.reference, qrX, qrTop + qrSize + 16, 11, { bold: true, center: qrSize });
   pen.para(tt.qrHint, qrX, qrTop + qrSize + 31, 8, qrSize, { color: C.muted, leading: 10 });
+  if (e.carrierTicket) {
+    // The carrier's own ticket number (what their dispatcher / driver sees).
+    let ly = qrTop + qrSize + 60;
+    for (const line of wrap(fmt(tt.carrierTicket, { carrier: e.carrierName ?? "" }), fonts.bold, 7, qrSize)) {
+      pen.text(line, qrX, ly, 7, { bold: true, color: C.muted, center: qrSize });
+      ly += 9;
+    }
+    pen.text(e.carrierTicket, qrX, qrTop + qrSize + 84, 11, { bold: true, center: qrSize });
+  }
 
   // Passenger.
   const colW = qrX - 24 - M;
@@ -202,7 +213,7 @@ async function drawTicketPage(pdf: PDFDocument, e: ETicket, fonts: Fonts, lang: 
   }
 
   // Price.
-  y = Math.max(y, qrTop + qrSize + 70) + 4;
+  y = Math.max(y, qrTop + qrSize + 70 + carrierBox) + 4;
   pen.rect(M, y, W - 2 * M, 48, C.soft, C.line);
   pen.text(tt.price.toUpperCase(), M + 14, y + 18, 8, { bold: true, color: C.muted });
   pen.text(money(e.price, lang), M + 14, y + 37, 16, { bold: true, color: C.navy });
@@ -227,12 +238,16 @@ async function drawTicketPage(pdf: PDFDocument, e: ETicket, fonts: Fonts, lang: 
     y = pen.para(rule, M + 12, y, 9, W - 2 * M - 12, { color: C.ink, leading: 12.5 }) + 3;
   }
 
-  // Footer.
-  const phones = [contacts.phoneUa, contacts.phoneEs, contacts.phoneDe].filter(Boolean).join("   ·   ");
-  pen.hr(H - 70);
-  if (phones) pen.text(phones, M, H - 52, 9, { bold: true, color: C.navy });
-  pen.text([contacts.website, contacts.email].filter(Boolean).join("   ·   "), M, H - 38, 8, { color: C.muted });
-  pen.text(tt.pdfValid, W - M, H - 38, 8, { color: C.muted, right: true });
+  // Footer: our contacts and the carrier's, each signed.
+  const labeled = (label: string, value: string, top: number) => {
+    const lw = pen.text(`${label}: `, M, top, 8.5, { bold: true, color: C.navy });
+    return pen.para(value, M + lw, top, 8.5, W - 2 * M - lw, { color: C.ink, leading: 11 });
+  };
+  const site = [contacts.phoneUa, contacts.phoneEs, contacts.phoneDe, contacts.email, contacts.website].filter(Boolean).join("   ·   ");
+  pen.hr(H - 84);
+  let fy = labeled(tt.contactsSite, site, H - 68);
+  if (e.carrierPhones) fy = labeled(fmt(tt.contactsCarrier, { carrier: e.carrierName ?? "" }), e.carrierPhones, fy + 2);
+  pen.text(tt.pdfValid, W - M, Math.max(fy + 2, H - 26), 8, { color: C.muted, right: true });
 }
 
 let fontCache: Promise<[Buffer, Buffer]> | null = null;

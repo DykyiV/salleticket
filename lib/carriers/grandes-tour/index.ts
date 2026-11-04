@@ -44,6 +44,8 @@ type GtTrip = {
   price: number;
   duration: string; // d.hh:mm:ss or hh:mm:ss
   carrier_name: string;
+  /** Bus / office phones, e.g. "+380… (автобус), +49… (офіс)". */
+  phoneNumber?: string;
 };
 type GtSequence = { canBook: boolean; canBookWithPaymentAtBoarding: boolean; currency_code: string; trips: GtTrip[] };
 type GtPlace = { id: number; name: string; type: string; status: string; x?: number; y?: number; floor?: number };
@@ -209,6 +211,7 @@ function toTrip(t: GtTrip, currency: string, seatsLeft: number): Trip {
     arrivalAt,
     fromStation: t.departure_place || undefined,
     toStation: t.arrival_place || undefined,
+    carrierPhones: t.phoneNumber?.trim() || undefined,
     transfers: 0,
   };
 }

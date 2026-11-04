@@ -110,6 +110,14 @@ describe("e-ticket model", () => {
     expect(toETicket(booking(), "x").toPay).toBe(79.5);
     expect(toETicket(booking({ status: "PAID_ONLINE" }), "x").toPay).toBe(0);
     expect(toETicket(booking({ seat: null }), "x").journeys[0].freeSeating).toBe(true);
+    // Carrier ticket number and contacts (Grandes Tour) go on the ticket too.
+    expect(toETicket(booking(), "x").carrierTicket).toBeNull();
+    const gt = booking();
+    gt.ticket.carrierRef = "GT:797633:1014651";
+    if (gt.ticket.trip) gt.ticket.trip.carrierPhones = "+380682854657 (автобус)";
+    const e = toETicket(gt, "x");
+    expect(e.carrierTicket).toBe("1014651");
+    expect(e.carrierPhones).toBe("+380682854657 (автобус)");
   });
 });
 

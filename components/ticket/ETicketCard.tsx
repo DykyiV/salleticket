@@ -103,14 +103,35 @@ function Journey({ j, t, lang }: { j: ETicketJourney; t: Dict; lang: Lang }) {
 }
 
 /** Passenger e-ticket card: QR, route with boarding addresses, seat, price. */
-export default function ETicketCard({ e, qr, t, lang }: { e: ETicket; qr: string; t: Dict; lang: Lang }) {
+export default function ETicketCard({
+  e,
+  qr,
+  t,
+  lang,
+  contacts,
+}: {
+  e: ETicket;
+  qr: string;
+  t: Dict;
+  lang: Lang;
+  /** Our contacts, signed on the ticket next to the carrier's. */
+  contacts?: { phone: string | null; email: string; website: string } | null;
+}) {
   const tt = t.ticket;
+  const site = contacts ? [contacts.phone, contacts.email, contacts.website].filter(Boolean).join(" · ") : "";
+  const info = [
+    e.carrierTicket ? { label: fmt(tt.carrierTicket, { carrier: e.carrierName ?? "" }), value: e.carrierTicket, mono: true } : null,
+    e.carrierPhones ? { label: fmt(tt.contactsCarrier, { carrier: e.carrierName ?? "" }), value: e.carrierPhones, mono: false } : null,
+    site ? { label: tt.contactsSite, value: site, mono: false } : null,
+  ].filter((row): row is { label: string; value: string; mono: boolean } => row != null);
   const void_ = e.state === "cancelled" || e.state === "refunded";
   return (
     <article className="overflow-hidden rounded-2xl bg-white shadow-soft ring-1 ring-slate-200/70" aria-label={`${tt.reference} ${e.reference}`}>
       <header className="flex flex-wrap items-center justify-between gap-3 bg-navy px-5 py-3 text-white">
         <div>
-          <p className="text-[11px] uppercase tracking-wider text-blue-200">{tt.reference}</p>
+          {/* Not paid yet = a reservation: a boarding pass, not a ticket. */}
+          <p className="text-sm font-bold uppercase tracking-wide text-brand-200">{e.state === "paid" ? tt.pdfTitle : tt.boardingPass}</p>
+          <p className="mt-1 text-[11px] uppercase tracking-wider text-blue-200">{tt.referenceSite}</p>
           <p className="font-mono text-lg font-bold tracking-widest">{e.reference}</p>
         </div>
         <StatePill state={e.state} t={t} />
@@ -130,6 +151,16 @@ export default function ETicketCard({ e, qr, t, lang }: { e: ETicket; qr: string
           ))}
           {e.openReturn && !e.journeys.some((j) => j.kind === "return") ? (
             <p className="inline-flex rounded-md bg-brand-50 px-2 py-1 text-xs font-semibold text-brand-700">{tt.openReturn}</p>
+          ) : null}
+          {info.length ? (
+            <dl className="space-y-2 border-t border-slate-100 pt-4 text-sm">
+              {info.map((row) => (
+                <div key={row.label}>
+                  <dt className="text-[11px] font-semibold uppercase tracking-wide text-ink-soft">{row.label}</dt>
+                  <dd className={`text-navy ${row.mono ? "font-mono font-bold tracking-wider" : ""}`}>{row.value}</dd>
+                </div>
+              ))}
+            </dl>
           ) : null}
         </div>
 
