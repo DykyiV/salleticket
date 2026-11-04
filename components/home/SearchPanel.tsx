@@ -81,10 +81,6 @@ export default function SearchPanel({
     } else {
       params.set("tripKind", "ONE_WAY");
     }
-    params.set("passengers", String(total));
-    params.set("adults", String(pax.adults));
-    if (pax.children) params.set("children", String(pax.children));
-    if (pax.seniors) params.set("seniors", String(pax.seniors));
     router.push(`/results?${params.toString()}`);
   };
 
@@ -115,7 +111,7 @@ export default function SearchPanel({
         ))}
       </div>
 
-      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,1.15fr)_minmax(0,0.8fr)_minmax(0,0.8fr)_minmax(0,1fr)_auto]">
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,1.15fr)_minmax(0,0.8fr)_minmax(0,0.8fr)_auto]">
         <div className="relative grid grid-cols-1 gap-2 sm:col-span-2 sm:grid-cols-2">
           <Box label={s.from} icon="pin" htmlFor="search-from">
             <input
@@ -192,9 +188,7 @@ export default function SearchPanel({
           )}
         </div>
 
-        <PassengerPicker pax={pax} setPax={setPax} total={total} />
-
-        <button type="submit" disabled={submitting} className="btn-primary min-h-[3.75rem] w-full rounded-2xl px-6 text-base xl:w-auto">
+        <button type="submit" disabled={submitting} className="btn-primary min-h-[3.75rem] w-full rounded-2xl px-6 text-base sm:col-span-2 xl:col-span-1 xl:w-auto">
           <Icon name="search" className="h-5 w-5" />
           {s.submit}
         </button>

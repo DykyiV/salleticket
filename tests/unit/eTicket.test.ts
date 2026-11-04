@@ -38,7 +38,7 @@ function booking(over: Partial<{ status: string; seat: number | null; from: stri
     toCity: "Берлін",
     departureTime: new Date("2026-11-03T07:00:00Z"),
     arrivalTime: new Date("2026-11-04T06:00:00Z"),
-    carrier: { name: "Asol BUS" },
+    carrier: { name: "Kaufmann Reisen" },
     departure,
   };
   const returnTrip = {
@@ -144,19 +144,19 @@ describe("mail providers", () => {
   const mail = { to: "a@b.c", subject: "S", text: "T", html: "<p>T</p>", attachments: [{ filename: "t.pdf", content: new Uint8Array([37, 80, 68, 70]) }] };
 
   it("builds Resend and Brevo requests", () => {
-    const r = providerRequest("resend", mail, { key: "re_1", from: "Asol BUS <t@x.ua>", replyTo: "help@x.ua" });
+    const r = providerRequest("resend", mail, { key: "re_1", from: "Kaufmann Reisen <t@x.ua>", replyTo: "help@x.ua" });
     expect(r.url).toBe("https://api.resend.com/emails");
     expect(r.headers.Authorization).toBe("Bearer re_1");
-    expect(r.body).toMatchObject({ from: "Asol BUS <t@x.ua>", to: ["a@b.c"], reply_to: "help@x.ua", attachments: [{ filename: "t.pdf", content: "JVBERg==" }] });
+    expect(r.body).toMatchObject({ from: "Kaufmann Reisen <t@x.ua>", to: ["a@b.c"], reply_to: "help@x.ua", attachments: [{ filename: "t.pdf", content: "JVBERg==" }] });
 
-    const b = providerRequest("brevo", mail, { key: "xkeysib", from: "Asol BUS <t@x.ua>" });
+    const b = providerRequest("brevo", mail, { key: "xkeysib", from: "Kaufmann Reisen <t@x.ua>" });
     expect(b.url).toBe("https://api.brevo.com/v3/smtp/email");
     expect(b.headers["api-key"]).toBe("xkeysib");
-    expect(b.body).toMatchObject({ sender: { name: "Asol BUS", email: "t@x.ua" }, to: [{ email: "a@b.c" }], htmlContent: "<p>T</p>", attachment: [{ name: "t.pdf", content: "JVBERg==" }] });
+    expect(b.body).toMatchObject({ sender: { name: "Kaufmann Reisen", email: "t@x.ua" }, to: [{ email: "a@b.c" }], htmlContent: "<p>T</p>", attachment: [{ name: "t.pdf", content: "JVBERg==" }] });
   });
 
   it("parses addresses and escapes HTML", () => {
-    expect(parseAddress("Asol BUS <t@x.ua>")).toEqual({ name: "Asol BUS", email: "t@x.ua" });
+    expect(parseAddress("Kaufmann Reisen <t@x.ua>")).toEqual({ name: "Kaufmann Reisen", email: "t@x.ua" });
     expect(parseAddress("t@x.ua")).toEqual({ email: "t@x.ua" });
     expect(escapeHtml(`<a href="x">'&'</a>`)).toBe("&lt;a href=&quot;x&quot;&gt;&#39;&amp;&#39;&lt;/a&gt;");
   });
@@ -175,7 +175,7 @@ describe("mail providers", () => {
   it("reports delivery only when the provider accepts the message", async () => {
     vi.stubEnv("MAIL_PROVIDER", "resend");
     vi.stubEnv("MAIL_API_KEY", "re_1");
-    vi.stubEnv("MAIL_FROM", "Asol BUS <t@x.ua>");
+    vi.stubEnv("MAIL_FROM", "Kaufmann Reisen <t@x.ua>");
     const fetchMock = vi.fn(async () => new Response(JSON.stringify({ id: "m1" }), { status: 200 }));
     vi.stubGlobal("fetch", fetchMock);
     expect(await sendMail(mail)).toMatchObject({ delivered: true, id: "m1" });

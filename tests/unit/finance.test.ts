@@ -65,7 +65,7 @@ describe("carrier report CSV", () => {
         passenger: 'Шевченко "Кобзар"; Тарас',
         route: "Київ → Берлін",
         departureTime: new Date("2026-09-20T08:00:00.000Z"),
-        bookedBy: "agent@asolbus.local",
+        bookedBy: "agent@kaufmann.local",
         bookedByRole: "AGENT",
         status: "PAID_ONLINE",
         finalPrice: 94.05,
@@ -87,7 +87,7 @@ describe("carrier report CSV", () => {
       },
     ],
     totals: { count: 2, gross: 193.05, commission: 11.29, carrier: 82.76 },
-    agentRows: [{ email: "agent@asolbus.local", role: "AGENT", count: 1, gross: 94.05, commission: 11.29 }],
+    agentRows: [{ email: "agent@kaufmann.local", role: "AGENT", count: 1, gross: 94.05, commission: 11.29 }],
   };
   const labels = { status: (s: string) => `S:${s}`, role: (r: string) => `R:${r}` };
 
@@ -116,6 +116,6 @@ describe("carrier report CSV", () => {
     const csv = carrierReportCsv(report, "agents", labels);
     const [header, row] = csv.replace("﻿", "").split("\r\n");
     expect(header).toBe("Агент;Роль;Квитків;Сума бронювань, EUR;Комісія, EUR");
-    expect(row).toBe("agent@asolbus.local;R:AGENT;1;94.05;11.29");
+    expect(row).toBe("agent@kaufmann.local;R:AGENT;1;94.05;11.29");
   });
 });

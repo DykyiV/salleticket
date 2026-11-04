@@ -2,15 +2,15 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import Icon from "@/components/site/Icon";
 import HoldTimer from "@/components/checkout/HoldTimer";
 import { fmt, plural, useI18n } from "@/lib/i18n/client";
 import { money } from "@/lib/i18n/format";
 import { cityLabel } from "@/lib/trips/cities";
 import { computePrice, type AgeCategoryId } from "@/lib/pricing";
-import { ageCategoryFor, birthDateProblem, parseBirthDate } from "@/lib/age";
 import { telHref } from "@/lib/siteContacts";
+import { EXTRA_BAGGAGE_RATE, type BaggageZone } from "@/lib/trips/baggage";
 
 export type CheckoutTrip = {
   carrierId: string;
@@ -32,6 +32,10 @@ export type CheckoutTrip = {
   returnDate: string | null;
   seats: number[];
   returnSeats: number[];
+  /** Direction for the extra-baggage rate (ES 2 €/kg, DE 1 €/kg). */
+  baggageZone?: BaggageZone | null;
+  /** Carrier ticket types (Grandes Tour); null = our own age categories. */
+  fareTypes?: FareTypeOption[] | null;
   legs: {
     legId: string;
     assignmentId?: string;
@@ -43,9 +47,15 @@ export type CheckoutTrip = {
   }[];
 };
 
+type GtQuote = {
+  fares: { kind: "INFANT" | "CHILD" | "YOUTH" | "SENIOR" | "ADULT"; price: number; priceBeforeDiscount: number }[];
+  card: { status: "none" } | { status: "ok"; number: string; percent: number } | { status: "invalid"; number: string; message: string };
+};
 type Promo = { code: string; type?: "PERCENT" | "FIXED"; percent: number; amount?: number | null; label: string | null };
 type PromoState = { status: "empty" } | { status: "checking" } | { status: "valid"; promo: Promo } | { status: "invalid"; message: string };
-type Passenger = { firstName: string; lastName: string; birthDate: string };
+type Passenger = { firstName: string; lastName: string; fareType: string };
+/** Ticket type offered at checkout (carrier types, or our age categories). */
+export type FareTypeOption = { id: string; label: string; ageCategory: AgeCategoryId; discount: number };
 type Method = "CASH_ON_BUS" | "ONLINE";
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
@@ -69,9 +79,18 @@ export default function CheckoutForm({
   const { t, lang } = useI18n();
   const c = t.checkout;
   const count = Math.max(1, trip.fares.length);
+  const fareTypes: FareTypeOption[] = trip.fareTypes?.length
+    ? trip.fareTypes
+    : (["ADULT", "CHILD_0_4", "CHILD_5_12", "SENIOR_60"] as AgeCategoryId[]).map((id) => ({
+        id,
+        label: c.ageCategory[id],
+        ageCategory: id,
+        discount: id === "ADULT" ? 0 : 1,
+      }));
+  const defaultFare = (fareTypes.find((f) => f.ageCategory === "ADULT" && f.discount === 0) ?? fareTypes[0]).id;
 
   const [passengers, setPassengers] = useState<Passenger[]>(() =>
-    Array.from({ length: count }, () => ({ firstName: "", lastName: "", birthDate: "" }))
+    Array.from({ length: count }, () => ({ firstName: "", lastName: "", fareType: defaultFare }))
   );
   const [email, setEmail] = useState(user?.email ?? "");
   const [phone, setPhone] = useState("");
@@ -85,11 +104,13 @@ export default function CheckoutForm({
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<{ message: string; seat: boolean } | null>(null);
 
-  const travelDate = useMemo(() => new Date(`${trip.date ?? new Date().toISOString().slice(0, 10)}T12:00:00Z`), [trip.date]);
+  // Grandes Tour trips: fares (age types, discount card) come from their system.
+  const isGt = trip.carrierId === "grandes-tour";
+  const [gtQuote, setGtQuote] = useState<GtQuote | null>(null);
+
 
   const ages: (AgeCategoryId | null)[] = passengers.map((p) => {
-    const d = parseBirthDate(p.birthDate);
-    return d && !birthDateProblem(d) ? ageCategoryFor(d, travelDate) : null;
+    return fareTypes.find((f) => f.id === p.fareType)?.ageCategory ?? null;
   });
 
   const promoObj =
@@ -115,6 +136,19 @@ export default function CheckoutForm({
   const roundTrip = trip.tripKind === "ROUND_TRIP" && trip.returnTripId != null;
   const lines = passengers.map((_, i) => {
     const base = round2((trip.fares[i] ?? trip.price) + (roundTrip ? trip.returnPrice : 0));
+    const gtFare = isGt ? gtQuote?.fares[i] : undefined;
+    if (gtFare) {
+      return {
+        base: gtFare.priceBeforeDiscount,
+        basePrice: gtFare.priceBeforeDiscount,
+        ageDiscount: round2(gtFare.priceBeforeDiscount - gtFare.price),
+        promoCode: undefined,
+        promoDiscount: 0,
+        finalPrice: gtFare.price,
+        serviceFee,
+        total: round2(gtFare.price + serviceFee),
+      };
+    }
     const priced = computePrice(base, ages[i] ?? "ADULT", promoObj, serviceFee);
     return { base, ...priced };
   });
@@ -142,7 +176,7 @@ export default function CheckoutForm({
   // Promo check (debounced).
   useEffect(() => {
     const code = promoInput.trim();
-    if (!code) return;
+    if (!code || isGt) return;
     const ac = new AbortController();
     const timer = window.setTimeout(async () => {
       setPromo({ status: "checking" });
@@ -158,19 +192,61 @@ export default function CheckoutForm({
       ac.abort();
       window.clearTimeout(timer);
     };
-  }, [promoInput]);
+  }, [promoInput, isGt]);
+
+  // Grandes Tour fare preview (debounced): age types + discount card.
+  const typeKey = passengers.map((p) => p.fareType).join("|");
+  useEffect(() => {
+    if (!isGt) return;
+    const code = promoInput.trim();
+    const ac = new AbortController();
+    if (code) setPromo({ status: "checking" });
+    const timer = window.setTimeout(async () => {
+      try {
+        const res = await fetch("/api/carriers/grandes-tour/quote", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          signal: ac.signal,
+          body: JSON.stringify({
+            tripId: trip.tripId,
+            returnTripId: roundTrip ? trip.returnTripId : null,
+            date: trip.date,
+            typeIds: typeKey.split("|").map((v) => (Number.isInteger(Number(v)) ? Number(v) : null)),
+            card: code || null,
+          }),
+        });
+        if (!res.ok) return;
+        const data = (await res.json()) as GtQuote;
+        setGtQuote(data);
+        if (data.card.status === "ok") {
+          setPromo({ status: "valid", promo: { code: data.card.number, percent: data.card.percent, label: null } });
+        } else if (data.card.status === "invalid") {
+          setPromo({ status: "invalid", message: data.card.message });
+        } else {
+          setPromo({ status: "empty" });
+        }
+      } catch {
+        // aborted
+      }
+    }, 450);
+    return () => {
+      ac.abort();
+      window.clearTimeout(timer);
+    };
+  }, [isGt, typeKey, promoInput, trip.tripId, trip.returnTripId, trip.date, roundTrip]);
+
+  /** Fare type label shown next to a passenger (null = nothing to show). */
+  const ageLabel = (i: number, withAdult: boolean): string | null => {
+    const f = fareTypes.find((x) => x.id === passengers[i]?.fareType);
+    return f && (withAdult || f.discount > 0) ? f.label : null;
+  };
 
   const validate = () => {
     const next: Record<string, string> = {};
     passengers.forEach((p, i) => {
       if (!p.firstName.trim()) next[`p${i}-firstName`] = c.errorRequired;
       if (!p.lastName.trim()) next[`p${i}-lastName`] = c.errorRequired;
-      const d = parseBirthDate(p.birthDate);
-      if (!d) next[`p${i}-birthDate`] = c.errorBirth;
-      else {
-        const problem = birthDateProblem(d);
-        if (problem) next[`p${i}-birthDate`] = problem;
-      }
+      if (!fareTypes.some((f) => f.id === p.fareType)) next[`p${i}-fareType`] = c.errorRequired;
     });
     if (!/^\S+@\S+\.\S+$/.test(email.trim())) next.email = c.errorEmail;
     if (phone.replace(/\D/g, "").length < 7) next.phone = c.errorPhone;
@@ -228,12 +304,13 @@ export default function CheckoutForm({
           tripKind: trip.tripKind,
           paymentMethod: method,
           returnTripId: roundTrip ? trip.returnTripId : undefined,
+          returnDate: roundTrip ? (trip.returnDate ?? undefined) : undefined,
           contact: { phone: phone.trim(), email: email.trim() },
           passengers: passengers.map((p, i) => ({
             firstName: p.firstName.trim(),
             lastName: p.lastName.trim(),
-            birthDate: p.birthDate,
             ageCategory: ages[i] ?? "ADULT",
+            fareTypeId: isGt && Number.isInteger(Number(p.fareType)) ? Number(p.fareType) : undefined,
             promoCode: promo.status === "valid" ? promo.promo.code : undefined,
             seatNumber: trip.seats[i] ?? null,
             returnSeatNumber: roundTrip ? (trip.returnSeats[i] ?? null) : null,
@@ -316,7 +393,7 @@ export default function CheckoutForm({
         {/* Passengers */}
         {passengers.map((p, i) => (
           <Card key={i} title={`${fmt(c.passengerN, { n: i + 1 })}${trip.seats[i] != null ? ` · ${fmt(c.seatN, { n: trip.seats[i] })}` : ""}`} icon="user"
-            aside={ages[i] ? <span className="rounded-full bg-brand-50 px-2.5 py-0.5 text-xs font-semibold text-brand-700">{c.ageCategory[ages[i]!]}</span> : null}
+            aside={ageLabel(i, true) ? <span className="rounded-full bg-brand-50 px-2.5 py-0.5 text-xs font-semibold text-brand-700">{ageLabel(i, true)}</span> : null}
           >
             <div className="grid gap-3 sm:grid-cols-2">
               <Field label={c.firstName} id={`p${i}-firstName`} error={err(`p${i}-firstName`)}>
@@ -342,18 +419,21 @@ export default function CheckoutForm({
                   className={inputCls(`p${i}-lastName`)}
                 />
               </Field>
-              <Field label={c.birthDate} id={`p${i}-birthDate`} error={err(`p${i}-birthDate`)}>
-                <input
-                  id={`p${i}-birthDate`}
-                  data-field={`p${i}-birthDate`}
-                  type="date"
-                  autoComplete={i === 0 ? "bday" : "off"}
-                  max={new Date().toISOString().slice(0, 10)}
-                  value={p.birthDate}
-                  onChange={(e) => setP(i, "birthDate", e.target.value)}
-                  aria-invalid={Boolean(errors[`p${i}-birthDate`])}
-                  className={inputCls(`p${i}-birthDate`)}
-                />
+              <Field label={c.fareType} id={`p${i}-fareType`} error={err(`p${i}-fareType`)}>
+                <select
+                  id={`p${i}-fareType`}
+                  data-field={`p${i}-fareType`}
+                  value={p.fareType}
+                  onChange={(e) => setP(i, "fareType", e.target.value)}
+                  aria-invalid={Boolean(errors[`p${i}-fareType`])}
+                  className={inputCls(`p${i}-fareType`)}
+                >
+                  {fareTypes.map((f) => (
+                    <option key={f.id} value={f.id}>
+                      {f.label}
+                    </option>
+                  ))}
+                </select>
               </Field>
               <p className="self-end pb-3 text-xs text-ink-soft sm:col-span-1">{c.nameHint}</p>
             </div>
@@ -437,6 +517,14 @@ export default function CheckoutForm({
         {/* Baggage (information only) */}
         <Card title={c.baggage} icon="luggage">
           <p className="text-sm text-ink">{fmt(c.baggageIncluded, { bags: plural(lang, Math.max(1, trip.luggagePieces), c.bags) })}</p>
+          {trip.baggageZone ? (
+            <p className="mt-2 text-sm font-medium text-navy">
+              {fmt(c.baggageRate, {
+                direction: trip.baggageZone === "ES" ? c.baggageDirES : c.baggageDirDE,
+                rate: EXTRA_BAGGAGE_RATE[trip.baggageZone],
+              })}
+            </p>
+          ) : null}
           <p className="mt-2 text-sm text-ink-muted">
             {c.baggageExtra}
             {supportPhone ? (
@@ -491,7 +579,7 @@ export default function CheckoutForm({
               <li key={i} className="flex justify-between gap-2">
                 <span className="text-ink-muted">
                   {c.fare} {i + 1}
-                  {ages[i] && ages[i] !== "ADULT" ? ` · ${c.ageCategory[ages[i]!]}` : ""}
+                  {ageLabel(i, false) ? ` · ${ageLabel(i, false)}` : ""}
                 </span>
                 <span className="tabular-nums text-navy">{money(l.basePrice, lang)}</span>
               </li>

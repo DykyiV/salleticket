@@ -18,32 +18,42 @@ const CITY_GROUPS: string[][] = [
   ["Париж", "Paris", "París"],
   ["Мілан", "Milan", "Milán", "Milano"],
   ["Рим", "Rome", "Roma"],
+  ["Севілья", "Seville", "Sevilla"],
+  ["Білефельд", "Bielefeld"],
+  ["Ов'єдо", "Oviedo"],
+  ["Куенка", "Cuenca"],
+  ["Тернопіль", "Ternopil", "Ternópil"],
 ];
 
 /** City name to show in the interface language (the DB stores Ukrainian). */
-const CITY_LABEL: Record<string, { en: string; es: string }> = {
-  Київ: { en: "Kyiv", es: "Kiev" },
-  Львів: { en: "Lviv", es: "Leópolis" },
-  Одеса: { en: "Odesa", es: "Odesa" },
-  Харків: { en: "Kharkiv", es: "Járkov" },
-  Дніпро: { en: "Dnipro", es: "Dnipró" },
-  Варшава: { en: "Warsaw", es: "Varsovia" },
-  Прага: { en: "Prague", es: "Praga" },
-  Берлін: { en: "Berlin", es: "Berlín" },
-  Марбелья: { en: "Marbella", es: "Marbella" },
-  Краків: { en: "Kraków", es: "Cracovia" },
-  Барселона: { en: "Barcelona", es: "Barcelona" },
-  Валенсія: { en: "Valencia", es: "Valencia" },
-  Мадрид: { en: "Madrid", es: "Madrid" },
-  Мюнхен: { en: "Munich", es: "Múnich" },
-  Франкфурт: { en: "Frankfurt", es: "Fráncfort" },
-  Андернах: { en: "Andernach", es: "Andernach" },
-  Париж: { en: "Paris", es: "París" },
-  Мілан: { en: "Milan", es: "Milán" },
-  Рим: { en: "Rome", es: "Roma" },
+const CITY_LABEL: Record<string, { en: string; es: string; de: string }> = {
+  Київ: { en: "Kyiv", es: "Kiev", de: "Kiew" },
+  Львів: { en: "Lviv", es: "Leópolis", de: "Lwiw" },
+  Одеса: { en: "Odesa", es: "Odesa", de: "Odessa" },
+  Харків: { en: "Kharkiv", es: "Járkov", de: "Charkiw" },
+  Дніпро: { en: "Dnipro", es: "Dnipró", de: "Dnipro" },
+  Варшава: { en: "Warsaw", es: "Varsovia", de: "Warschau" },
+  Прага: { en: "Prague", es: "Praga", de: "Prag" },
+  Берлін: { en: "Berlin", es: "Berlín", de: "Berlin" },
+  Марбелья: { en: "Marbella", es: "Marbella", de: "Marbella" },
+  Краків: { en: "Kraków", es: "Cracovia", de: "Krakau" },
+  Барселона: { en: "Barcelona", es: "Barcelona", de: "Barcelona" },
+  Валенсія: { en: "Valencia", es: "Valencia", de: "Valencia" },
+  Мадрид: { en: "Madrid", es: "Madrid", de: "Madrid" },
+  Мюнхен: { en: "Munich", es: "Múnich", de: "München" },
+  Франкфурт: { en: "Frankfurt", es: "Fráncfort", de: "Frankfurt" },
+  Андернах: { en: "Andernach", es: "Andernach", de: "Andernach" },
+  Париж: { en: "Paris", es: "París", de: "Paris" },
+  Мілан: { en: "Milan", es: "Milán", de: "Mailand" },
+  Рим: { en: "Rome", es: "Roma", de: "Rom" },
+  Севілья: { en: "Seville", es: "Sevilla", de: "Sevilla" },
+  Білефельд: { en: "Bielefeld", es: "Bielefeld", de: "Bielefeld" },
+  "Ов'єдо": { en: "Oviedo", es: "Oviedo", de: "Oviedo" },
+  Куенка: { en: "Cuenca", es: "Cuenca", de: "Cuenca" },
+  Тернопіль: { en: "Ternopil", es: "Ternópil", de: "Ternopil" },
 };
 
-export function cityLabel(name: string, lang: "uk" | "es" | "en"): string {
+export function cityLabel(name: string, lang: "uk" | "de" | "es" | "en"): string {
   const group = cityNames(name);
   const uk = group[0] ?? name;
   if (lang === "uk") return CITY_LABEL[uk] ? uk : name;

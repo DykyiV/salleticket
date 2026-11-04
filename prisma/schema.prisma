@@ -1,4 +1,4 @@
-// Asol BUS — Prisma schema
+// Kaufmann Reisen — Prisma schema
 // Docs: https://pris.ly/d/prisma-schema
 
 generator client {
@@ -135,7 +135,7 @@ model Carrier {
   /// Default agency commission, percent 0..100, applied to ticket sales when
   /// no route-specific CommissionRule matches.
   commissionPercent Float    @default(10)
-  /// The platform's own fleet (e.g. "Asol BUS" route-template departures).
+  /// The platform's own fleet (e.g. "Kaufmann Reisen" route-template departures).
   /// Own-fleet sales carry no agency/carrier commission split and are never
   /// part of carrier settlements — there is no third party to settle with.
   isOwnFleet        Boolean  @default(false)
@@ -224,6 +224,8 @@ model Ticket {
   settlementId String?
   settlement   Settlement? @relation(fields: [settlementId], references: [id], onDelete: SetNull)
 
+  /// Ticket id in the carrier's system (Grandes Tour: "GT:<order>:<ticket>").
+  carrierRef       String?
   /// Coach seat number (1…) when the departure assigns seats.
   seatNumber       Int?
   /// Segment of the route (stop indices within the departure); null = full route.
@@ -305,7 +307,7 @@ model SeatHold {
   /// Segment the hold covers; null = full route.
   fromStopIndex Int?
   toStopIndex   Int?
-  /// Anonymous visitor id from the server-issued `asol_visitor` cookie
+  /// Anonymous visitor id from the server-issued `kaufmann_visitor` cookie
   /// (never taken from the request body, so it cannot be forged or reused).
   sessionId     String
   /// Hashed client address — caps how many seats one network can hold.

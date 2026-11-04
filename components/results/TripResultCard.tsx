@@ -3,7 +3,7 @@
 import Link from "next/link";
 import Icon, { type IconName } from "@/components/site/Icon";
 import { fmt, plural, useI18n } from "@/lib/i18n/client";
-import { money } from "@/lib/i18n/format";
+import { longDate, money } from "@/lib/i18n/format";
 import { cityLabel } from "@/lib/trips/cities";
 import { transfersOf } from "@/lib/results/filter";
 import type { Trip } from "@/lib/mockTrips";
@@ -65,6 +65,13 @@ export default function TripResultCard({
     >
       <div className="grid md:grid-cols-[1fr_15rem]">
         <div className="p-4 sm:p-5">
+          {/* Departure day — several departures of one route differ only by date. */}
+          {trip.departureAt ? (
+            <p className="mb-2 inline-flex items-center gap-1.5 rounded-full bg-brand-50 px-2.5 py-0.5 text-xs font-semibold capitalize text-brand-700">
+              <Icon name="calendar" className="h-3.5 w-3.5" />
+              {longDate(trip.departureAt.slice(0, 10), lang, { weekday: "short", year: false })}
+            </p>
+          ) : null}
           {/* Times and cities */}
           <div className="grid grid-cols-[auto_1fr_auto] items-start gap-3">
             <div>

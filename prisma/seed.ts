@@ -32,7 +32,7 @@ const PROMOS: PromoSeed[] = [
 /**
  * Third-party carriers sold through the platform (mock bus / flight / train
  * adapters). Their sales are split into agency commission vs carrier share and
- * settled monthly. The platform's own fleet ("Asol BUS") is seeded further
+ * settled monthly. The platform's own fleet ("Kaufmann Reisen") is seeded further
  * down with isOwnFleet = true and is excluded from settlements.
  */
 type CarrierSeed = {
@@ -51,7 +51,7 @@ const CARRIERS: CarrierSeed[] = [
     commissionPercent: 12,
     rules: [{ fromCity: "Kyiv", toCity: "Lviv", percent: 20 }],
   },
-  { name: "Asol Express", rating: 4.5, commissionPercent: 15 },
+  { name: "Kaufmann Express", rating: 4.5, commissionPercent: 15 },
   { name: "EuroLines Plus", rating: 4.2, commissionPercent: 10 },
   { name: "SkyLine Airlines", rating: 4.6, commissionPercent: 8 },
   { name: "AirUkraine", rating: 4.8, commissionPercent: 9 },
@@ -69,7 +69,7 @@ async function upsertUser(email: string, password: string, role: Role, flags = {
 }
 
 async function main() {
-  // Demo data only: well-known logins (admin@asolbus.local / Admin12345 …),
+  // Demo data only: well-known logins (admin@kaufmann.local / Admin12345 …),
   // demo promo codes, carriers and tickets must never reach a live database.
   if (process.env.NODE_ENV === "production") {
     console.error(
@@ -119,23 +119,23 @@ async function main() {
     }
   }
 
-  await upsertUser("admin@asolbus.local", "Admin12345", "ADMIN", {
+  await upsertUser("admin@kaufmann.local", "Admin12345", "ADMIN", {
     displayName: "Адміністратор",
   });
-  await upsertUser("agent@asolbus.local", "Agent12345", "AGENT", {
+  await upsertUser("agent@kaufmann.local", "Agent12345", "AGENT", {
     displayName: "Агент",
     canEditDepartures: true,
     canHideStops: true,
     canHideSeats: true,
   });
-  await upsertUser("manager@asolbus.local", "Manager12345", "MANAGER", {
+  await upsertUser("manager@kaufmann.local", "Manager12345", "MANAGER", {
     displayName: "Менеджер Іван",
   });
-  await upsertUser("accountant@asolbus.local", "Accountant12345", "ACCOUNTANT", {
+  await upsertUser("accountant@kaufmann.local", "Accountant12345", "ACCOUNTANT", {
     displayName: "Бухгалтер",
   });
   console.log(
-    "  upserted admin@ / agent@ / manager@ / accountant@asolbus.local"
+    "  upserted admin@ / agent@ / manager@ / accountant@kaufmann.local"
   );
 
   // Migrate legacy USER accounts to CUSTOMER and seed role permissions.
@@ -787,8 +787,8 @@ async function findOrCreateTripForRoute(routeName: string) {
     throw new Error(`У шаблоні ${routeName} немає зупинок`);
   }
   const carrier = await prisma.carrier.upsert({
-    where: { name: "Asol BUS" },
-    create: { name: "Asol BUS", rating: 4.8, isOwnFleet: true },
+    where: { name: "Kaufmann Reisen" },
+    create: { name: "Kaufmann Reisen", rating: 4.8, isOwnFleet: true },
     update: { isOwnFleet: true },
   });
   return prisma.trip.create({
@@ -814,10 +814,10 @@ async function findOrCreateTripForRoute(routeName: string) {
 
 async function seedDemoTickets() {
   const admin = await prisma.user.findUnique({
-    where: { email: "admin@asolbus.local" },
+    where: { email: "admin@kaufmann.local" },
   });
   if (!admin) {
-    throw new Error("admin@asolbus.local не знайдено");
+    throw new Error("admin@kaufmann.local не знайдено");
   }
 
   const demos: Array<{
@@ -1041,8 +1041,8 @@ async function seedDemoTickets() {
  */
 async function seedPartnerSales() {
   const [admin, agent] = await Promise.all([
-    prisma.user.findUniqueOrThrow({ where: { email: "admin@asolbus.local" } }),
-    prisma.user.findUniqueOrThrow({ where: { email: "agent@asolbus.local" } }),
+    prisma.user.findUniqueOrThrow({ where: { email: "admin@kaufmann.local" } }),
+    prisma.user.findUniqueOrThrow({ where: { email: "agent@kaufmann.local" } }),
   ]);
   const now = new Date();
   const prevMonth = (day: number) =>

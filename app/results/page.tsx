@@ -50,9 +50,9 @@ function passengerCounts(sp: SearchParams) {
 export async function generateMetadata(props: { searchParams: Promise<SearchParams> }): Promise<Metadata> {
   const sp = await props.searchParams;
   const { t, lang } = await getDict();
-  if (!sp.from || !sp.to) return { title: `${t.nav.trips} — Asol BUS` };
+  if (!sp.from || !sp.to) return { title: `${t.nav.trips} — Kaufmann Reisen` };
   return {
-    title: `${fmt(t.results.metaTitle, { from: cityLabel(sp.from, lang), to: cityLabel(sp.to, lang) })} — Asol BUS`,
+    title: `${fmt(t.results.metaTitle, { from: cityLabel(sp.from, lang), to: cityLabel(sp.to, lang) })} — Kaufmann Reisen`,
   };
 }
 

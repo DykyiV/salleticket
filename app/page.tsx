@@ -66,20 +66,20 @@ function Hero({ t }: { t: Dict }) {
               <span className="h-1.5 w-1.5 rounded-full bg-ok" />
               {t.hero.badge}
             </span>
-            <h1 id="hero-title" className="mt-4 text-[2rem] font-bold leading-tight tracking-tight sm:text-5xl">
+            <h1 id="hero-title" className="mt-4 text-[1.75rem] font-bold leading-tight tracking-tight sm:text-4xl lg:text-[2.75rem]">
               {t.hero.title}
             </h1>
             <p className="mt-3 max-w-xl text-base text-blue-100/90 sm:text-lg">{t.hero.subtitle}</p>
           </div>
           <div className="order-3 -mx-2 flex justify-center lg:order-2 lg:mx-0">
             <Image
-              src="/grandes-tour-bus.webp"
+              src="/hero-bus.webp"
               alt={t.hero.busAlt}
-              width={1778}
-              height={830}
+              width={1400}
+              height={985}
               priority
               sizes="(min-width: 1024px) 560px, 100vw"
-              className="h-auto w-full max-w-md drop-shadow-[0_24px_30px_rgba(0,0,0,0.45)] sm:max-w-lg lg:max-w-none"
+              className="h-auto w-full max-w-md rounded-2xl shadow-2xl ring-1 ring-white/10 sm:max-w-lg lg:max-w-none"
             />
           </div>
           <div className="order-2 lg:order-3 lg:col-span-2">

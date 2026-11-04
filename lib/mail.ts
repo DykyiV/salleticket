@@ -6,7 +6,7 @@
  *   brevo  — https://api.brevo.com/v3/smtp/email, key in MAIL_API_KEY
  *   empty / "stub" — nothing is sent; callers record "not delivered" instead
  *   of pretending the message arrived.
- * MAIL_FROM is the sender, e.g. `Asol BUS <tickets@grandes-tour.com.ua>`
+ * MAIL_FROM is the sender, e.g. `Kaufmann Reisen <tickets@kaufmann-reisen.de>`
  * (the domain must be verified with the provider). MAIL_REPLY_TO is optional.
  */
 export type MailAttachment = { filename: string; content: Uint8Array };

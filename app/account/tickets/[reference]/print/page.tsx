@@ -88,7 +88,7 @@ export default async function PrintTicketPage(props: { params: Promise<{ referen
       <div className="rounded-2xl border border-slate-300 p-5 print:rounded-none print:border-black">
         <header className="flex items-center justify-between border-b border-slate-200 pb-3">
           <p className="text-sm font-bold tracking-wide">
-            Asol <span className="text-brand-600 print:text-black">BUS</span>
+            Kaufmann <span className="text-brand-600 print:text-black">Reisen</span>
             <span className="ml-2 font-normal text-slate-500">· посадковий квиток</span>
           </p>
           <p className="text-xs text-slate-500">{TRIP_KIND_LABEL[ticket.tripKind] ?? ticket.tripKind}</p>

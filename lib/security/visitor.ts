@@ -7,7 +7,7 @@ import type { NextRequest, NextResponse } from "next/server";
  * per-visitor limit, and nobody can guess another visitor's id to take over
  * their held seats.
  */
-export const VISITOR_COOKIE = "asol_visitor";
+export const VISITOR_COOKIE = "kaufmann_visitor";
 const VISITOR_RE = /^[a-f0-9]{48}$/;
 
 export function readVisitorId(req: NextRequest): string | null {

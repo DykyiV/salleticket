@@ -11,7 +11,7 @@ export type Review = {
   text: string;
   /** YYYY-MM */
   date: string;
-  lang: "uk" | "es" | "en";
+  lang: "uk" | "de" | "es" | "en";
 };
 
 export const REVIEWS: Review[] = [];

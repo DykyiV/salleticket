@@ -39,7 +39,7 @@ describe("language detection", () => {
     expect(langFromAcceptLanguage("es-ES,es;q=0.9,en;q=0.8")).toBe("es");
     expect(langFromAcceptLanguage("ca-ES,ca;q=0.9")).toBe("es");
     expect(langFromAcceptLanguage("en-GB,en;q=0.9")).toBe("en");
-    expect(langFromAcceptLanguage("de-DE,de;q=0.9,en;q=0.5")).toBe("en");
+    expect(langFromAcceptLanguage("de-DE,de;q=0.9,en;q=0.5")).toBe("de");
     expect(langFromAcceptLanguage("ru-RU,ru;q=0.9")).toBe("uk");
     expect(langFromAcceptLanguage("pl-PL")).toBe("uk");
     expect(langFromAcceptLanguage(null)).toBe("uk");

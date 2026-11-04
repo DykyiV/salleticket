@@ -27,10 +27,10 @@ const H = 841.89;
 const M = 40;
 
 const C = {
-  navy: rgb(11 / 255, 31 / 255, 58 / 255),
-  brand: rgb(37 / 255, 99 / 255, 235 / 255),
-  brandSoft: rgb(219 / 255, 234 / 255, 254 / 255),
-  brandLight: rgb(147 / 255, 197 / 255, 253 / 255),
+  navy: rgb(20 / 255, 44 / 255, 42 / 255),
+  brand: rgb(15 / 255, 118 / 255, 110 / 255),
+  brandSoft: rgb(204 / 255, 251 / 255, 241 / 255),
+  brandLight: rgb(94 / 255, 234 / 255, 212 / 255),
   ok: rgb(21 / 255, 128 / 255, 61 / 255),
   okSoft: rgb(220 / 255, 252 / 255, 231 / 255),
   warn: rgb(180 / 255, 83 / 255, 9 / 255),
@@ -164,8 +164,8 @@ async function drawTicketPage(pdf: PDFDocument, e: ETicket, fonts: Fonts, lang: 
 
   // Header band.
   pen.rect(0, 0, W, 86, C.navy);
-  const aw = pen.text("Asol", M, 48, 22, { bold: true, color: C.white });
-  pen.text(" BUS", M + aw, 48, 22, { bold: true, color: C.brandLight });
+  const kw = pen.text("Kaufmann", M, 48, 20, { bold: true, color: C.white });
+  pen.text(" Reisen", M + kw, 48, 20, { bold: true, color: C.brandLight });
   pen.text(tt.pdfTitle, M, 68, 10, { color: C.whiteDim });
   pen.text(tt.reference, W - M, 36, 9, { color: C.whiteDim, right: true });
   pen.text(e.reference, W - M, 64, 24, { bold: true, color: C.white, right: true });
@@ -244,7 +244,7 @@ function fontBytes(): Promise<[Buffer, Buffer]> {
 
 /**
  * One PDF with one page per booking, in the given order. `origin` is the
- * site origin (e.g. "https://asolbus.com") used for the QR.
+ * site origin (e.g. "https://kaufmann-reisen.de") used for the QR.
  */
 export async function buildTicketsPdf(bookings: TicketPdfBooking[], origin: string, lang: Lang = "uk"): Promise<Uint8Array> {
   const pdf = await PDFDocument.create();
@@ -252,8 +252,8 @@ export async function buildTicketsPdf(bookings: TicketPdfBooking[], origin: stri
   const [regular, bold] = await fontBytes();
   const fonts: Fonts = { font: await pdf.embedFont(regular, { subset: true }), bold: await pdf.embedFont(bold, { subset: true }) };
   const contacts = await getSiteContacts().catch(() => null);
-  pdf.setTitle(`Asol BUS — ${bookings.map((b) => b.reference).join(", ")}`);
-  pdf.setAuthor("Asol BUS");
+  pdf.setTitle(`Kaufmann Reisen — ${bookings.map((b) => b.reference).join(", ")}`);
+  pdf.setAuthor("Kaufmann Reisen");
   for (const booking of bookings) {
     await drawTicketPage(pdf, toETicket(booking, origin), fonts, lang, contacts ?? ({} as SiteContacts));
   }

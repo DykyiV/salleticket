@@ -52,6 +52,8 @@ export const HISTORY_ACTION_LABEL: Record<string, string> = {
   EMAIL_FAILED: "Email не відправлено",
   PRICE_RECALCED: "Перераховано ціну",
   NO_SHOW: "Не зʼявився — неоплачену бронь закрито після рейсу",
+  CARRIER_CANCELLED: "Скасовано в системі Grandes Tour",
+  CARRIER_CANCEL_FAILED: "Не вдалося скасувати в Grandes Tour — скасуйте вручну",
 };
 
 export const STATUS_TRANSITIONS: Record<TicketStatus, TicketStatus[]> = {

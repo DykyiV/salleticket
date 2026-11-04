@@ -10,7 +10,7 @@ const FIELDS: { key: keyof SiteContacts; label: string; placeholder: string }[] 
   { key: "phoneEs", label: "Телефон в Іспанії", placeholder: "+34 …" },
   { key: "phoneDe", label: "Телефон у Німеччині", placeholder: "+49 …" },
   { key: "email", label: "E-mail підтримки", placeholder: "support@…" },
-  { key: "website", label: "Сайт", placeholder: "grandes-tour.com.ua" },
+  { key: "website", label: "Сайт", placeholder: "kaufmann-reisen.de" },
   { key: "address", label: "Адреса офісу", placeholder: "Місто, вулиця, будинок" },
   { key: "viber", label: "Viber (номер)", placeholder: "+380…" },
   { key: "whatsapp", label: "WhatsApp (номер)", placeholder: "+34…" },

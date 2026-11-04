@@ -34,8 +34,8 @@ export async function generateDepartures(options: {
   const createdDates: string[] = [];
 
   const carrier = await prisma.carrier.upsert({
-    where: { name: "Asol BUS" },
-    create: { name: "Asol BUS", rating: 4.8, isOwnFleet: true },
+    where: { name: "Kaufmann Reisen" },
+    create: { name: "Kaufmann Reisen", rating: 4.8, isOwnFleet: true },
     update: { isOwnFleet: true },
   });
 

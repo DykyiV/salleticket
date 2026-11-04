@@ -2,7 +2,7 @@ import type { Dict } from "@/lib/i18n/dict/uk";
 
 const es: Dict = {
   meta: {
-    title: "Asol BUS — billetes de autobús por Europa y Ucrania",
+    title: "Kaufmann Reisen — billetes de autobús por Europa",
     description:
       "Billetes de autobús entre España, Ucrania, Polonia, Alemania y otros países de la UE. Elige el viaje y el asiento, paga y recibe tu billete electrónico con código QR.",
   },
@@ -27,11 +27,10 @@ const es: Dict = {
     support: "Atención al cliente",
   },
   hero: {
-    badge: "Líneas regulares España — Ucrania — Europa",
-    title: "Tu billete de autobús en 3 minutos",
-    subtitle:
-      "Busca el viaje, elige tu asiento, paga y recibe en el móvil el billete electrónico con código QR.",
-    busAlt: "Autobús de dos pisos de Grandes Tour",
+    badge: "Ucrania — Alemania — Europa",
+    title: "Líneas internacionales regulares Ucrania — Alemania y otros países de Europa",
+    subtitle: "Con el mejor servicio y los mejores conductores. ¡La calidad, lo primero!",
+    busAlt: "Autobús moderno Kaufmann Reisen",
   },
   search: {
     title: "Buscar viajes",
@@ -68,9 +67,9 @@ const es: Dict = {
       { icon: "route", title: "Líneas internacionales regulares", text: "España, Ucrania, Polonia, Alemania, Francia, Italia y otros países de la UE con horarios fijos." },
       { icon: "price", title: "Precio transparente", text: "El importe que ves es el que pagas. Los descuentos y suplementos se muestran antes de pulsar «Pagar»." },
       { icon: "qr", title: "Billete electrónico con QR", text: "Enseña el código QR al conductor desde el móvil: no hace falta imprimir nada." },
-      { icon: "luggage", title: "Equipaje incluido", text: "Equipaje de mano de hasta 5 kg y una maleta de hasta 20 kg ya incluidos. Normas claras y sencillas." },
+      { icon: "luggage", title: "Equipaje incluido", text: "Equipaje de mano de hasta 10 kg y 1–2 maletas de hasta 40 kg en total incluidos en el precio." },
       { icon: "pin", title: "Paradas cómodas", text: "Estaciones y paradas en el centro de las ciudades. La dirección y la hora exactas figuran en tu billete." },
-      { icon: "chat", title: "Atención en tres idiomas", text: "En ucraniano, español e inglés: antes, durante y después del viaje." },
+      { icon: "chat", title: "Atención en cuatro idiomas", text: "En ucraniano, alemán, español e inglés: antes, durante y después del viaje." },
     ],
   },
   routes: {
@@ -122,11 +121,11 @@ const es: Dict = {
       },
       {
         q: "¿Cuánto equipaje puedo llevar?",
-        a: "El precio incluye equipaje de mano de hasta 5 kg y una maleta de hasta 20 kg en el maletero. El equipaje adicional o voluminoso (bicicleta, esquís, maleta de más de 20 kg) se acuerda previamente y puede tener suplemento.",
+        a: "El precio incluye equipaje de mano de hasta 10 kg (55×25×45 cm) y 1–2 maletas de hasta 40 kg en total (60×45×25 cm). El equipaje adicional se admite si hay espacio y se paga al subir: 2 €/kg en las líneas de España y 1 €/kg en las de Alemania. En verano (01.06–31.08) no se admite exceso de equipaje en los autobuses de dos pisos.",
       },
       {
         q: "¿Cómo devuelvo un billete?",
-        a: "Con más de 24 horas de antelación devolvemos el importe íntegro; con menos de 24 horas se retiene el 20%. Una reserva sin pagar puedes cancelarla tú mismo en «Mis billetes»; para devolver un billete pagado, contacta con atención al cliente.",
+        a: "Con más de 24 horas de antelación devolvemos el 90% del billete. Con menos de 24 horas, o si no te presentas al embarque, no hay reembolso. Si compraste ida y vuelta y usaste solo una parte, se devuelve la diferencia entre el precio total y la parte usada menos un 20%. Una reserva sin pagar puedes cancelarla tú mismo en «Mis billetes». Más detalles en la página «Condiciones de reembolso».",
       },
       {
         q: "¿Cómo funciona un viaje con transbordo?",
@@ -134,7 +133,7 @@ const es: Dict = {
       },
       {
         q: "¿Puedo viajar con niños?",
-        a: "Sí. Cada niño tiene su propio asiento y billete con descuento: 0–4 años, 30%; 5–12 años, 20%. Indica la edad al hacer la reserva.",
+        a: "Sí. Cada niño tiene su propio asiento y billete con descuento: menores de 4 años, 30%; de 4 a 12 años, 20%. También hay descuentos para jóvenes de 12 a 24 años (10%), mayores de 60 años (10%) y veteranos (UBD, 10%). Indica la edad al reservar.",
       },
       {
         q: "¿Se admiten mascotas?",
@@ -201,7 +200,7 @@ const es: Dict = {
       seatsLeft: { one: "{n} plaza libre", other: "{n} plazas libres" },
       fewSeats: { one: "Queda {n} plaza", other: "Quedan {n} plazas" },
       soldOut: "Completo",
-      freeSeating: "Asiento libre",
+      freeSeating: "Elección de asiento gratuita",
       notEnough: "No hay plazas para {n} pasajeros",
       perPassenger: "por pasajero",
       online: "{price} pagando online",
@@ -230,6 +229,10 @@ const es: Dict = {
     dropoff: "Bajada",
     noStops: "La dirección exacta de subida figurará en el billete.",
     passengers: "Pasajeros",
+    pickSeatsHint: "Elige los asientos en el plano: un asiento por pasajero",
+    pickedCount: "Asientos elegidos: {n}",
+    deckLower: "Planta baja",
+    deckUpper: "Planta alta",
     pickFor: "Elige el asiento del pasajero {n}",
     allPicked: "Asientos elegidos para todos los pasajeros",
     legend: {
@@ -249,7 +252,7 @@ const es: Dict = {
     aisle: "pasillo",
     sleeper: "cama",
     semiSleeper: "semicama",
-    freeSeating: "En este viaje no hay asientos numerados: te sientas al subir.",
+    freeSeating: "Elección de asiento gratuita: ocupa cualquier asiento libre al subir al autobús.",
     leg: "Tramo {n}: {from} → {to}",
     transferNote: "Transbordo en {city}: después cambias de autobús y el asiento se elige aparte.",
     returnTitle: "Vuelta: {from} → {to}",
@@ -279,7 +282,15 @@ const es: Dict = {
     firstName: "Nombre",
     lastName: "Apellidos",
     birthDate: "Fecha de nacimiento",
+    fareType: "Tipo de billete",
     nameHint: "Como en el documento con el que viajas",
+    gtKind: {
+      INFANT: "Niño menor de 4 · −30%",
+      CHILD: "Niño 4–12 · −20%",
+      YOUTH: "Joven 12–24 · −10%",
+      SENIOR: "Mayor de 60 · −10%",
+      ADULT: "Adulto",
+    },
     ageCategory: {
       ADULT: "Adulto",
       CHILD_0_4: "Niño 0–4 · −30%",
@@ -297,12 +308,15 @@ const es: Dict = {
     password: "Contraseña",
     forgot: "¿No recuerdas la contraseña? Llámanos y te ayudamos.",
     baggage: "Equipaje",
-    baggageIncluded: "Cada pasajero tiene incluido equipaje de mano de hasta 5 kg y {bags} de hasta 20 kg.",
+    baggageIncluded: "Gratis para cada pasajero: equipaje de mano de hasta 10 kg (55×25×45 cm) y 1–2 maletas de hasta 40 kg en total (60×45×25 cm).",
     bags: { one: "{n} maleta", other: "{n} maletas" },
-    baggageExtra: "El equipaje adicional o voluminoso (bicicleta, esquís, maleta de más de 20 kg) se acuerda con el transportista.",
+    baggageExtra: "El equipaje adicional se admite si hay espacio y se paga al subir. En verano (01.06–31.08) no se admite exceso de equipaje en los autobuses de dos pisos.",
+    baggageRate: "Equipaje adicional en este viaje ({direction}): {rate} € por kg.",
+    baggageDirES: "línea de España",
+    baggageDirDE: "línea de Alemania",
     baggageCall: "Llámanos: {phone}",
     baggageRules: "Normas de equipaje",
-    promo: "Código promocional",
+    promo: "Código promocional o tarjeta de cliente",
     promoPlaceholder: "Si tienes uno",
     promoApply: "Aplicar",
     promoChecking: "Comprobando…",
@@ -366,7 +380,7 @@ const es: Dict = {
     passenger: "Pasajero",
     seat: "Asiento",
     seatN: "n.º {n}",
-    noSeat: "asiento libre",
+    noSeat: "elección de asiento gratuita",
     bus: "Autobús",
     busTbd: "por confirmar",
     carrier: "Transportista",
@@ -408,8 +422,8 @@ const es: Dict = {
     rulesTitle: "Información importante",
     rules: [
       "El embarque se cierra 5 minutos antes de la salida. Llegar tarde no da derecho a reembolso.",
-      "Gratis: equipaje de mano hasta 5 kg y una maleta hasta 20 kg. Más, previo acuerdo con el transportista.",
-      "Reembolso: más de 24 h antes de la salida, importe íntegro; menos de 24 h, se retiene el 20 %.",
+      "Gratis: equipaje de mano hasta 10 kg y 1–2 maletas hasta 40 kg en total. Equipaje adicional: 2 €/kg (España), 1 €/kg (Alemania).",
+      "Reembolso: más de 24 h antes de la salida, el 90 %; menos de 24 h o no presentarse, sin reembolso.",
       "Lleva contigo en el asiento los objetos de valor, documentos y medicamentos.",
     ],
     pdfTitle: "Billete electrónico",
@@ -417,7 +431,7 @@ const es: Dict = {
     mail: {
       subject: "Tu billete {ref}: {from} → {to}",
       greeting: "¡Hola, {name}!",
-      intro: "Gracias por viajar con Asol BUS. Tus billetes van adjuntos (PDF) y están en «Mis billetes» en la web.",
+      intro: "Gracias por viajar con Kaufmann Reisen. Tus billetes van adjuntos (PDF) y están en «Mis billetes» en la web.",
       open: "Abrir billete",
       help: "¿Dudas sobre el viaje? Llámanos: {phone}",
     },
@@ -457,6 +471,7 @@ const es: Dict = {
     ],
   },
   footer: {
+    refund: "Condiciones de reembolso",
     about: "Billetes para líneas regulares de autobús entre Ucrania, España y los países de la UE.",
     contacts: "Contacto",
     phoneUa: "Ucrania",
@@ -474,6 +489,8 @@ const es: Dict = {
     rightsReserved: "Todos los derechos reservados.",
   },
   pages: {
+    refundTitle: "Condiciones de reembolso",
+    refundIntro: "Cuánto se devuelve si cancelas el viaje y cómo solicitarlo.",
     baggageTitle: "Equipaje",
     baggageIntro: "Qué puedes llevar contigo y cómo preparar el equipaje para el viaje.",
     rulesTitle: "Condiciones de transporte",
@@ -482,17 +499,17 @@ const es: Dict = {
     privacyText:
       "Tus datos personales se utilizan únicamente para organizar el transporte: emitir el billete, contactarte sobre el viaje y tramitar devoluciones.",
     questions: "¿Tienes más preguntas?",
-    callUs: "Llámanos: te atendemos en ucraniano, español o inglés.",
+    callUs: "Llámanos: te atendemos en ucraniano, alemán, español o inglés.",
   },
   legal: {
     baggage: {
       title: "Normas de transporte de equipaje",
       body: [
-        "Gratis: un bulto de mano de hasta 5 kg y una maleta de hasta 20 kg en el maletero.",
-        "El equipaje adicional o voluminoso (más de 20 kg, bicicletas, esquís) se acuerda con el transportista y puede tener suplemento.",
-        "Lleva contigo en el autobús los objetos de valor, documentos, dinero y llaves.",
-        "Prohibido: sustancias peligrosas, armas y animales sin transportín.",
-        "El transportista no se hace responsable de la pérdida de equipaje entregado sin etiqueta.",
+        "Gratis (incluido en el billete): equipaje de mano de hasta 10 kg y hasta 55×25×45 cm, y 1–2 maletas de hasta 40 kg en total y hasta 60×45×25 cm.",
+        "El equipaje adicional se admite si hay espacio y se paga al subir: líneas de España 2 € por kg, líneas de Alemania 1 € por kg.",
+        "En verano, del 01.06 al 31.08, no se admite exceso de equipaje en los autobuses de dos pisos.",
+        "Lleva contigo a bordo los objetos de valor, documentos, dinero y llaves.",
+        "Prohibido: sustancias peligrosas, armas, animales sin transportín.",
       ],
     },
     rights: {
@@ -505,12 +522,23 @@ const es: Dict = {
         "El transportista informa de los cambios de horario a través de los datos de contacto indicados en la reserva.",
       ],
     },
+    refund: {
+      title: "Condiciones de reembolso",
+      body: [
+        "Sin reembolso: si el Pasajero renuncia voluntariamente al viaje menos de 24 horas antes de la salida o no se presenta al embarque.",
+        "Reembolso del 90 %: si el Pasajero renuncia voluntariamente al viaje más de 24 horas antes de la salida.",
+        "Renuncia a la vuelta: si se compró un billete de ida y vuelta y solo se usó una parte, el importe a devolver es la diferencia entre el precio total y el de la parte usada. De esa diferencia se retiene el 20 % y el resto se devuelve.",
+        "Una reserva sin pagar puedes cancelarla tú mismo en «Mis billetes», sin pagar nada.",
+        "Para el reembolso de un billete pagado, envía una solicitud libre a {email} indicando: nombre completo del pasajero; número de billete; datos bancarios; copia del documento de identidad; copia del billete; justificante de pago; número de identificación fiscal; motivo del reembolso.",
+        "Este es un resumen de las condiciones principales. Las condiciones completas figuran en la Oferta pública y en las Condiciones de transporte de pasajeros y equipaje.",
+      ],
+    },
     offer: {
       title: "Contrato de oferta",
       body: [
         "Al hacer la reserva, el pasajero acepta las condiciones del contrato público de transporte.",
         "El billete confirma el contrato entre el pasajero y el transportista.",
-        "Devoluciones: con más de 24 h antes de la salida, importe íntegro; con menos de 24 h se retiene el 20%.",
+        "Los reembolsos siguen las Condiciones de reembolso: más de 24 h antes de la salida, el 90 %; menos de 24 h o no presentarse, sin reembolso.",
         "El descuento online solo es válido si el pago se realiza en el plazo establecido.",
         "Los datos personales se utilizan únicamente para organizar el transporte.",
       ],

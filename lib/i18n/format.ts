@@ -13,7 +13,7 @@ export function plural(lang: Lang, n: number, forms: Plural): string {
   return fmt(forms[rule] ?? forms.other, { n });
 }
 
-const LOCALE: Record<Lang, string> = { uk: "uk-UA", es: "es-ES", en: "en-GB" };
+const LOCALE: Record<Lang, string> = { uk: "uk-UA", de: "de-DE", es: "es-ES", en: "en-GB" };
 
 export function localeOf(lang: Lang): string {
   return LOCALE[lang];

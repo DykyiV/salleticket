@@ -55,7 +55,7 @@ export async function GET(_req: NextRequest, props: Params) {
       eventTicketObjects: [
         {
           id: objectId,
-          classId: `${issuerId}.asolbus_ticket`,
+          classId: `${issuerId}.kaufmann_ticket`,
           state: "active",
           barcode: {
             type: "QR_CODE",

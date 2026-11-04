@@ -2,6 +2,9 @@ import { NextResponse, type NextRequest } from "next/server";
 import { setVisitorCookie, visitorId } from "@/lib/security/visitor";
 import { prisma } from "@/lib/db";
 import { emptySeatLayout } from "@/lib/seats";
+import { gtSeatLayout } from "@/lib/carriers/grandes-tour";
+import { grandesTourEnabled } from "@/lib/carriers/grandes-tour/client";
+import { getDict } from "@/lib/i18n/server";
 import { getTripSeatLayout } from "@/lib/tickets/inventory";
 import { FULL_ROUTE, type Segment } from "@/lib/trips/segments";
 
@@ -21,6 +24,15 @@ function parseSegment(req: NextRequest): Segment {
 
 export async function GET(req: NextRequest, props: Params) {
   const params = await props.params;
+  // Grandes Tour: live seat map from their system (no holds on our side).
+  if (params.id.startsWith("gt-")) {
+    if (!grandesTourEnabled()) return NextResponse.json({ layout: emptySeatLayout(), virtual: true });
+    const { t } = await getDict();
+    const layout = await gtSeatLayout(params.id, [t.seat.deckLower, t.seat.deckUpper]).catch(() => null);
+    return layout && layout.seatCount
+      ? NextResponse.json({ layout, external: true })
+      : NextResponse.json({ layout: emptySeatLayout(), virtual: true });
+  }
   const trip = await prisma.trip.findUnique({
     where: { id: params.id },
     select: { id: true },

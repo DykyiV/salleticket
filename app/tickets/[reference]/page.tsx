@@ -22,7 +22,7 @@ export const dynamic = "force-dynamic";
 
 export async function generateMetadata(): Promise<Metadata> {
   const { t } = await getDict();
-  return { title: `${t.ticket.metaTitle} — Asol BUS`, robots: { index: false } };
+  return { title: `${t.ticket.metaTitle} — Kaufmann Reisen`, robots: { index: false } };
 }
 
 type Props = { params: Promise<{ reference: string }>; searchParams: Promise<Record<string, string | undefined>> };

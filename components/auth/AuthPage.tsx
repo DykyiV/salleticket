@@ -36,12 +36,12 @@ export default async function AuthPage({ mode, next }: { mode: "login" | "regist
             </ul>
             <div className="mt-auto pt-8">
               <Image
-                src="/grandes-tour-bus.webp"
+                src="/hero-bus.webp"
                 alt={t.hero.busAlt}
-                width={1778}
-                height={830}
+                width={1400}
+                height={985}
                 sizes="440px"
-                className="h-auto w-full drop-shadow-[0_24px_30px_rgba(0,0,0,0.45)]"
+                className="h-auto w-full rounded-2xl shadow-2xl"
               />
             </div>
           </aside>

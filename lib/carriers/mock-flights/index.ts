@@ -13,7 +13,7 @@ import type {
  */
 export class MockFlightAdapter implements CarrierAdapter {
   readonly id = "mock-air";
-  readonly name = "Asol Mock Airlines";
+  readonly name = "Kaufmann Mock Airlines";
   readonly transportType = "FLIGHT" as const;
 
   async search(query: SearchQuery): Promise<Trip[]> {

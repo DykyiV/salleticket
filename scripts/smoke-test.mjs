@@ -1,5 +1,5 @@
 /**
- * Smoke tests for the Asol BUS API.
+ * Smoke tests for the Kaufmann Reisen API.
  *
  * Expects a running server (BASE_URL, default http://localhost:3100) with a
  * migrated + seeded database. Exits with code 1 on the first failed check.
@@ -39,11 +39,11 @@ async function waitForServer(timeoutMs = 60_000) {
   throw new Error(`Server at ${BASE_URL} did not start within ${timeoutMs}ms`);
 }
 
-/** Extract the asol_session cookie value from a response. */
+/** Extract the kaufmann_session cookie value from a response. */
 function sessionCookie(res) {
   const raw = res.headers.get("set-cookie") ?? "";
-  const match = raw.match(/asol_session=([^;]*)/);
-  return match ? `asol_session=${match[1]}` : null;
+  const match = raw.match(/kaufmann_session=([^;]*)/);
+  return match ? `kaufmann_session=${match[1]}` : null;
 }
 
 async function main() {
@@ -206,9 +206,9 @@ async function main() {
   // Seat holds: the visitor id comes from a server cookie, max 6 seats.
   // Needs a real coach with assigned seats (Київ → Берлін in the seed).
   const coachSearch = await (await fetch(`${BASE_URL}/api/search?from=${encodeURIComponent("Київ")}&to=${encodeURIComponent("Берлін")}&date=2026-10-27`)).json();
-  const coach = coachSearch.trips?.find((t) => t.carrierId === "asol" && t.hasAssignedSeats) ?? trip;
+  const coach = coachSearch.trips?.find((t) => t.carrierId === "kaufmann" && t.hasAssignedSeats) ?? trip;
   const seatsForHolds = await fetch(`${BASE_URL}/api/trips/${encodeURIComponent(coach.id)}/seats`);
-  const visitor = (seatsForHolds.headers.get("set-cookie") ?? "").match(/asol_visitor=[^;]+/)?.[0];
+  const visitor = (seatsForHolds.headers.get("set-cookie") ?? "").match(/kaufmann_visitor=[^;]+/)?.[0];
   check("seat map issues the visitor cookie", Boolean(visitor));
   const holdable = ((await seatsForHolds.json()).layout?.decks ?? [])
     .flatMap((d) => d.rows.flat())
@@ -442,7 +442,7 @@ async function main() {
     return res.ok ? sessionCookie(res) : null;
   };
 
-  const agentCookie = await login("agent@asolbus.local", "Agent12345");
+  const agentCookie = await login("agent@kaufmann.local", "Agent12345");
   check("seeded agent can log in", Boolean(agentCookie));
   if (agentCookie) {
     const agentFinance = await fetch(`${BASE_URL}/api/finance/settlements`, { headers: { Cookie: agentCookie } });
@@ -470,10 +470,10 @@ async function main() {
 
     // Agent takes the passenger's cash at the desk and keeps it until the
     // mutual settlement: the reconciliation must count it against the agent.
-    const accForCash = await login("accountant@asolbus.local", "Accountant12345");
+    const accForCash = await login("accountant@kaufmann.local", "Accountant12345");
     const agentRow = async () => {
       const r = await fetch(`${BASE_URL}/api/finance/reconciliation`, { headers: { Cookie: accForCash } });
-      return (await r.json()).agents?.find((a) => a.name.includes("agent@asolbus.local"));
+      return (await r.json()).agents?.find((a) => a.name.includes("agent@kaufmann.local"));
     };
     const before = await agentRow();
     const seatsAgain = await (await fetch(`${BASE_URL}/api/trips/${encodeURIComponent(trip.id)}/seats`)).json();
@@ -524,7 +524,7 @@ async function main() {
     );
   }
 
-  const accountantCookie = await login("accountant@asolbus.local", "Accountant12345");
+  const accountantCookie = await login("accountant@kaufmann.local", "Accountant12345");
   check("seeded accountant can log in", Boolean(accountantCookie));
   if (accountantCookie) {
     const accSettlements = await fetch(`${BASE_URL}/api/finance/settlements`, { headers: { Cookie: accountantCookie } });
@@ -545,7 +545,7 @@ async function main() {
     // Звірка: accrued / paid / debt per carrier and agent.
     const recon = await fetch(`${BASE_URL}/api/finance/reconciliation`, { headers: { Cookie: accountantCookie } });
     const reconBody = await recon.json();
-    const demoAgent = reconBody.agents?.find((a) => a.name.includes("agent@asolbus.local"));
+    const demoAgent = reconBody.agents?.find((a) => a.name.includes("agent@kaufmann.local"));
     check(
       "reconciliation lists carriers and the seeded agent with accrued/paid/debt",
       recon.status === 200 && Array.isArray(reconBody.carriers) && demoAgent &&
@@ -603,7 +603,7 @@ async function main() {
   check("owner can cancel own reserved ticket", cancelOwn.status === 200, `got ${cancelOwn.status}`);
 
   // --- Admin hierarchy, revocation -------------------------------------------
-  const adminCookie = await login("admin@asolbus.local", "Admin12345");
+  const adminCookie = await login("admin@kaufmann.local", "Admin12345");
   check("seeded admin can log in", Boolean(adminCookie));
   if (adminCookie) {
     // --- Guest checkout + service fee ----------------------------------------
@@ -624,7 +624,7 @@ async function main() {
     const guestWrong = await fetch(`${BASE_URL}/api/auth/guest`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: "agent@asolbus.local", password: "wrong-password-1" }),
+      body: JSON.stringify({ email: "agent@kaufmann.local", password: "wrong-password-1" }),
     });
     check("guest checkout: wrong password for an existing account (401)", guestWrong.status === 401, `got ${guestWrong.status}`);
 
@@ -666,7 +666,7 @@ async function main() {
     await setFee(0);
 
     const users = (await (await fetch(`${BASE_URL}/api/admin/users`, { headers: { Cookie: adminCookie } })).json()).users ?? [];
-    const self = users.find((u) => u.email === "admin@asolbus.local");
+    const self = users.find((u) => u.email === "admin@kaufmann.local");
     const selfDemote = await fetch(`${BASE_URL}/api/admin/users`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json", Cookie: adminCookie },
@@ -676,13 +676,13 @@ async function main() {
     const grantAdmin = await fetch(`${BASE_URL}/api/admin/users`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json", Cookie: adminCookie },
-      body: JSON.stringify({ userId: users.find((u) => u.email === "manager@asolbus.local")?.id, role: "ADMIN" }),
+      body: JSON.stringify({ userId: users.find((u) => u.email === "manager@kaufmann.local")?.id, role: "ADMIN" }),
     });
     check("an admin cannot grant the ADMIN role (403)", grantAdmin.status === 403, `got ${grantAdmin.status}`);
 
     // Demoting a staff member signs them out at once.
-    const managerCookie = await login("manager@asolbus.local", "Manager12345");
-    const manager = users.find((u) => u.email === "manager@asolbus.local");
+    const managerCookie = await login("manager@kaufmann.local", "Manager12345");
+    const manager = users.find((u) => u.email === "manager@kaufmann.local");
     const demote = await fetch(`${BASE_URL}/api/admin/users`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json", Cookie: adminCookie },

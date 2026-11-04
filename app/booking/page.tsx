@@ -4,7 +4,8 @@ import Header from "@/components/Header";
 import SiteFooter from "@/components/site/SiteFooter";
 import Icon from "@/components/site/Icon";
 import StepIndicator from "@/components/checkout/StepIndicator";
-import CheckoutForm, { type CheckoutTrip } from "@/components/checkout/CheckoutForm";
+import CheckoutForm, { type CheckoutTrip, type FareTypeOption } from "@/components/checkout/CheckoutForm";
+import { gtFareTypes } from "@/lib/carriers/grandes-tour/pricing";
 import { getCurrentUser } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import { getDict } from "@/lib/i18n/server";
@@ -16,6 +17,9 @@ import { getSiteContacts } from "@/lib/siteContacts";
 import { parseTripKind } from "@/lib/tickets/kinds";
 import { seatPriceMultiplier } from "@/lib/tickets/inventory";
 import { cityLabel } from "@/lib/trips/cities";
+import { zoneFromNames } from "@/lib/trips/baggage";
+import { grandesTourCarrierAdapter, gtBaggageZone } from "@/lib/carriers/grandes-tour";
+import { grandesTourEnabled } from "@/lib/carriers/grandes-tour/client";
 import { findSearchTrip, tripRefFromParams, tripRefParams } from "@/lib/trips/lookup";
 
 export const dynamic = "force-dynamic";
@@ -58,7 +62,7 @@ function count(v?: string): number {
 
 export async function generateMetadata(): Promise<Metadata> {
   const { t } = await getDict();
-  return { title: `${t.checkout.metaTitle} — Asol BUS` };
+  return { title: `${t.checkout.metaTitle} — Kaufmann Reisen` };
 }
 
 export default async function BookingPage(props: { searchParams: Promise<SP> }) {
@@ -86,7 +90,7 @@ export default async function BookingPage(props: { searchParams: Promise<SP> }) 
   let checkoutTrip: CheckoutTrip | null = null;
   if (trip && ref) {
     // Display prices (the booking API recomputes everything on its own).
-    const stored = trip.carrierId === "asol";
+    const stored = trip.carrierId === "kaufmann";
     const fares = await Promise.all(
       Array.from({ length: passengers }, async (_, i) => {
         const mult = stored && seats[i] != null ? await seatPriceMultiplier(prisma, trip.id, seats[i]).catch(() => 1) : 1;
@@ -95,14 +99,41 @@ export default async function BookingPage(props: { searchParams: Promise<SP> }) 
     );
     let returnPrice = 0;
     let returnLabel: string | null = null;
-    if (returnTripId) {
+    if (returnTripId?.startsWith("gt-") && trip.carrierId === "grandes-tour" && grandesTourEnabled() && sp.returnDate) {
+      const back = await grandesTourCarrierAdapter
+        .search({ from: trip.to, to: trip.from, date: sp.returnDate })
+        .catch(() => []);
+      const rt = back.find((t) => t.id === returnTripId);
+      if (rt) {
+        returnPrice = rt.price;
+        returnLabel = `${shortDate(sp.returnDate, lang)} · ${rt.departure}`;
+      }
+    } else if (returnTripId) {
       const rt = await prisma.trip.findUnique({ where: { id: returnTripId } });
       if (rt) {
         returnPrice = (await priceForTrip(prisma, rt)).price;
         returnLabel = `${shortDate(rt.departureTime.toISOString().slice(0, 10), lang)} · ${rt.departureTime.toISOString().slice(11, 16)}`;
       }
     }
+    // Grandes Tour: the ticket types they offer on this trip (age discounts etc.).
+    let fareTypes: FareTypeOption[] | null = null;
+    if (trip.carrierId === "grandes-tour" && grandesTourEnabled()) {
+      const kindToAge = { INFANT: "CHILD_0_4", CHILD: "CHILD_5_12", SENIOR: "SENIOR_60", YOUTH: "ADULT", ADULT: "ADULT" } as const;
+      const types = await gtFareTypes(trip.id).catch(() => []);
+      fareTypes = types.length
+        ? [...types]
+            .sort((a, b) => a.discount - b.discount)
+            .map((ft) => ({
+              id: String(ft.id),
+              // GT names usually carry the discount already ("… (-20%)").
+              label: ft.discount > 0 && !ft.name.includes("%") ? `${ft.name} · −${ft.discount}%` : ft.name,
+              ageCategory: kindToAge[ft.kind],
+              discount: ft.discount,
+            }))
+        : null;
+    }
     checkoutTrip = {
+      fareTypes,
       carrierId: trip.carrierId,
       tripId: trip.id,
       from: trip.from,
@@ -122,6 +153,9 @@ export default async function BookingPage(props: { searchParams: Promise<SP> }) 
       seats,
       returnSeats: parseSeats(sp.returnSeats),
       legs: parseLegs(sp.legs),
+      baggageZone:
+        (trip.carrierId === "grandes-tour" && grandesTourEnabled() ? await gtBaggageZone(trip.from, trip.to) : null) ??
+        zoneFromNames(trip.from, trip.to),
     };
   }
 

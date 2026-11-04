@@ -1,4 +1,4 @@
-# Asol BUS
+# Kaufmann Reisen
 
 [![CI](https://github.com/DykyiV/salleticket/actions/workflows/ci.yml/badge.svg)](https://github.com/DykyiV/salleticket/actions/workflows/ci.yml)
 
@@ -15,7 +15,7 @@ money side — agency commissions, monthly carrier settlements and reports.
 - Next.js 16 (App Router) + `proxy.ts` (the Next 16 name for middleware)
 - React 19, TypeScript, Tailwind CSS 3
 - Prisma 6 — SQLite locally, Postgres-ready
-- JWT sessions via `jose` (HttpOnly `asol_session` cookie) + `bcryptjs`
+- JWT sessions via `jose` (HttpOnly `kaufmann_session` cookie) + `bcryptjs`
 - `pdf-lib` + `qrcode` for e-tickets, invoices and acts
 - Vitest (unit + integration), a Node smoke suite, GitHub Actions CI
 
@@ -33,10 +33,10 @@ Seeded users (password in brackets — **dev only**):
 
 | Email | Role | Password |
 |---|---|---|
-| `admin@asolbus.local` | ADMIN | `Admin12345` |
-| `manager@asolbus.local` | MANAGER | `Manager12345` |
-| `agent@asolbus.local` | AGENT | `Agent12345` |
-| `accountant@asolbus.local` | ACCOUNTANT | `Accountant12345` |
+| `admin@kaufmann.local` | ADMIN | `Admin12345` |
+| `manager@kaufmann.local` | MANAGER | `Manager12345` |
+| `agent@kaufmann.local` | AGENT | `Agent12345` |
+| `accountant@kaufmann.local` | ACCOUNTANT | `Accountant12345` |
 
 > ⚠️ Never deploy with the example `JWT_SECRET` — generate one with
 > `openssl rand -base64 48`. For Postgres, switch the datasource provider in

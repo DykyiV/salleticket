@@ -1,4 +1,5 @@
 import { PaymentStatus, TicketStatus, type PrismaClient } from "@prisma/client";
+import { scheduleCarrierCancel } from "@/lib/tickets/carrierSync";
 import { prisma } from "@/lib/db";
 import { recordTicketHistory } from "@/lib/tickets/history";
 import { updateTicketVersioned } from "@/lib/tickets/version";
@@ -101,12 +102,13 @@ export async function reconcileTicketPayment(
           },
         });
         cancelled = { reference: ticket.booking?.reference ?? null, seat: ticket.seatNumber };
+        scheduleCarrierCancel(ticket.id, ticket.carrierRef);
       }
     });
     const done = cancelled as { reference: string | null; seat: number | null } | null;
     if (done?.reference) {
       await notifyPassenger(payment.ticketId, {
-        sms: `Asol BUS: час на оплату квитка ${done.reference} минув, бронювання скасовано.`,
+        sms: `Kaufmann Reisen: час на оплату квитка ${done.reference} минув, бронювання скасовано.`,
         subject: `Бронювання ${done.reference} скасовано`,
         text: `Оплата за квиток ${done.reference} не надійшла вчасно, тому бронювання автоматично скасовано, а місце звільнено. Ви можете оформити новий квиток на сайті.`,
       });

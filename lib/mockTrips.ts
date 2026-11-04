@@ -56,7 +56,7 @@ export type Trip = {
 
 const BUS_CARRIERS = [
   { name: "Grandes Tour", short: "GT", vehicle: "Mercedes Tourismo" },
-  { name: "Asol Express", short: "AE", vehicle: "Neoplan Cityliner" },
+  { name: "Kaufmann Express", short: "AE", vehicle: "Neoplan Cityliner" },
   { name: "EuroLines Plus", short: "EL", vehicle: "Setra ComfortClass" },
   { name: "Intercity Bus", short: "IC", vehicle: "Van Hool Astromega" },
   { name: "Gunsel", short: "GS", vehicle: "Mercedes Travego" },
