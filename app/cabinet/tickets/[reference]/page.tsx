@@ -112,7 +112,10 @@ export default async function CabinetTicketEditPage(props: {
   const h = await headers();
   const host = h.get("x-forwarded-host") ?? h.get("host");
   const proto = h.get("x-forwarded-proto") ?? "http";
-  const qrCode = await qrCodeDataUrl(`${proto}://${host}/check/${full.reference}`);
+  // Grandes Tour tickets: the same QR as the carrier's (their ticket number).
+  const qrCode = await qrCodeDataUrl(
+    full.ticket.carrierRef?.split(":").pop() || `${proto}://${host}/check/${full.reference}`
+  );
 
   const trip = ticket.trip;
   const returnTrip = ticket.returnTrip;

@@ -118,6 +118,9 @@ describe("e-ticket model", () => {
     const e = toETicket(gt, "x");
     expect(e.carrierTicket).toBe("1014651");
     expect(e.carrierPhones).toBe("+380682854657 (автобус)");
+    // QR: the carrier's ticket number for GT (as on their tickets), our /check link otherwise.
+    expect(e.qrValue).toBe("1014651");
+    expect(toETicket(booking(), "https://kaufmann-reisen.de").qrValue).toMatch(/^https:\/\/kaufmann-reisen\.de\/check\//);
   });
 });
 

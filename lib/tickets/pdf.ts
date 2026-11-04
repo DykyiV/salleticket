@@ -215,7 +215,7 @@ async function drawTicketPage(pdf: PDFDocument, e: ETicket, fonts: Fonts, lang: 
   const qrTop = 136;
   const carrierBox = e.carrierTicket ? 38 : 0;
   pen.rect(qrX - 8, qrTop - 8, qrSize + 16, qrSize + 58 + carrierBox, C.soft, C.line);
-  const qr = await pdf.embedPng(await qrCodePngBuffer(e.checkUrl));
+  const qr = await pdf.embedPng(await qrCodePngBuffer(e.qrValue));
   page.drawImage(qr, { x: qrX, y: H - qrTop - qrSize, width: qrSize, height: qrSize });
   pen.text(e.reference, qrX, qrTop + qrSize + 16, 11, { bold: true, center: qrSize });
   pen.para(tt.qrHint, qrX, qrTop + qrSize + 31, 8, qrSize, { color: C.muted, leading: 10 });

@@ -64,8 +64,10 @@ export default async function PrintTicketPage(props: { params: Promise<{ referen
     : "";
 
   const h = await headers();
+  // Grandes Tour tickets: the same QR as the carrier's (their ticket number).
   const qr = await qrCodeDataUrl(
-    `${h.get("x-forwarded-proto") ?? "http"}://${h.get("x-forwarded-host") ?? h.get("host")}/check/${booking.reference}`
+    carrierTicket ??
+      `${h.get("x-forwarded-proto") ?? "http"}://${h.get("x-forwarded-host") ?? h.get("host")}/check/${booking.reference}`
   );
 
   const payment = ticket.payments[0] ?? null;

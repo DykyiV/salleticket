@@ -48,7 +48,7 @@ export default async function TicketPage(props: Props) {
   const host = h.get("x-forwarded-host") ?? h.get("host");
   const origin = siteOrigin(host ? `${h.get("x-forwarded-proto") ?? "http"}://${host}` : null);
   const tickets: ETicket[] = (group ?? []).map((b) => toETicket(b, origin));
-  const qrs = await Promise.all(tickets.map((e) => qrCodeDataUrl(e.checkUrl)));
+  const qrs = await Promise.all(tickets.map((e) => qrCodeDataUrl(e.qrValue)));
   const contacts = await getSiteContacts().catch(() => null);
   const phone = contacts?.phoneUa || contacts?.phoneEs || contacts?.phoneDe || null;
 

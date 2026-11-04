@@ -100,6 +100,12 @@ export type ETicket = {
   openReturn: boolean;
   journeys: ETicketJourney[];
   checkUrl: string;
+  /**
+   * What the QR code holds. Grandes Tour tickets: the carrier's ticket
+   * number, exactly as on their own tickets / Wallet pass, so their drivers'
+   * scan works the same; our own tickets: the /check link.
+   */
+  qrValue: string;
   /** The carrier's own ticket number (Grandes Tour), when it keeps one. */
   carrierTicket: string | null;
   carrierName: string | null;
@@ -225,6 +231,7 @@ export function toETicket(b: ETicketBooking, origin: string): ETicket {
     checkUrl: `${origin.replace(/\/$/, "")}/check/${b.reference}`,
     // "GT:<order>:<ticket>" → "<ticket>"
     carrierTicket: t.carrierRef?.split(":").pop() || null,
+    qrValue: t.carrierRef?.split(":").pop() || `${origin.replace(/\/$/, "")}/check/${b.reference}`,
     carrierName: t.trip?.carrier?.name ?? null,
     carrierPhones: t.trip?.carrierPhones ?? t.returnTrip?.carrierPhones ?? null,
   };

@@ -24,12 +24,11 @@ export default async function CheckTicketPage(
   const user = await getCurrentUser();
   if (!user || !hasRoleAtLeast(user.role, "DRIVER")) notFound();
 
-  const booking = await prisma.booking.findUnique({
-    where: { reference: params.reference },
-    include: {
-      ticket: { include: { trip: { include: { carrier: true } } } },
-    },
-  });
+  // A Grandes Tour QR holds only the carrier's ticket number: find ours by it.
+  const include = { ticket: { include: { trip: { include: { carrier: true } } } } } as const;
+  const booking = /^\d{5,10}$/.test(params.reference)
+    ? await prisma.booking.findFirst({ where: { ticket: { carrierRef: { endsWith: `:${params.reference}` } } }, include })
+    : await prisma.booking.findUnique({ where: { reference: params.reference }, include });
   if (!booking) notFound();
 
   await reconcileTicketPayment(booking.ticket.id);
