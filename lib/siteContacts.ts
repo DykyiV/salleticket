@@ -29,7 +29,7 @@ export const CONTACT_FIELDS = Object.keys({
 export const DEFAULT_CONTACTS: SiteContacts = {
   phoneUa: "",
   phoneEs: "",
-  phoneDe: "+49 959 44 124",
+  phoneDe: "+49 721 95 944 124",
   email: "info@kaufmann-reisen.de",
   website: "kaufmann-reisen.de",
   address: "",

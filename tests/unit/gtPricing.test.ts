@@ -78,6 +78,7 @@ describe("phone for Grandes Tour", () => {
     expect(toE164("050 123 45 67")).toBe("+380501234567");
     expect(toE164("0034 612 345 678")).toBe("+34612345678");
     expect(toE164("+49 959 44 124")).toBeNull();
+    expect(toE164("+49 721 95 944 124")).toBe("+4972195944124");
     expect(toE164("12345")).toBeNull();
   });
 });
