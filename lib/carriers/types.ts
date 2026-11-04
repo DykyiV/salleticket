@@ -50,6 +50,8 @@ export type BookingRequest = {
   travelDate?: string;
   /** Return trip id of the same carrier (round-trip booking). */
   returnTripId?: string | null;
+  /** Return trip date YYYY-MM-DD. */
+  returnDate?: string;
   /** Discount / loyalty card or promo code checked by the carrier. */
   discountCard?: string | null;
 };

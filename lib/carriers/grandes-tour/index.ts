@@ -1,6 +1,7 @@
 import type { Trip } from "@/lib/mockTrips";
 import type { BusLayout, DeckView, LayoutCell, Seat } from "@/lib/seats";
 import { cityNames } from "@/lib/trips/cities";
+import { toE164 } from "@/lib/phone";
 import { zoneFromCountries, type BaggageZone } from "@/lib/trips/baggage";
 import type { BookResult, BookingRequest, CarrierAdapter, SearchQuery } from "@/lib/carriers/types";
 import {
@@ -26,6 +27,9 @@ import { gtCall } from "@/lib/carriers/grandes-tour/client";
 type GtCity = { id: number; name: string; country_iso?: string | null };
 type GtTrip = {
   id: number;
+  bus_id?: number;
+  /** Trip's order number in the GT route (reserve_tickets needs it). */
+  number?: number;
   bus_number: string;
   departure_city_id: number;
   departure_city: string;
@@ -209,6 +213,40 @@ function toTrip(t: GtTrip, currency: string, seatsLeft: number): Trip {
   };
 }
 
+/** bus_id + route order number per GT trip id (from the last search). */
+const tripMeta = new Map<number, { busId?: number; number?: number }>();
+
+/** Direct GT trips that can be booked with payment on boarding. */
+async function searchSequences(fromId: number, toId: number, day?: string, passengers?: number): Promise<GtSequence[]> {
+  const today = new Date().toISOString().slice(0, 10);
+  const date = day && day >= today ? day : today;
+  const res = await gtCall<{ trips_sequences: GtSequence[] }>("/api/v2/booking/search_trips", {
+    method: "POST",
+    json: {
+      enable_external_search: false,
+      departure_city_id: fromId,
+      arrival_city_id: toId,
+      depature_date: date,
+      // Without a date (checkout re-check) look a month ahead to find the trip id.
+      days_count_limit: day ? 1 : 31,
+      passengers_count: Math.max(1, passengers ?? 1),
+      currecny_code: "EUR",
+      back: false,
+    },
+  });
+  const direct = (res.trips_sequences ?? []).filter(
+    (s) => s.canBook && s.canBookWithPaymentAtBoarding && s.trips?.length === 1,
+  );
+  for (const s of direct) tripMeta.set(s.trips[0].id, { busId: s.trips[0].bus_id, number: s.trips[0].number });
+  return direct;
+}
+
+/** bus_id and route number of a GT trip (searched again if not cached). */
+async function metaFor(leg: { tripId: number; fromId: number; toId: number }, day?: string) {
+  if (!tripMeta.has(leg.tripId)) await searchSequences(leg.fromId, leg.toId, day).catch(() => []);
+  return tripMeta.get(leg.tripId) ?? {};
+}
+
 export class GrandesTourCarrierAdapter implements CarrierAdapter {
   readonly id = "grandes-tour";
   readonly name = "Grandes Tour";
@@ -217,26 +255,7 @@ export class GrandesTourCarrierAdapter implements CarrierAdapter {
   async search(query: SearchQuery): Promise<Trip[]> {
     const [fromId, toId] = await Promise.all([cityId(query.from), cityId(query.to)]);
     if (!fromId || !toId) return [];
-    const today = new Date().toISOString().slice(0, 10);
-    const date = query.date && query.date >= today ? query.date : today;
-    const res = await gtCall<{ trips_sequences: GtSequence[] }>("/api/v2/booking/search_trips", {
-      method: "POST",
-      json: {
-        enable_external_search: false,
-        departure_city_id: fromId,
-        arrival_city_id: toId,
-        depature_date: date,
-        // Without a date (checkout re-check) look a month ahead to find the trip id.
-        days_count_limit: query.date ? 1 : 31,
-        passengers_count: Math.max(1, query.passengers ?? 1),
-        currecny_code: "EUR",
-        back: false,
-      },
-    });
-    // Direct trips that can be booked with payment on boarding (no online payment yet).
-    const direct = (res.trips_sequences ?? []).filter(
-      (s) => s.canBook && s.canBookWithPaymentAtBoarding && s.trips?.length === 1,
-    );
+    const direct = await searchSequences(fromId, toId, query.date, query.passengers);
     return Promise.all(
       direct.map(async (s) => {
         const t = s.trips[0];
@@ -276,21 +295,20 @@ export class GrandesTourCarrierAdapter implements CarrierAdapter {
         const chosen = p.fareTypeId != null ? typesTo.find((t) => t.id === p.fareTypeId) : undefined;
         if (p.fareTypeId != null && !chosen) throw new Error("Невідомий тип квитка");
         const kind = chosen ? gtKindOfType(chosen) : gtKindForBirthDate(p.birthDate, travelDate);
-        const [total, toOnly] = await Promise.all([
-          gtFare({ to: key, back, kind, typeId: chosen?.id, card: cardNo, currency }),
-          back ? gtFare({ to: key, kind, typeId: chosen?.id, card: cardNo, currency }) : Promise.resolve(null),
-        ]);
-        const priceTo = toOnly ? Math.min(toOnly.price, total.price) : total.price;
+        const total = await gtFare({ to: key, back, kind, typeId: chosen?.id, card: cardNo, currency });
         return {
           kind,
           total,
-          priceTo,
-          priceBack: Math.round((total.price - priceTo) * 100) / 100,
           typeTo: chosen?.id ?? gtTypeFor(typesTo, kind)?.id ?? null,
           typeBack: back ? (gtTypeFor(typesBack, kind)?.id ?? null) : null,
         };
       }),
     );
+
+    const [metaTo, metaBack] = await Promise.all([
+      metaFor(key, request.travelDate),
+      back ? metaFor(back, request.returnDate ?? undefined) : Promise.resolve({} as { busId?: number; number?: number }),
+    ]);
 
     const res = await gtCall<{ order_details: { id: number; tickets?: { id: number; first_name?: string; last_name?: string; price?: number }[] } }>(
       "/api/v2/booking/reserve_tickets",
@@ -302,22 +320,21 @@ export class GrandesTourCarrierAdapter implements CarrierAdapter {
           passengers: people.map((p, i) => {
             const [first, ...rest] = p.name.trim().split(/\s+/);
             const f = priced[i];
+            // Same shape as the Grandes Tour site sends (names upper case).
             return {
-              first_name: first ?? "",
-              last_name: rest.join(" "),
-              phone1: p.phone,
-              ...(p.birthDate ? { birthday: `${p.birthDate}T00:00:00` } : {}),
-              price: f.total.price,
-              price_before_discount: f.total.priceBeforeDiscount,
+              first_name: (first ?? "").toUpperCase(),
+              last_name: rest.join(" ").toUpperCase(),
+              phone1: toE164(p.phone) ?? p.phone,
               trip_seats_to: [
                 {
                   trip_id: key.tripId,
                   seat_id: seatsTo[i].id,
                   city_from_id: key.fromId,
                   city_to_id: key.toId,
+                  number: metaTo.number ?? 1,
+                  busId: metaTo.busId,
                   passenger_type_id: f.typeTo,
-                  price: f.priceTo,
-                  discount_cart: cardNo,
+                  discount_cart: cardNo ?? "",
                 },
               ],
               trip_seats_back: back
@@ -327,9 +344,10 @@ export class GrandesTourCarrierAdapter implements CarrierAdapter {
                       seat_id: seatsBack[i].id,
                       city_from_id: back.fromId,
                       city_to_id: back.toId,
+                      number: metaBack.number ?? 1,
+                      busId: metaBack.busId,
                       passenger_type_id: f.typeBack,
-                      price: f.priceBack,
-                      discount_cart: cardNo,
+                      discount_cart: cardNo ?? "",
                     },
                   ]
                 : [],
@@ -344,7 +362,9 @@ export class GrandesTourCarrierAdapter implements CarrierAdapter {
     const tickets = people.map((p, i) => {
       const [first, ...rest] = p.name.trim().split(/\s+/);
       const byName = gtTickets.find(
-        (t) => (t.first_name ?? "").trim() === (first ?? "") && (t.last_name ?? "").trim() === rest.join(" "),
+        (t) =>
+          (t.first_name ?? "").trim().toUpperCase() === (first ?? "").toUpperCase() &&
+          (t.last_name ?? "").trim().toUpperCase() === rest.join(" ").toUpperCase(),
       );
       const t = gtTickets.length === people.length ? gtTickets[i] : byName ?? gtTickets[i];
       return {

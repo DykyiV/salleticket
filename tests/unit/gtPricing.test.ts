@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { isLatinName } from "@/lib/passengerName";
+import { toE164 } from "@/lib/phone";
 import { gtKindForAge, gtKindForBirthDate, gtLegFromKey, gtTicketIdFromRef, gtTicketRef, gtTypeFor } from "@/lib/carriers/grandes-tour/pricing";
 import { zoneFromCountries, zoneFromNames } from "@/lib/trips/baggage";
 
@@ -55,5 +57,27 @@ describe("baggage zones", () => {
     expect(zoneFromCountries(["UA", "PL"])).toBeNull();
     expect(zoneFromNames("Львів", "Мадрид")).toBe("ES");
     expect(zoneFromNames("Білефельд", "Київ")).toBe("DE");
+  });
+});
+
+describe("passenger names (Grandes Tour rule)", () => {
+  it("accepts Latin letters only, at least 3", () => {
+    expect(isLatinName("Test")).toBe(true);
+    expect(isLatinName("Anna-Maria")).toBe(true);
+    expect(isLatinName("De La Cruz")).toBe(true);
+    expect(isLatinName("Тест")).toBe(false);
+    expect(isLatinName("Іван")).toBe(false);
+    expect(isLatinName("Al")).toBe(false);
+    expect(isLatinName("O'Neil")).toBe(false);
+  });
+});
+
+describe("phone for Grandes Tour", () => {
+  it("normalises valid numbers to E.164 and rejects invalid ones", () => {
+    expect(toE164("+380 (50) 123-45-67")).toBe("+380501234567");
+    expect(toE164("050 123 45 67")).toBe("+380501234567");
+    expect(toE164("0034 612 345 678")).toBe("+34612345678");
+    expect(toE164("+49 959 44 124")).toBeNull();
+    expect(toE164("12345")).toBeNull();
   });
 });

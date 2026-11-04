@@ -91,8 +91,9 @@ export async function gtCheckCard(raw: string | null | undefined): Promise<GtCar
     if (d.is_blocked) return { status: "invalid", number, message: "Картку заблоковано" };
     if (d.is_within_active_period === false) return { status: "invalid", number, message: "Термін дії картки минув" };
     return { status: "ok", number, percent: d.percent ?? 0 };
-  } catch {
-    return { status: "invalid", number, message: "Картку не знайдено" };
+  } catch (err) {
+    const message = err instanceof Error ? err.message.replace(/^Grandes Tour [^:]+: /, "") : "";
+    return { status: "invalid", number, message: message || "Картку не знайдено" };
   }
 }
 

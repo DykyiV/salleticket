@@ -10,6 +10,8 @@ import { money } from "@/lib/i18n/format";
 import { cityLabel } from "@/lib/trips/cities";
 import { computePrice, type AgeCategoryId } from "@/lib/pricing";
 import { telHref } from "@/lib/siteContacts";
+import { isLatinName } from "@/lib/passengerName";
+import { toE164 } from "@/lib/phone";
 import { EXTRA_BAGGAGE_RATE, type BaggageZone } from "@/lib/trips/baggage";
 
 export type CheckoutTrip = {
@@ -244,12 +246,15 @@ export default function CheckoutForm({
   const validate = () => {
     const next: Record<string, string> = {};
     passengers.forEach((p, i) => {
+      // As Grandes Tour requires: Latin letters, as in the passport.
       if (!p.firstName.trim()) next[`p${i}-firstName`] = c.errorRequired;
+      else if (!isLatinName(p.firstName)) next[`p${i}-firstName`] = c.errorLatin;
       if (!p.lastName.trim()) next[`p${i}-lastName`] = c.errorRequired;
+      else if (!isLatinName(p.lastName)) next[`p${i}-lastName`] = c.errorLatin;
       if (!fareTypes.some((f) => f.id === p.fareType)) next[`p${i}-fareType`] = c.errorRequired;
     });
     if (!/^\S+@\S+\.\S+$/.test(email.trim())) next.email = c.errorEmail;
-    if (phone.replace(/\D/g, "").length < 7) next.phone = c.errorPhone;
+    if (!toE164(phone)) next.phone = c.errorPhone;
     if (accountExists && !user && !password) next.password = c.errorRequired;
     if (!agree) next.agree = c.errorAgree;
     if (promo.status === "invalid") next.promo = promo.message;

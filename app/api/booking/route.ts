@@ -29,6 +29,8 @@ import { notifyNewBooking, notifyTripAlmostFull } from "@/lib/notify";
 import { FULL_ROUTE, resolveSegment, type Segment } from "@/lib/trips/segments";
 import { pickAssignment } from "@/lib/ops/legs";
 import { cityNames } from "@/lib/trips/cities";
+import { isLatinName } from "@/lib/passengerName";
+import { toE164 } from "@/lib/phone";
 import type { BookingPassenger, Trip } from "@/lib/carriers/types";
 import { getLang } from "@/lib/i18n/server";
 import { loadGroupBookings, requestOrigin } from "@/lib/tickets/eTicket";
@@ -279,6 +281,21 @@ export async function POST(req: NextRequest) {
     throw err;
   }
 
+  // Grandes Tour accepts names in Latin letters only (as in the passport).
+  if (isGt && passengers.some((p) => !isLatinName(p.firstName) || !isLatinName(p.lastName))) {
+    return NextResponse.json(
+      { error: "Імʼя та прізвище — лише латинськими літерами, як у закордонному паспорті (щонайменше 3)" },
+      { status: 400 }
+    );
+  }
+
+  if (isGt && !toE164(phone)) {
+    return NextResponse.json(
+      { error: "Вкажіть справжній номер телефону в міжнародному форматі, напр. +380501234567" },
+      { status: 400 }
+    );
+  }
+
   // Passengers booking "pay on the bus" themselves are limited per phone /
   // account; agents, the cash desk and office staff are not.
   if (paymentMethod === "CASH_ON_BUS" && !(await isTicketStaff(session))) {
@@ -424,13 +441,16 @@ export async function POST(req: NextRequest) {
       tripSnapshot: snapshot,
       travelDate: snapshot.date,
       returnTripId: carrierReturn?.id ?? null,
+      returnDate: carrierReturn?.date,
       discountCard: isGt ? (passengers.find((p) => p.promoCode)?.promoCode ?? body.promoCode ?? null) : null,
     });
   } catch (err) {
+    const details = err instanceof Error ? err.message : String(err);
     return NextResponse.json(
       {
-        error: "Carrier booking failed",
-        details: err instanceof Error ? err.message : String(err),
+        // Shown to the buyer: the carrier's reason (seat taken, card, …).
+        error: `Не вдалося забронювати у перевізника: ${details.replace(/^Grandes Tour [^:]+: /, "")}`,
+        details,
       },
       { status: 502 }
     );
