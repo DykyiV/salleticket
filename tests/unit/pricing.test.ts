@@ -102,6 +102,6 @@ describe("cityNames", () => {
   });
 
   it("returns the raw input for unknown cities", () => {
-    expect(cityNames("Zhytomyr")).toEqual(["Zhytomyr"]);
+    expect(cityNames("Atlantis")).toEqual(["Atlantis"]);
   });
 });

@@ -13,7 +13,7 @@ import type { Lang } from "@/lib/i18n/config";
 import { parseTripKind } from "@/lib/tickets/kinds";
 import { getSiteSettings } from "@/lib/settings";
 import { onlinePaymentsEnabled } from "@/lib/paymentMode";
-import { cityLabel, knownCities } from "@/lib/trips/cities";
+import { cityLabel } from "@/lib/trips/cities";
 import { filtersFromParams } from "@/lib/results/filter";
 
 export const dynamic = "force-dynamic";
@@ -104,7 +104,6 @@ export default async function ResultsPage(props: { searchParams: Promise<SearchP
           <SearchSummary
             title={routeTitle}
             details={details}
-            cities={knownCities()}
             today={today}
             initiallyOpen={!hasRoute}
             defaults={{

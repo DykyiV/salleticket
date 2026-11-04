@@ -8,7 +8,7 @@ import { getDict } from "@/lib/i18n/server";
 import { fmt, money, plural } from "@/lib/i18n/format";
 import type { Lang } from "@/lib/i18n/config";
 import type { Dict } from "@/lib/i18n/dict";
-import { cityLabel, knownCities } from "@/lib/trips/cities";
+import { cityLabel } from "@/lib/trips/cities";
 import { QUICK_ROUTES, getPopularRouteStats, type RouteStats } from "@/lib/site/popularRoutes";
 import { REVIEWS } from "@/lib/site/reviews";
 
@@ -57,7 +57,7 @@ function SectionTitle({ title, subtitle, id }: { title: string; subtitle?: strin
 
 function Hero({ t }: { t: Dict }) {
   return (
-    <section id="search" aria-labelledby="hero-title" className="relative isolate overflow-hidden bg-navy">
+    <section id="search" aria-labelledby="hero-title" className="relative isolate z-10 bg-navy">
       <div className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(60rem_30rem_at_85%_-10%,rgba(37,99,235,0.45),transparent),radial-gradient(40rem_24rem_at_0%_110%,rgba(37,99,235,0.25),transparent)]" />
       <div className="container-site pb-10 pt-8 sm:pb-14 sm:pt-12 lg:pb-16 lg:pt-14">
         <div className="grid items-center gap-6 lg:grid-cols-[1.05fr_1fr] lg:gap-10">
@@ -83,7 +83,7 @@ function Hero({ t }: { t: Dict }) {
             />
           </div>
           <div className="order-2 lg:order-3 lg:col-span-2">
-            <SearchPanel cities={knownCities()} quickRoutes={QUICK_ROUTES} today={todayInEurope()} />
+            <SearchPanel quickRoutes={QUICK_ROUTES} today={todayInEurope()} />
           </div>
         </div>
       </div>

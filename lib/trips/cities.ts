@@ -1,3 +1,5 @@
+import { GT_CITIES } from "@/lib/trips/gtCities";
+
 const CITY_GROUPS: string[][] = [
   ["Київ", "Kyiv", "Kiev"],
   ["Львів", "Lviv", "Leópolis"],
@@ -53,25 +55,91 @@ const CITY_LABEL: Record<string, { en: string; es: string; de: string }> = {
   Тернопіль: { en: "Ternopil", es: "Ternópil", de: "Ternopil" },
 };
 
+/** Comparable form of a city name: lower case, no accents/apostrophes. */
+export function normCity(name: string): string {
+  return name
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[’'ʼ`´]/g, "")
+    .replace(/[-\s]+/g, " ")
+    .trim()
+    .toLowerCase();
+}
+
+type CityEntry = { uk: string; labels: { en: string; es: string; de: string }; names: string[] };
+
+/**
+ * Every city we know (our list + the Grandes Tour directory), with all its
+ * spellings, so a city typed in any language finds the same city.
+ */
+const { ENTRIES, BY_NAME } = (() => {
+  const entries: CityEntry[] = [];
+  const byName = new Map<string, CityEntry>();
+  const add = (entry: CityEntry, names: string[]) => {
+    for (const n of names) {
+      if (!n) continue;
+      if (!entry.names.includes(n)) entry.names.push(n);
+      const key = normCity(n);
+      if (!byName.has(key)) byName.set(key, entry);
+    }
+  };
+  for (const group of CITY_GROUPS) {
+    const uk = group[0];
+    const entry: CityEntry = { uk, labels: CITY_LABEL[uk] ?? { en: uk, es: uk, de: uk }, names: [] };
+    entries.push(entry);
+    add(entry, group);
+  }
+  for (const [, uk, en, es, de, pl] of GT_CITIES) {
+    const names = [uk, en, es, de, pl];
+    let entry = names.map((n) => byName.get(normCity(n))).find(Boolean);
+    if (!entry) {
+      entry = { uk, labels: { en: en || uk, es: es || uk, de: de || uk }, names: [] };
+      entries.push(entry);
+    }
+    add(entry, names);
+  }
+  return { ENTRIES: entries, BY_NAME: byName };
+})();
+
 export function cityLabel(name: string, lang: "uk" | "de" | "es" | "en"): string {
-  const group = cityNames(name);
-  const uk = group[0] ?? name;
-  if (lang === "uk") return CITY_LABEL[uk] ? uk : name;
-  return CITY_LABEL[uk]?.[lang] ?? name;
+  const entry = BY_NAME.get(normCity(name));
+  if (!entry) return name;
+  return lang === "uk" ? entry.uk : entry.labels[lang] || entry.uk;
 }
 
-/** Ukrainian names of all known cities (for the search suggestions). */
-export function knownCities(): string[] {
-  return CITY_GROUPS.map((group) => group[0]);
-}
-
-/** All known spellings of a city so search/booking match Prisma rows. */
+/** All known spellings of a city (Ukrainian first) so search/booking match. */
 export function cityNames(input: string): string[] {
   const raw = input.trim();
   if (!raw) return [];
-  const key = raw.toLowerCase();
-  for (const group of CITY_GROUPS) {
-    if (group.some((name) => name.toLowerCase() === key)) return group;
+  return BY_NAME.get(normCity(raw))?.names ?? [raw];
+}
+
+export type CitySuggestion = { uk: string; label: string; alt: string | null };
+
+/**
+ * Cities for what the user is typing, in any language: the label is in the
+ * site language, `alt` is the spelling that matched when it differs.
+ */
+export function citySuggestions(query: string, lang: "uk" | "de" | "es" | "en", limit = 8): CitySuggestion[] {
+  const q = normCity(query);
+  if (!q) return [];
+  const hits: { entry: CityEntry; rank: number; matched: string }[] = [];
+  for (const entry of ENTRIES) {
+    let rank = -1;
+    let matched = "";
+    for (const n of entry.names) {
+      const nn = normCity(n);
+      const r = nn.startsWith(q) ? 0 : nn.includes(` ${q}`) ? 1 : -1;
+      if (r >= 0 && (rank < 0 || r < rank)) {
+        rank = r;
+        matched = n;
+      }
+    }
+    if (rank >= 0) hits.push({ entry, rank, matched });
   }
-  return [raw];
+  return hits
+    .map(({ entry, rank, matched }) => ({ rank, label: cityLabel(entry.uk, lang), uk: entry.uk, matched }))
+    .sort((a, b) => a.rank - b.rank || a.label.localeCompare(b.label))
+    .slice(0, limit)
+    .map(({ uk, label, matched }) => ({ uk, label, alt: normCity(matched) === normCity(label) ? null : matched }));
 }

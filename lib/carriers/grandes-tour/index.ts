@@ -217,7 +217,13 @@ function toTrip(t: GtTrip, currency: string, seatsLeft: number): Trip {
 const tripMeta = new Map<number, { busId?: number; number?: number }>();
 
 /** Direct GT trips that can be booked with payment on boarding. */
-async function searchSequences(fromId: number, toId: number, day?: string, passengers?: number): Promise<GtSequence[]> {
+async function searchSequences(
+  fromId: number,
+  toId: number,
+  day?: string,
+  passengers?: number,
+  days = day ? 1 : 31,
+): Promise<GtSequence[]> {
   const today = new Date().toISOString().slice(0, 10);
   const date = day && day >= today ? day : today;
   const res = await gtCall<{ trips_sequences: GtSequence[] }>("/api/v2/booking/search_trips", {
@@ -228,7 +234,7 @@ async function searchSequences(fromId: number, toId: number, day?: string, passe
       arrival_city_id: toId,
       depature_date: date,
       // Without a date (checkout re-check) look a month ahead to find the trip id.
-      days_count_limit: day ? 1 : 31,
+      days_count_limit: days,
       passengers_count: Math.max(1, passengers ?? 1),
       currecny_code: "EUR",
       back: false,
@@ -245,6 +251,22 @@ async function searchSequences(fromId: number, toId: number, day?: string, passe
 async function metaFor(leg: { tripId: number; fromId: number; toId: number }, day?: string) {
   if (!tripMeta.has(leg.tripId)) await searchSequences(leg.fromId, leg.toId, day).catch(() => []);
   return tripMeta.get(leg.tripId) ?? {};
+}
+
+/**
+ * Lowest fare per departure day (YYYY-MM-DD → price) for 31 days from
+ * `start` — for the date picker.
+ */
+export async function gtLowestPrices(from: string, to: string, start: string): Promise<Record<string, number>> {
+  const [fromId, toId] = await Promise.all([cityId(from), cityId(to)]);
+  if (!fromId || !toId) return {};
+  const out: Record<string, number> = {};
+  for (const s of await searchSequences(fromId, toId, start, 1, 31)) {
+    const t = s.trips[0];
+    const day = isoDate(t.departure_date);
+    if (out[day] == null || t.price < out[day]) out[day] = t.price;
+  }
+  return out;
 }
 
 export class GrandesTourCarrierAdapter implements CarrierAdapter {

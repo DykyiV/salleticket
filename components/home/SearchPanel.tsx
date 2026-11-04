@@ -3,6 +3,8 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from "react";
 import Icon from "@/components/site/Icon";
+import CityInput from "@/components/home/CityInput";
+import DatePicker from "@/components/home/DatePicker";
 import { fmt, plural, useI18n } from "@/lib/i18n/client";
 import { cityLabel, cityNames } from "@/lib/trips/cities";
 
@@ -25,13 +27,10 @@ export type SearchDefaults = {
  * picker (adults, children, concession). Submits to /results.
  */
 export default function SearchPanel({
-  cities,
   quickRoutes,
   today,
   defaults = {},
 }: {
-  /** Ukrainian city names for suggestions. */
-  cities: string[];
   quickRoutes: { from: string; to: string }[];
   /** YYYY-MM-DD from the server — earliest selectable date. */
   today: string;
@@ -40,7 +39,6 @@ export default function SearchPanel({
   const router = useRouter();
   const { t, lang } = useI18n();
   const s = t.search;
-  const listId = useId();
   const [roundTrip, setRoundTrip] = useState(Boolean(defaults.roundTrip));
   const [from, setFrom] = useState(defaults.from ? cityLabel(defaults.from, lang) : "");
   const [to, setTo] = useState(defaults.to ? cityLabel(defaults.to, lang) : "");
@@ -66,10 +64,11 @@ export default function SearchPanel({
 
   const submit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    const f = from.trim();
-    const tt = to.trim();
+    // Any language → the city's Ukrainian name (as stored and searched).
+    const f = cityNames(from)[0] ?? "";
+    const tt = cityNames(to)[0] ?? "";
     if (!f || !tt) return setError(s.errorCities);
-    if (cityNames(f).map((x) => x.toLowerCase()).includes(tt.toLowerCase())) return setError(s.errorSameCity);
+    if (f === tt) return setError(s.errorSameCity);
     if (roundTrip && returnDate && date && returnDate < date) return setError(s.errorReturn);
     setError(null);
     setSubmitting(true);
@@ -114,13 +113,11 @@ export default function SearchPanel({
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,1.15fr)_minmax(0,0.8fr)_minmax(0,0.8fr)_auto]">
         <div className="relative grid grid-cols-1 gap-2 sm:col-span-2 sm:grid-cols-2">
           <Box label={s.from} icon="pin" htmlFor="search-from">
-            <input
+            <CityInput
               id="search-from"
               name="from"
-              list={listId}
-              autoComplete="off"
               value={from}
-              onChange={(e) => setFrom(e.target.value)}
+              onChange={setFrom}
               placeholder={s.cityPlaceholder}
               className="w-full bg-transparent pr-10 text-base font-semibold text-navy placeholder:text-[0.9375rem] placeholder:font-normal placeholder:text-slate-400 focus:outline-none sm:pr-4"
             />
@@ -135,13 +132,11 @@ export default function SearchPanel({
             <Icon name="swap" className="h-4 w-4" />
           </button>
           <Box label={s.to} icon="pin" htmlFor="search-to">
-            <input
+            <CityInput
               id="search-to"
               name="to"
-              list={listId}
-              autoComplete="off"
               value={to}
-              onChange={(e) => setTo(e.target.value)}
+              onChange={setTo}
               placeholder={s.cityPlaceholder}
               className="w-full bg-transparent pr-10 text-base font-semibold text-navy placeholder:text-[0.9375rem] placeholder:font-normal placeholder:text-slate-400 focus:outline-none sm:pl-4 sm:pr-0"
             />
@@ -150,27 +145,28 @@ export default function SearchPanel({
 
         <div className="grid grid-cols-2 gap-2 sm:col-span-2">
           <Box label={s.departDate} icon="calendar" htmlFor="search-date">
-            <input
+            <DatePicker
               id="search-date"
-              type="date"
-              name="date"
               min={minDate}
               value={date}
-              onChange={(e) => setDate(e.target.value)}
-              className="w-full min-w-0 bg-transparent text-base font-semibold text-navy focus:outline-none"
+              onChange={(d) => {
+                setDate(d);
+                if (returnDate && returnDate < d) setReturnDate("");
+              }}
+              from={from}
+              to={to}
             />
           </Box>
           {roundTrip ? (
             <Box label={s.returnDate} icon="calendar" htmlFor="search-return">
-              <input
+              <DatePicker
                 id="search-return"
-                type="date"
-                name="returnDate"
                 min={date || minDate}
                 value={returnDate}
-                onChange={(e) => setReturnDate(e.target.value)}
-                aria-describedby="search-return-hint"
-                className="w-full min-w-0 bg-transparent text-base font-semibold text-navy focus:outline-none"
+                onChange={setReturnDate}
+                from={to}
+                to={from}
+                align="right"
               />
               <span id="search-return-hint" className="sr-only">
                 {s.returnHint}
@@ -197,12 +193,6 @@ export default function SearchPanel({
       <p role="alert" aria-live="polite" className={`text-sm font-medium text-rose-700 ${error ? "mt-3" : "sr-only"}`}>
         {error ?? ""}
       </p>
-
-      <datalist id={listId}>
-        {cities.map((c) => (
-          <option key={c} value={cityLabel(c, lang)} />
-        ))}
-      </datalist>
 
       {quickRoutes.length ? (
         <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">

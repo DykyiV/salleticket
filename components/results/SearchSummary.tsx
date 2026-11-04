@@ -9,14 +9,12 @@ import { useI18n } from "@/lib/i18n/client";
 export default function SearchSummary({
   title,
   details,
-  cities,
   today,
   defaults,
   initiallyOpen = false,
 }: {
   title: string;
   details: string;
-  cities: string[];
   today: string;
   defaults: SearchDefaults;
   initiallyOpen?: boolean;
@@ -43,7 +41,7 @@ export default function SearchSummary({
       </div>
       {open ? (
         <div className="mt-4">
-          <SearchPanel cities={cities} quickRoutes={[]} today={today} defaults={defaults} />
+          <SearchPanel quickRoutes={[]} today={today} defaults={defaults} />
         </div>
       ) : null}
     </div>
