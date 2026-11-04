@@ -54,6 +54,8 @@ export type BookingRequest = {
   returnDate?: string;
   /** Discount / loyalty card or promo code checked by the carrier. */
   discountCard?: string | null;
+  /** Paid on the bus (no auto-cancel at the carrier) or online. */
+  paymentAtBoarding?: boolean;
 };
 
 /** One ticket per passenger as recorded by the carrier. */

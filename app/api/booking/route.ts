@@ -443,6 +443,7 @@ export async function POST(req: NextRequest) {
       returnTripId: carrierReturn?.id ?? null,
       returnDate: carrierReturn?.date,
       discountCard: isGt ? (passengers.find((p) => p.promoCode)?.promoCode ?? body.promoCode ?? null) : null,
+      paymentAtBoarding: paymentMethod === "CASH_ON_BUS",
     });
   } catch (err) {
     const details = err instanceof Error ? err.message : String(err);

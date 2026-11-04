@@ -339,6 +339,9 @@ export class GrandesTourCarrierAdapter implements CarrierAdapter {
         json: {
           trip_type: back ? "roundTrip" : "oneWay",
           currency_code: currency,
+          // As the GT site does: pay-at-boarding bookings never auto-cancel (0);
+          // online-payment bookings are held 24 h.
+          hours_to_auto_cancel_reserved_status: request.paymentAtBoarding === false ? 24 : 0,
           passengers: people.map((p, i) => {
             const [first, ...rest] = p.name.trim().split(/\s+/);
             const f = priced[i];
