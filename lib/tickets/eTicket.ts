@@ -176,7 +176,7 @@ function journey(
     alightMap: alight?.map ?? null,
     seat,
     freeSeating: dep?.hasAssignedSeats === false || seat == null,
-    bus: bus ?? busLabel(dep?.bus, dep?.defaultBus),
+    bus: bus ?? busLabel(dep?.bus, dep?.defaultBus) ?? trip.carrierBus ?? null,
     carrier: trip.carrier?.name ?? null,
     legs,
   };

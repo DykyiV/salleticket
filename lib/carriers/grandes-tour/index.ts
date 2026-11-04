@@ -212,6 +212,7 @@ function toTrip(t: GtTrip, currency: string, seatsLeft: number): Trip {
     fromStation: t.departure_place || undefined,
     toStation: t.arrival_place || undefined,
     carrierPhones: t.phoneNumber?.trim() || undefined,
+    carrierBus: t.bus_number?.trim() || undefined,
     transfers: 0,
   };
 }

@@ -4,6 +4,7 @@ import type { Dict } from "@/lib/i18n/dict";
 import { fmt, longDate, money } from "@/lib/i18n/format";
 import type { ETicket, ETicketJourney, ETicketState } from "@/lib/tickets/eTicket";
 import { cityLabel } from "@/lib/trips/cities";
+import { BusGlyph, SeatGlyph } from "@/components/ticket/TicketGlyphs";
 
 export const STATE_PILL: Record<ETicketState, string> = {
   due: "bg-warn-50 text-warn-700 ring-warn-100",
@@ -65,17 +66,27 @@ function Journey({ j, t, lang }: { j: ETicketJourney; t: Dict; lang: Lang }) {
           </li>
         ))}
       </ol>
+      {/* Seat and bus as pictures: seat icon with the number, the plate on a bus. */}
+      <div className="mt-3 flex flex-wrap items-stretch gap-3">
+        <div className="flex items-center gap-3 rounded-xl bg-slate-50 px-3 py-2 ring-1 ring-slate-200/70">
+          <SeatGlyph className="h-9 w-8 text-brand-600" />
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-soft">{tt.seat}</p>
+            {j.freeSeating ? (
+              <p className="max-w-[9rem] text-sm font-semibold leading-tight text-navy">{tt.noSeat}</p>
+            ) : (
+              <p className="text-2xl font-bold leading-none tabular-nums text-navy">{j.seat}</p>
+            )}
+          </div>
+        </div>
+        <div className="flex items-center gap-3 rounded-xl bg-slate-50 px-3 py-2 ring-1 ring-slate-200/70">
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-soft">{tt.bus}</p>
+            <BusGlyph plate={j.bus ?? tt.busTbd} className="mt-1 h-12 w-auto" />
+          </div>
+        </div>
+      </div>
       <ul className="mt-3 flex flex-wrap gap-2 text-sm">
-        <li className="inline-flex items-center gap-1.5 rounded-lg bg-slate-50 px-2.5 py-1 ring-1 ring-slate-200/70">
-          <Icon name="seat" className="h-4 w-4 text-brand-600" />
-          <span className="text-ink-muted">{tt.seat}:</span>
-          <span className="font-semibold text-navy">{j.freeSeating ? tt.noSeat : fmt(tt.seatN, { n: j.seat ?? "" })}</span>
-        </li>
-        <li className="inline-flex items-center gap-1.5 rounded-lg bg-slate-50 px-2.5 py-1 ring-1 ring-slate-200/70">
-          <Icon name="bus" className="h-4 w-4 text-brand-600" />
-          <span className="text-ink-muted">{tt.bus}:</span>
-          <span className="font-semibold text-navy">{j.bus ?? tt.busTbd}</span>
-        </li>
         {j.carrier ? (
           <li className="inline-flex items-center gap-1.5 rounded-lg bg-slate-50 px-2.5 py-1 ring-1 ring-slate-200/70">
             <span className="text-ink-muted">{tt.carrier}:</span>

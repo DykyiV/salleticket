@@ -47,6 +47,8 @@ export type Trip = {
   toStation?: string;
   /** Carrier contacts for this run, as the carrier gives them (bus / office phones). */
   carrierPhones?: string;
+  /** Bus plate given by the carrier (e.g. Grandes Tour bus_number). */
+  carrierBus?: string;
   /** Passenger-facing class and services of the bus(es). */
   busCategory?: BusCategory;
   features?: BusFeature[];

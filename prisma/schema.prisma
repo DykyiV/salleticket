@@ -160,6 +160,8 @@ model Trip {
   price         Float
   /// Carrier contacts for this run as the carrier gives them (Grandes Tour: bus/office phones).
   carrierPhones String?
+  /// Bus plate the carrier gives for this run (Grandes Tour bus_number).
+  carrierBus    String?
   transportType TransportType @default(BUS)
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt

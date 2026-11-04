@@ -52,6 +52,7 @@ export default async function PrintTicketPage(props: { params: Promise<{ referen
   const bus =
     ticket.legs.map((l) => (l.assignment ? `${l.assignment.bus.model ?? "Автобус"} ${l.assignment.bus.plate}` : null)).find(Boolean) ??
     departure?.defaultBus ??
+    trip?.carrierBus ??
     null;
 
   const paid = ticket.status === "PAID_ONLINE" || ticket.status === "PAID_CASH";
