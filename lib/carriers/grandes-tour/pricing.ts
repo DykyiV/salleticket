@@ -182,6 +182,22 @@ export async function gtOrderTicketStatuses(orderId: number): Promise<Map<number
   return new Map((res.tickets ?? []).map((t) => [t.id, t.status]));
 }
 
+/** The passenger of a GT ticket as GT holds it: fare type and discount card. */
+export async function gtTicketPassenger(
+  orderId: number,
+  ticketId: number,
+): Promise<{ passengerTypeId: number | null; discountCard: string | null }> {
+  const res = await gtCall<{
+    order_details?: {
+      tickets?: { id: number; trip_seats_to?: { passenger_type_id?: number; discount_cart?: string }[] }[];
+    };
+  }>("/api/v2/booking/get_order_details", { method: "POST", json: { id: orderId } });
+  const t = res.order_details?.tickets?.find((x) => x.id === ticketId);
+  if (!t) throw new Error(`Grandes Tour: квиток ${ticketId} не знайдено в замовленні ${orderId}`);
+  const seat = t.trip_seats_to?.[0];
+  return { passengerTypeId: seat?.passenger_type_id ?? null, discountCard: seat?.discount_cart?.trim() || null };
+}
+
 /** A ticket removed on GT's side (their site or office) has the status "canceled". */
 export function gtIsCancelled(status: string | null | undefined): boolean {
   return status === "canceled" || status === "cancelled";

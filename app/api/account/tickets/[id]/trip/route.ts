@@ -9,6 +9,7 @@ import {
   SeatTakenError,
   assertSeatAvailable,
 } from "@/lib/tickets/inventory";
+import { GtChangeError, changeGtTicketTrip, gtChangeBlocked } from "@/lib/tickets/gtChange";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -20,9 +21,9 @@ export async function PATCH(req: NextRequest, props: Params) {
   const guard = await requireAuth();
   if (!guard.ok) return guard.response;
 
-  let body: { tripId?: string; seatNumber?: number | null };
+  let body: { tripId?: string; seatNumber?: number | null; date?: string };
   try {
-    body = (await req.json()) as { tripId?: string; seatNumber?: number | null };
+    body = (await req.json()) as { tripId?: string; seatNumber?: number | null; date?: string };
   } catch {
     return NextResponse.json({ error: "Некоректний JSON" }, { status: 400 });
   }
@@ -41,6 +42,37 @@ export async function PATCH(req: NextRequest, props: Params) {
   const staff = rights.isStaff;
   if (!rights.isOwner && !rights.canEdit) {
     return NextResponse.json({ error: "Немає доступу" }, { status: 403 });
+  }
+
+  // Grandes Tour: a new reservation there, then the old one is cancelled.
+  if (body.tripId.startsWith("gt-")) {
+    if (!ticket.carrierRef?.startsWith("GT:")) {
+      return NextResponse.json({ error: "Це не квиток Grandes Tour" }, { status: 400 });
+    }
+    const blocked = gtChangeBlocked(ticket);
+    if (blocked) return NextResponse.json({ error: blocked }, { status: 400 });
+    if (!body.seatNumber) return NextResponse.json({ error: "Оберіть місце" }, { status: 400 });
+    try {
+      const result = await changeGtTicketTrip({
+        ticketId: ticket.id,
+        tripKey: body.tripId,
+        date: body.date ?? "",
+        seatNumber: body.seatNumber,
+        changedBy: guard.session.sub,
+        source: staff ? "ADMIN_PANEL" : "ACCOUNT",
+        request: requestMeta(req),
+      });
+      return NextResponse.json(result);
+    } catch (err) {
+      if (err instanceof VersionConflictError) {
+        return NextResponse.json({ error: err.message }, { status: 409 });
+      }
+      const message = err instanceof Error ? err.message.replace(/^Grandes Tour [^:]+: /, "") : "Не вдалося змінити рейс";
+      return NextResponse.json(
+        { error: err instanceof GtChangeError ? message : `Grandes Tour: ${message}` },
+        { status: err instanceof GtChangeError ? 400 : 502 }
+      );
+    }
   }
 
   const nextTrip = await prisma.trip.findUnique({

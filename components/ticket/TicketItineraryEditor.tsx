@@ -21,16 +21,33 @@ export default function TicketItineraryEditor({
   tripKind,
   outbound,
   returnLeg,
+  carrier = null,
+  departureTime = null,
+  changeBlocked = null,
 }: {
   ticketId: string;
   tripKind: string;
   outbound: Leg;
   returnLeg: Leg | null;
+  /** "grandes-tour": the date / seat is changed by re-reserving at the carrier. */
+  carrier?: "grandes-tour" | null;
+  /** Outbound departure, ISO (preselected in the change window). */
+  departureTime?: string | null;
+  /** Why the outbound date / seat can't be changed here (null = it can). */
+  changeBlocked?: string | null;
 }) {
   const router = useRouter();
-  const [seatModal, setSeatModal] = useState<"outbound" | "return" | null>(null);
+  const [seatModal, setSeatModal] = useState<"return" | null>(null);
   const [dateModal, setDateModal] = useState<"outbound" | "return" | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+
+  /** Seat or date of the outbound trip: one window with the calendar and the seat map. */
+  const openOutbound = () => {
+    setNotice(null);
+    if (changeBlocked) setError(changeBlocked);
+    else setDateModal("outbound");
+  };
 
   const patch = async (url: string, body: unknown) => {
     setError(null);
@@ -46,6 +63,7 @@ export default function TicketItineraryEditor({
       throw new Error(message);
     }
     router.refresh();
+    return data as { price?: number; oldPrice?: number };
   };
 
   const openReturn = tripKind === "OPEN_RETURN" && !returnLeg?.tripId;
@@ -60,8 +78,8 @@ export default function TicketItineraryEditor({
         date={outbound.date}
         seatNumber={outbound.seatNumber}
         hasAssignedSeats={outbound.hasAssignedSeats}
-        onSeat={() => outbound.tripId && setSeatModal("outbound")}
-        onDate={() => setDateModal("outbound")}
+        onSeat={openOutbound}
+        onDate={openOutbound}
       />
       {tripKind !== "ONE_WAY" ? (
         openReturn ? (
@@ -86,23 +104,8 @@ export default function TicketItineraryEditor({
         ) : null
       ) : null}
       {error ? <p className="text-sm text-rose-700">{error}</p> : null}
+      {notice ? <p className="text-sm text-emerald-700">{notice}</p> : null}
 
-      {seatModal === "outbound" && outbound.tripId ? (
-        <SeatPickerModal
-          tripId={outbound.tripId}
-          exceptTicketId={ticketId}
-          initialSeat={outbound.seatNumber}
-          title="Нове місце (туди)"
-          onClose={() => setSeatModal(null)}
-          onSave={async (seatNumber) => {
-            await patch(`/api/account/tickets/${ticketId}/seat`, {
-              seatNumber,
-              leg: "outbound",
-            });
-            setSeatModal(null);
-          }}
-        />
-      ) : null}
       {seatModal === "return" && returnLeg?.tripId ? (
         <SeatPickerModal
           tripId={returnLeg.tripId}
@@ -125,15 +128,22 @@ export default function TicketItineraryEditor({
           toCity={outbound.toCity}
           initialDate={outbound.date ?? toIsoDate(new Date())}
           exceptTicketId={ticketId}
-          title="Змінити дату виїзду"
-          confirmLabel="Зберегти рейс"
+          title="Дата виїзду і місце"
+          confirmLabel="Зберегти"
+          carrier={carrier}
+          currentTripId={outbound.tripId}
+          currentDeparture={departureTime}
+          initialSeat={outbound.seatNumber}
           onClose={() => setDateModal(null)}
-          onSave={async (tripId, seatNumber) => {
-            await patch(`/api/account/tickets/${ticketId}/trip`, {
-              tripId,
-              seatNumber,
-            });
+          onSave={async (tripId, seatNumber, date) => {
+            const result =
+              !carrier && tripId === outbound.tripId
+                ? await patch(`/api/account/tickets/${ticketId}/seat`, { seatNumber, leg: "outbound" })
+                : await patch(`/api/account/tickets/${ticketId}/trip`, { tripId, seatNumber, date });
             setDateModal(null);
+            if (result.price != null && result.oldPrice != null && result.price !== result.oldPrice) {
+              setNotice(`Квиток перенесено. Ціна за новим рейсом: €${result.price.toFixed(2)} (було €${result.oldPrice.toFixed(2)}).`);
+            } else setNotice("Квиток перенесено.");
           }}
         />
       ) : null}

@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import SeatMap from "@/components/ticket/SeatMap";
-import { btnGhost, btnPrimary, inputClass } from "@/components/admin/Field";
+import { PriceCalendar } from "@/components/home/DatePicker";
+import { btnGhost, btnPrimary } from "@/components/admin/Field";
 import { formatUkDate } from "@/lib/routes/dates";
 import type { BusLayout } from "@/lib/seats";
 
@@ -22,6 +23,11 @@ function isoDate(value: string | undefined): string {
     : new Date().toISOString().slice(0, 10);
 }
 
+/**
+ * Another date and seat for a ticket: the route's price calendar on top, the
+ * departures of the chosen day, then the seat map of the chosen departure.
+ * Opens on the ticket's current departure (preselected when found).
+ */
 export default function TripChangeModal({
   fromCity,
   toCity,
@@ -31,6 +37,10 @@ export default function TripChangeModal({
   confirmLabel,
   onClose,
   onSave,
+  carrier = null,
+  currentTripId = null,
+  currentDeparture = null,
+  initialSeat = null,
 }: {
   fromCity: string;
   toCity: string;
@@ -39,7 +49,13 @@ export default function TripChangeModal({
   title: string;
   confirmLabel: string;
   onClose: () => void;
-  onSave: (tripId: string, seatNumber: number | null) => Promise<void>;
+  onSave: (tripId: string, seatNumber: number | null, date: string) => Promise<void>;
+  /** "grandes-tour": departures and seats come from the carrier. */
+  carrier?: "grandes-tour" | null;
+  /** The ticket's current departure (own trip id / departure time). */
+  currentTripId?: string | null;
+  currentDeparture?: string | null;
+  initialSeat?: number | null;
 }) {
   const [date, setDate] = useState(isoDate(initialDate));
   const [trips, setTrips] = useState<TripOption[]>([]);
@@ -53,14 +69,19 @@ export default function TripChangeModal({
   useEffect(() => {
     const day = isoDate(date);
     fetch(
-      `/api/trips?from=${encodeURIComponent(fromCity)}&to=${encodeURIComponent(toCity)}&date=${encodeURIComponent(day)}`
+      `/api/trips?from=${encodeURIComponent(fromCity)}&to=${encodeURIComponent(toCity)}&date=${encodeURIComponent(day)}${
+        carrier ? `&carrier=${carrier}` : ""
+      }`
     )
       .then((r) => r.json())
       .then((data) => {
         const list = (data.trips ?? []) as TripOption[];
         setTrips(list);
         setNearby(Boolean(data.nearby));
-        setTripId(null);
+        const current =
+          list.find((t) => t.id === currentTripId) ??
+          (currentDeparture ? list.find((t) => t.departureTime === currentDeparture) : undefined);
+        setTripId(current?.id ?? (list.length === 1 ? list[0].id : null));
         setLayout(null);
         setSeat(null);
         if (data.nearby && list[0]?.departureTime) {
@@ -71,7 +92,7 @@ export default function TripChangeModal({
         }
       })
       .catch(() => setError("Не вдалося завантажити рейси"));
-  }, [date, fromCity, toCity]);
+  }, [date, fromCity, toCity, carrier, currentTripId, currentDeparture]);
 
   useEffect(() => {
     if (!tripId) return;
@@ -82,10 +103,11 @@ export default function TripChangeModal({
       .then((r) => r.json())
       .then((data) => {
         setLayout(data.layout ?? null);
-        setSeat(null);
+        // Own trips show the ticket's seat as free: keep it picked.
+        setSeat(tripId === currentTripId ? initialSeat : null);
       })
       .catch(() => setError("Не вдалося завантажити місця"));
-  }, [tripId, exceptTicketId]);
+  }, [tripId, exceptTicketId, currentTripId, initialSeat]);
 
   const save = async () => {
     if (!tripId) {
@@ -99,7 +121,7 @@ export default function TripChangeModal({
     setBusy(true);
     setError(null);
     try {
-      await onSave(tripId, seat);
+      await onSave(tripId, seat, date);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Помилка");
       setBusy(false);
@@ -117,16 +139,23 @@ export default function TripChangeModal({
         </div>
         <p className="mt-1 text-sm text-slate-500">
           {fromCity} → {toCity}
+          {currentDeparture ? (
+            <>
+              {" "}
+              · зараз: {formatUkDate(currentDeparture)} {currentDeparture.slice(11, 16)}
+              {initialSeat != null ? `, місце ${initialSeat}` : ""}
+            </>
+          ) : null}
         </p>
-        <label className="mt-4 block text-xs">
-          <span className="mb-1 block font-medium text-slate-600">Дата</span>
-          <input
-            type="date"
-            className={`${inputClass} w-48`}
-            value={date}
-            onChange={(e) => setDate(e.target.value)}
-          />
-        </label>
+        {carrier === "grandes-tour" ? (
+          <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900 ring-1 ring-amber-200">
+            Квиток буде переброньовано в Grandes Tour: нове місце бронюється, старе звільняється. Ціна —
+            за тарифом нового рейсу.
+          </p>
+        ) : null}
+        <div className="mt-4 max-w-sm">
+          <PriceCalendar value={date} min={new Date().toISOString().slice(0, 10)} from={fromCity} to={toCity} onPick={setDate} />
+        </div>
         {nearby && trips.length > 0 ? (
           <p className="mt-2 text-xs text-slate-500">
             На обрану дату рейсів немає — показано найближчі.

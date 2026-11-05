@@ -15,6 +15,7 @@ import { ticketRights } from "@/lib/auth/access";
 import { prisma } from "@/lib/db";
 import { reconcileTicketPayment } from "@/lib/payments";
 import { syncCarrierCancellations } from "@/lib/tickets/carrierStatus";
+import { gtChangeBlocked } from "@/lib/tickets/gtChange";
 import { getSiteSettings } from "@/lib/settings";
 import { onlinePaymentsEnabled } from "@/lib/paymentMode";
 import { qrCodeDataUrl } from "@/lib/tickets/qrcode";
@@ -256,6 +257,9 @@ export default async function CabinetTicketEditPage(props: {
               <TicketItineraryEditor
                 ticketId={ticket.id}
                 tripKind={ticket.tripKind}
+                carrier={ticket.carrierRef?.startsWith("GT:") ? "grandes-tour" : null}
+                departureTime={trip ? trip.departureTime.toISOString() : null}
+                changeBlocked={ticket.carrierRef?.startsWith("GT:") ? gtChangeBlocked(ticket) : null}
                 outbound={{
                   tripId: trip?.id ?? null,
                   fromCity: trip?.fromCity ?? "",
