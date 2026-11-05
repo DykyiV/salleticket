@@ -34,7 +34,7 @@ export class ResetTokenError extends Error {
  */
 export async function resetPasswordWithToken(token: string, newPassword: string, now = new Date()): Promise<User> {
   const hash = token ? hashToken(token) : "";
-  const user = hash ? await prisma.user.findUnique({ where: { passwordResetHash: hash } }) : null;
+  const user = hash ? await prisma.user.findFirst({ where: { passwordResetHash: hash } }) : null;
   if (!user || !user.passwordResetExpires || user.passwordResetExpires <= now) throw new ResetTokenError();
   const used = await prisma.user.updateMany({
     where: { id: user.id, passwordResetHash: hash },

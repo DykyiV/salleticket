@@ -86,7 +86,7 @@ model User {
   /// stop working immediately (lib/auth/resolve.ts).
   sessionVersion     Int      @default(0)
   /// «Забули пароль?»: SHA-256 of the one-time token from the e-mail link, and its expiry.
-  passwordResetHash    String?   @unique
+  passwordResetHash    String?
   passwordResetExpires DateTime?
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
@@ -99,6 +99,8 @@ model User {
 
   @@index([role])
   @@map("users")
+
+  @@index([passwordResetHash])
 }
 
 /// A promo code that can be applied to a booking to get a percentage discount.
