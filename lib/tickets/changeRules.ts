@@ -8,8 +8,13 @@ import type { Role } from "@prisma/client";
 const CHANGERS = new Set<Role>(["DISPATCHER", "MANAGER", "ADMIN", "SUPER_ADMIN"]);
 const ADMINS = new Set<Role>(["ADMIN", "SUPER_ADMIN"]);
 
+/** May this role change dates and seats at all (otherwise: a change request)? */
+export function canChangeTrips(role: Role): boolean {
+  return CHANGERS.has(role);
+}
+
 /** Today in Kyiv, YYYY-MM-DD. */
-function kyivToday(now: Date): string {
+export function kyivToday(now = new Date()): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Kyiv", year: "numeric", month: "2-digit", day: "2-digit" }).format(now);
 }
 
