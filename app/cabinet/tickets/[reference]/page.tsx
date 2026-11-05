@@ -14,6 +14,7 @@ import { hasRoleAtLeast } from "@/lib/auth/constants";
 import { ticketRights } from "@/lib/auth/access";
 import { prisma } from "@/lib/db";
 import { reconcileTicketPayment } from "@/lib/payments";
+import { syncCarrierCancellations } from "@/lib/tickets/carrierStatus";
 import { getSiteSettings } from "@/lib/settings";
 import { onlinePaymentsEnabled } from "@/lib/paymentMode";
 import { qrCodeDataUrl } from "@/lib/tickets/qrcode";
@@ -53,6 +54,7 @@ export default async function CabinetTicketEditPage(props: {
 
   // Settle / expire a pending online payment before showing the ticket.
   await reconcileTicketPayment(booking.ticketId);
+  await syncCarrierCancellations([booking.ticketId]);
 
   const full = await prisma.booking.findUnique({
     where: { id: booking.id },

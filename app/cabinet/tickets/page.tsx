@@ -8,6 +8,7 @@ import { hasRoleAtLeast } from "@/lib/auth/constants";
 import { isTicketStaff, ticketListWhere } from "@/lib/auth/access";
 import { prisma } from "@/lib/db";
 import { reconcileDuePayments } from "@/lib/payments";
+import { syncCarrierCancellations } from "@/lib/tickets/carrierStatus";
 import { closeNoShowReservations } from "@/lib/tickets/cashLimits";
 import {
   bookedByLabel,
@@ -39,6 +40,7 @@ export default async function CabinetTicketsPage(
   const admin = user ? hasRoleAtLeast(user.role, "ADMIN") : false;
   await reconcileDuePayments();
   await closeNoShowReservations();
+  await syncCarrierCancellations();
   const q = (searchParams.q ?? "").trim();
   const statusFilter =
     searchParams.status && STATUSES.includes(searchParams.status as TicketStatus)

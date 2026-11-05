@@ -170,6 +170,23 @@ export async function gtCancelTicket(ref: string): Promise<void> {
   await gtCall("/api/v2/booking/cancel_ticket", { method: "POST", json: { ticket_id: ticketId } });
 }
 
+/** "GT:<order>:<ticket>" → both ids. */
+export function gtRefParts(ref: string | null | undefined): { orderId: number; ticketId: number } | null {
+  const m = /^GT:(\d+):(\d+)$/.exec(ref ?? "");
+  return m ? { orderId: Number(m[1]), ticketId: Number(m[2]) } : null;
+}
+
+/** Current status of each ticket of a GT order ("reserved", "canceled", …), by GT ticket id. */
+export async function gtOrderTicketStatuses(orderId: number): Promise<Map<number, string>> {
+  const res = await gtCall<{ tickets?: { id: number; status: string }[] }>(`/api/v4/booking/order/${orderId}/tickets`);
+  return new Map((res.tickets ?? []).map((t) => [t.id, t.status]));
+}
+
+/** A ticket removed on GT's side (their site or office) has the status "canceled". */
+export function gtIsCancelled(status: string | null | undefined): boolean {
+  return status === "canceled" || status === "cancelled";
+}
+
 export type GtFareType = { id: number; name: string; discount: number; kind: GtKind };
 
 /** Ticket types the carrier offers on this trip (for the checkout select). */

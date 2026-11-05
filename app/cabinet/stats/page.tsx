@@ -2,6 +2,7 @@ import Link from "next/link";
 import PageHeader from "@/components/cabinet/PageHeader";
 import { prisma } from "@/lib/db";
 import { reconcileDuePayments } from "@/lib/payments";
+import { syncCarrierCancellations } from "@/lib/tickets/carrierStatus";
 import { buildLayout, parseCoachLayout } from "@/lib/seats";
 import { occupiedSeatNumbers } from "@/lib/tickets/inventory";
 import { eur, TICKET_STATUS_CLASS, TICKET_STATUS_LABEL } from "@/lib/tickets/labels";
@@ -29,6 +30,7 @@ export default async function CabinetStatsPage(
 ) {
   const searchParams = await props.searchParams;
   await reconcileDuePayments();
+  await syncCarrierCancellations();
   const today = todayUtc();
   const tomorrow = addUtcDays(today, 1);
 

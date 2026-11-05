@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { isLatinName } from "@/lib/passengerName";
 import { toE164 } from "@/lib/phone";
-import { gtKindForAge, gtKindForBirthDate, gtLegFromKey, gtTicketIdFromRef, gtTicketRef, gtTypeFor } from "@/lib/carriers/grandes-tour/pricing";
+import { gtIsCancelled, gtKindForAge, gtKindForBirthDate, gtLegFromKey, gtRefParts, gtTicketIdFromRef, gtTicketRef, gtTypeFor } from "@/lib/carriers/grandes-tour/pricing";
 import { zoneFromCountries, zoneFromNames } from "@/lib/trips/baggage";
 
 describe("Grandes Tour fare types", () => {
@@ -80,5 +80,15 @@ describe("phone for Grandes Tour", () => {
     expect(toE164("+49 959 44 124")).toBeNull();
     expect(toE164("+49 721 95 944 124")).toBe("+4972195944124");
     expect(toE164("12345")).toBeNull();
+  });
+});
+
+describe("Grandes Tour ticket status", () => {
+  it("reads order and ticket ids from our carrier ref", () => {
+    expect(gtRefParts("GT:797692:1014739")).toEqual({ orderId: 797692, ticketId: 1014739 });
+    expect(gtRefParts("AB-1")).toBeNull();
+    expect(gtIsCancelled("canceled")).toBe(true);
+    expect(gtIsCancelled("reserved")).toBe(false);
+    expect(gtIsCancelled(undefined)).toBe(false);
   });
 });

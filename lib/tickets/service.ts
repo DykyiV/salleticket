@@ -26,6 +26,8 @@ export type UpdateTicketStatusOptions = {
    * null (paid to the driver / carrier on the bus).
    */
   cashCollector?: { id: string | null; label: string };
+  /** The carrier already cancelled the ticket on its side: don't send the cancel back. */
+  carrierCancelled?: boolean;
 };
 
 export type UpdateTicketStatusResult = {
@@ -125,7 +127,9 @@ export async function updateTicketStatus(
       request: options.request,
     });
 
-    if (changed && newStatus === "CANCELLED") scheduleCarrierCancel(ticketId, ticket.carrierRef);
+    if (changed && newStatus === "CANCELLED" && !options.carrierCancelled) {
+      scheduleCarrierCancel(ticketId, ticket.carrierRef);
+    }
 
     return { ticket: updated, oldStatus, newStatus, changed };
   };
