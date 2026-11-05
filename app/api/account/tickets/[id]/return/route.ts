@@ -5,6 +5,7 @@ import { ticketRights } from "@/lib/auth/access";
 import { prisma } from "@/lib/db";
 import { recordTicketHistory, requestMeta } from "@/lib/tickets/history";
 import { updateTicketVersioned, VersionConflictError } from "@/lib/tickets/version";
+import { tripChangeRefusal } from "@/lib/tickets/changeRules";
 import {
   SeatRequiredError,
   SeatTakenError,
@@ -33,7 +34,7 @@ export async function PATCH(req: NextRequest, props: Params) {
 
   const ticket = await prisma.ticket.findUnique({
     where: { id: params.id },
-    include: { trip: true },
+    include: { trip: true, returnTrip: true },
   });
   if (!ticket) {
     return NextResponse.json({ error: "Квиток не знайдено" }, { status: 404 });
@@ -42,6 +43,11 @@ export async function PATCH(req: NextRequest, props: Params) {
   const staff = rights.isStaff;
   if (!rights.isOwner && !rights.canEdit) {
     return NextResponse.json({ error: "Немає доступу" }, { status: 403 });
+  }
+  const refusal = tripChangeRefusal(guard.session.role, ticket.returnTrip?.departureTime);
+  if (refusal) return NextResponse.json({ error: refusal }, { status: 403 });
+  if (ticket.carrierRef) {
+    return NextResponse.json({ error: "Зворотну поїздку квитка перевізника змінюють у вікні зміни рейсу" }, { status: 400 });
   }
   if (ticket.tripKind === TripKind.ONE_WAY) {
     return NextResponse.json(

@@ -7,10 +7,10 @@ import { updateTicketVersioned } from "@/lib/tickets/version";
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
-/** Why a Grandes Tour ticket's date or seat can't be changed online (null = it can). */
+/** Why a Grandes Tour ticket's date or seat can't be changed here (null = it can). */
 export function gtChangeBlocked(ticket: { status: string; tripKind: string }): string | null {
-  if (ticket.tripKind !== "ONE_WAY") return "Квиток туди-назад Grandes Tour поки що змінює менеджер вручну";
-  if (ticket.status !== "RESERVED") return "Дату квитка Grandes Tour можна змінити, поки його не оплачено";
+  if (ticket.tripKind !== "ONE_WAY") return "Квиток туди-назад Grandes Tour поки що змінюють у Grandes Tour вручну";
+  if (ticket.status === "CANCELLED" || ticket.status === "REFUNDED") return "Квиток скасовано";
   return null;
 }
 
@@ -27,7 +27,8 @@ export class GtChangeError extends Error {
  * trip first, our ticket follows (trip, seat, GT ticket, price), and only then
  * the old GT ticket is cancelled. Nothing changes when the new reservation
  * fails; a failed cancel of the old one is reported to staff.
- * Only unpaid one-way tickets (pay at boarding) — callers check that.
+ * A paid ticket keeps its paid price (the carrier's new price is noted in the
+ * history); an unpaid one takes the new price. One-way tickets — callers check.
  */
 export async function changeGtTicketTrip(input: {
   ticketId: string;
@@ -65,13 +66,14 @@ export async function changeGtTicketTrip(input: {
     tripSnapshot: { ...found, currency: "EUR" },
     travelDate: input.date,
     discountCard: passenger.discountCard,
-    paymentAtBoarding: true,
+    paymentAtBoarding: ticket.status !== "AWAITING_PAYMENT",
   });
   const fresh = reserved.tickets?.[0];
   if (!fresh || !gtRefParts(fresh.ref)) throw new GtChangeError("Grandes Tour не повернув номер нового квитка");
 
   const fare = fresh.price;
-  const price = round2(fare + ticket.serviceFee);
+  const paid = ticket.status === "PAID_ONLINE" || ticket.status === "PAID_CASH";
+  const price = paid ? ticket.finalPrice : round2(fare + ticket.serviceFee);
   const percent = ticket.commissionPercent;
   try {
     await prisma.$transaction(async (tx) => {
@@ -92,16 +94,20 @@ export async function changeGtTicketTrip(input: {
         tripId: trip.id,
         seatNumber: input.seatNumber,
         carrierRef: fresh.ref,
-        basePrice: fresh.priceBeforeDiscount,
-        finalPrice: price,
-        ...(percent != null
-          ? {
-              commissionAmount: round2((fare * percent) / 100 + ticket.serviceFee),
-              carrierAmount: round2(fare - (fare * percent) / 100),
-            }
-          : {}),
+        ...(paid
+          ? {}
+          : {
+              basePrice: fresh.priceBeforeDiscount,
+              finalPrice: price,
+              ...(percent != null
+                ? {
+                    commissionAmount: round2((fare * percent) / 100 + ticket.serviceFee),
+                    carrierAmount: round2(fare - (fare * percent) / 100),
+                  }
+                : {}),
+            }),
       });
-      await tx.booking.update({ where: { id: booking.id }, data: { finalPrice: price } });
+      if (!paid) await tx.booking.update({ where: { id: booking.id }, data: { finalPrice: price } });
       await recordTicketHistory(tx, {
         ticketId: ticket.id,
         action: "TRIP_CHANGED",
@@ -114,6 +120,7 @@ export async function changeGtTicketTrip(input: {
           seatNumber: { from: ticket.seatNumber, to: input.seatNumber },
           carrierRef: { from: ticket.carrierRef, to: fresh.ref },
           ...(price !== ticket.finalPrice ? { finalPrice: { from: ticket.finalPrice, to: price } } : {}),
+          ...(paid ? { carrierFare: { from: null, to: fare } } : {}),
         },
       });
     });

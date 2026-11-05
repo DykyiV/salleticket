@@ -10,6 +10,7 @@ import {
   assertSeatAvailable,
 } from "@/lib/tickets/inventory";
 import { GtChangeError, changeGtTicketTrip, gtChangeBlocked } from "@/lib/tickets/gtChange";
+import { tripChangeRefusal } from "@/lib/tickets/changeRules";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -43,6 +44,8 @@ export async function PATCH(req: NextRequest, props: Params) {
   if (!rights.isOwner && !rights.canEdit) {
     return NextResponse.json({ error: "Немає доступу" }, { status: 403 });
   }
+  const refusal = tripChangeRefusal(guard.session.role, ticket.trip?.departureTime);
+  if (refusal) return NextResponse.json({ error: refusal }, { status: 403 });
 
   // Grandes Tour: a new reservation there, then the old one is cancelled.
   if (body.tripId.startsWith("gt-")) {

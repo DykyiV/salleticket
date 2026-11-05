@@ -24,6 +24,7 @@ export default function TicketItineraryEditor({
   carrier = null,
   departureTime = null,
   changeBlocked = null,
+  returnChangeBlocked = null,
 }: {
   ticketId: string;
   tripKind: string;
@@ -35,6 +36,8 @@ export default function TicketItineraryEditor({
   departureTime?: string | null;
   /** Why the outbound date / seat can't be changed here (null = it can). */
   changeBlocked?: string | null;
+  /** The same for the return trip. */
+  returnChangeBlocked?: string | null;
 }) {
   const router = useRouter();
   const [seatModal, setSeatModal] = useState<"return" | null>(null);
@@ -47,6 +50,12 @@ export default function TicketItineraryEditor({
     setNotice(null);
     if (changeBlocked) setError(changeBlocked);
     else setDateModal("outbound");
+  };
+
+  const openReturnLeg = (open: () => void) => {
+    setNotice(null);
+    if (returnChangeBlocked) setError(returnChangeBlocked);
+    else open();
   };
 
   const patch = async (url: string, body: unknown) => {
@@ -85,7 +94,7 @@ export default function TicketItineraryEditor({
         openReturn ? (
           <button
             type="button"
-            onClick={() => setDateModal("return")}
+            onClick={() => openReturnLeg(() => setDateModal("return"))}
             className="w-full rounded-xl border border-dashed border-brand-300 bg-brand-50 px-4 py-3 text-left text-sm text-brand-800"
           >
             Зворотня поїздка: відкрита дата — натисніть, щоб обрати рейс і місце
@@ -98,8 +107,8 @@ export default function TicketItineraryEditor({
             date={returnLeg.date}
             seatNumber={returnLeg.seatNumber}
             hasAssignedSeats={returnLeg.hasAssignedSeats}
-            onSeat={() => returnLeg.tripId && setSeatModal("return")}
-            onDate={() => setDateModal("return")}
+            onSeat={() => openReturnLeg(() => returnLeg.tripId && setSeatModal("return"))}
+            onDate={() => openReturnLeg(() => setDateModal("return"))}
           />
         ) : null
       ) : null}

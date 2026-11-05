@@ -121,9 +121,18 @@ describe("changing the date / seat of a Grandes Tour ticket", () => {
     expect(gt.cancel).not.toHaveBeenCalled();
   });
 
-  it("only unpaid one-way tickets are changed online", () => {
+  it("a paid ticket keeps the price it was paid at", async () => {
+    const ticket = await gtTicket();
+    await prisma.ticket.update({ where: { id: ticket.id }, data: { status: "PAID_CASH" } });
+    expect(await change(ticket.id)).toEqual({ price: 81, oldPrice: 81 });
+    const moved = await prisma.ticket.findUniqueOrThrow({ where: { id: ticket.id } });
+    expect(moved).toMatchObject({ seatNumber: 12, carrierRef: "GT:700:800", finalPrice: 81, commissionAmount: 8.1 });
+  });
+
+  it("paid or not, one-way tickets can be changed; cancelled ones not", () => {
     expect(gtChangeBlocked({ status: "RESERVED", tripKind: "ONE_WAY" })).toBeNull();
-    expect(gtChangeBlocked({ status: "PAID_CASH", tripKind: "ONE_WAY" })).not.toBeNull();
+    expect(gtChangeBlocked({ status: "PAID_CASH", tripKind: "ONE_WAY" })).toBeNull();
+    expect(gtChangeBlocked({ status: "CANCELLED", tripKind: "ONE_WAY" })).not.toBeNull();
     expect(gtChangeBlocked({ status: "RESERVED", tripKind: "ROUND_TRIP" })).not.toBeNull();
   });
 });
