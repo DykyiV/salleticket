@@ -204,9 +204,15 @@ async function main() {
   );
 
   // Seat holds: the visitor id comes from a server cookie, max 6 seats.
-  // Needs a real coach with assigned seats (Київ → Берлін in the seed).
-  const coachSearch = await (await fetch(`${BASE_URL}/api/search?from=${encodeURIComponent("Київ")}&to=${encodeURIComponent("Берлін")}&date=2026-10-27`)).json();
-  const coach = coachSearch.trips?.find((t) => t.carrierId === "kaufmann" && t.hasAssignedSeats) ?? trip;
+  // Needs a real coach with assigned seats (Київ → Берлін in the seed; its
+  // departures are generated from today, so look through the next two weeks).
+  let coach = null;
+  for (let d = 0; d < 14 && !coach; d++) {
+    const day = new Date(Date.now() + d * 86_400_000).toISOString().slice(0, 10);
+    const coachSearch = await (await fetch(`${BASE_URL}/api/search?from=${encodeURIComponent("Київ")}&to=${encodeURIComponent("Берлін")}&date=${day}`)).json();
+    coach = coachSearch.trips?.find((t) => t.carrierId === "kaufmann" && t.hasAssignedSeats) ?? null;
+  }
+  coach ??= trip;
   const seatsForHolds = await fetch(`${BASE_URL}/api/trips/${encodeURIComponent(coach.id)}/seats`);
   const visitor = (seatsForHolds.headers.get("set-cookie") ?? "").match(/kaufmann_visitor=[^;]+/)?.[0];
   check("seat map issues the visitor cookie", Boolean(visitor));
