@@ -168,6 +168,13 @@ export default function AuthForm({ mode, next, supportPhone }: { mode: Mode; nex
       </p>
 
       <div className="mt-5 space-y-2 border-t border-slate-100 pt-4 text-sm text-ink-muted">
+        {login ? (
+          <p>
+            <Link href="/forgot-password" className="font-semibold text-brand-700 hover:underline">
+              {a.forgotLink}
+            </Link>
+          </p>
+        ) : null}
         {login && supportPhone ? (
           <p>
             {a.forgot}{" "}

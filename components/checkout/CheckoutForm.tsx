@@ -503,6 +503,9 @@ export default function CheckoutForm({
                 />
               </Field>
               <p className="mt-2 text-xs text-ink-soft">
+                <Link href="/forgot-password" target="_blank" className="font-semibold text-brand-700 hover:underline">
+                  {t.auth.forgotLink}
+                </Link>{" "}
                 {c.forgot}
                 {supportPhone ? (
                   <>
