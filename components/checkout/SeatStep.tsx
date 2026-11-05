@@ -42,7 +42,7 @@ export default function SeatStep(props: SeatStepProps) {
   const router = useRouter();
   const { t, lang } = useI18n();
   const s = t.seat;
-  const [count, setCount] = useState(Math.min(MAX_SEATS, Math.max(1, props.passengers)));
+  const [countState, setCount] = useState(Math.min(MAX_SEATS, Math.max(1, props.passengers)));
   const [layout, setLayout] = useState<BusLayout | null>(null);
   const [virtual, setVirtual] = useState(false);
   const [seats, setSeats] = useState<number[]>([]);
@@ -192,16 +192,16 @@ export default function SeatStep(props: SeatStepProps) {
 
   // With a seat map the passengers are the seats picked (no counter).
   const pickMode = assignsSeats && !virtual && !hasLegs && layout != null;
-  useEffect(() => {
-    if (!pickMode) return;
-    const n = Math.max(1, seats.length);
-    setCount(n);
-    if (returnSeats.length > n) {
+  const count = pickMode ? Math.max(1, seats.length) : countState;
+  /** Outbound seats changed; in pick mode fewer of them also trims the return seats. */
+  const setOutboundSeats = (next: number[]) => {
+    setSeats(next);
+    const n = Math.max(1, next.length);
+    if (pickMode && returnSeats.length > n) {
       if (returnTripId) returnSeats.slice(n).forEach((x) => release(returnTripId, x));
       setReturnSeats(returnSeats.slice(0, n));
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pickMode, seats.length]);
+  };
 
   const changeCount = (next: number) => {
     const c = Math.min(MAX_SEATS, Math.max(1, next));
@@ -331,7 +331,7 @@ export default function SeatStep(props: SeatStepProps) {
               selected={seats}
               basePrice={trip.price}
               busy={busy}
-              onToggle={(n) => void toggleIn(seats, setSeats, n, trip.id, segment, () => void reloadMain(), pickMode ? MAX_SEATS : count)}
+              onToggle={(n) => void toggleIn(seats, setOutboundSeats, n, trip.id, segment, () => void reloadMain(), pickMode ? MAX_SEATS : count)}
             />
           ) : (
             <p className="text-sm text-ink-soft">{s.loading}</p>

@@ -202,8 +202,8 @@ export default function CheckoutForm({
     if (!isGt) return;
     const code = promoInput.trim();
     const ac = new AbortController();
-    if (code) setPromo({ status: "checking" });
     const timer = window.setTimeout(async () => {
+      if (code) setPromo({ status: "checking" });
       try {
         const res = await fetch("/api/carriers/grandes-tour/quote", {
           method: "POST",

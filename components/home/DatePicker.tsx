@@ -61,30 +61,27 @@ export default function DatePicker({
   const locale = localeOf(lang);
   const [open, setOpen] = useState(false);
   const [view, setView] = useState(monthOf(value || min));
-  const [prices, setPrices] = useState<Record<string, number>>({});
-  const [loading, setLoading] = useState(false);
+  const [loaded, setLoaded] = useState<{ key: string; prices: Record<string, number> } | null>(null);
   const ref = useRef<HTMLDivElement>(null);
 
   const fromCity = cityNames(from)[0] ?? "";
   const toCity = cityNames(to)[0] ?? "";
   const routeKnown = Boolean(fromCity && toCity && fromCity !== toCity && from.trim() && to.trim());
 
+  // Lowest prices of the month shown, for this route only.
+  const priceKey = routeKnown ? `${fromCity}|${toCity}|${view}` : "";
   useEffect(() => {
-    if (!open || !routeKnown) {
-      setPrices({});
-      return;
-    }
+    if (!open || !priceKey) return;
     let alive = true;
-    setLoading(true);
     void loadPrices(fromCity, toCity, view).then((p) => {
-      if (!alive) return;
-      setPrices(p);
-      setLoading(false);
+      if (alive) setLoaded({ key: priceKey, prices: p });
     });
     return () => {
       alive = false;
     };
-  }, [open, routeKnown, fromCity, toCity, view]);
+  }, [open, priceKey, fromCity, toCity, view]);
+  const prices = loaded && loaded.key === priceKey ? loaded.prices : {};
+  const loading = open && Boolean(priceKey) && loaded?.key !== priceKey;
 
   useEffect(() => {
     if (!open) return;
