@@ -12,6 +12,11 @@ export const GUEST_PER_IP: RateLimitRule = { limit: 20, windowMs: 60 * 60_000 };
 /** «Send the ticket by e-mail» presses: per order and per account. */
 export const TICKET_MAIL_PER_ORDER: RateLimitRule = { limit: 3, windowMs: 60 * 60_000 };
 export const TICKET_MAIL_PER_USER: RateLimitRule = { limit: 10, windowMs: 60 * 60_000 };
+/** «Попросити змінити дату» requests per ticket. */
+export const CHANGE_REQUEST_PER_TICKET: RateLimitRule = { limit: 3, windowMs: 60 * 60_000 };
+/** «Забули пароль?» e-mails: per address and per IP. */
+export const RESET_PER_EMAIL: RateLimitRule = { limit: 3, windowMs: 60 * 60_000 };
+export const RESET_PER_IP: RateLimitRule = { limit: 10, windowMs: 60 * 60_000 };
 
 /**
  * Client address as reported by the reverse proxy, or null when the request

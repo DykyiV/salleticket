@@ -13,6 +13,7 @@ import { getDict } from "@/lib/i18n/server";
 import { fmt, longDate, money, plural } from "@/lib/i18n/format";
 import { mailConfigured } from "@/lib/mail";
 import { reconcileTicketPayment } from "@/lib/payments";
+import { syncCarrierCancellations } from "@/lib/tickets/carrierStatus";
 import { getSiteContacts, telHref } from "@/lib/siteContacts";
 import { siteOrigin, toETicket, viewableGroup, type ETicket } from "@/lib/tickets/eTicket";
 import { qrCodeDataUrl } from "@/lib/tickets/qrcode";
@@ -22,7 +23,7 @@ export const dynamic = "force-dynamic";
 
 export async function generateMetadata(): Promise<Metadata> {
   const { t } = await getDict();
-  return { title: `${t.ticket.metaTitle} — Asol BUS`, robots: { index: false } };
+  return { title: `${t.ticket.metaTitle} — Kaufmann Reisen`, robots: { index: false } };
 }
 
 type Props = { params: Promise<{ reference: string }>; searchParams: Promise<Record<string, string | undefined>> };
@@ -42,13 +43,14 @@ export default async function TicketPage(props: Props) {
   // Settle or expire pending online payments before showing the status.
   const before = await viewableGroup(reference, who);
   if (before) await Promise.all(before.map((b) => reconcileTicketPayment(b.ticketId)));
+  if (before) await syncCarrierCancellations(before.map((b) => b.ticketId));
   const group = before ? await viewableGroup(reference, who) : null;
 
   const h = await headers();
   const host = h.get("x-forwarded-host") ?? h.get("host");
   const origin = siteOrigin(host ? `${h.get("x-forwarded-proto") ?? "http"}://${host}` : null);
   const tickets: ETicket[] = (group ?? []).map((b) => toETicket(b, origin));
-  const qrs = await Promise.all(tickets.map((e) => qrCodeDataUrl(e.checkUrl)));
+  const qrs = await Promise.all(tickets.map((e) => qrCodeDataUrl(e.qrValue)));
   const contacts = await getSiteContacts().catch(() => null);
   const phone = contacts?.phoneUa || contacts?.phoneEs || contacts?.phoneDe || null;
 
@@ -143,7 +145,14 @@ export default async function TicketPage(props: Props) {
                     <TicketActions reference={head.reference} email={email} mailOn={mailOn} />
                   </div>
                   {tickets.map((e, i) => (
-                    <ETicketCard key={e.reference} e={e} qr={qrs[i]} t={t} lang={lang} />
+                    <ETicketCard
+                      key={e.reference}
+                      e={e}
+                      qr={qrs[i]}
+                      t={t}
+                      lang={lang}
+                      contacts={contacts ? { phone, email: contacts.email, website: contacts.website } : null}
+                    />
                   ))}
                 </div>
 

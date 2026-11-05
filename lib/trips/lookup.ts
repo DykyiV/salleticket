@@ -25,7 +25,7 @@ export function tripRefFromParams(sp: Record<string, string | undefined>): TripR
   const to = sp.to?.trim();
   if (!tripId || !from || !to) return null;
   return {
-    carrierId: sp.carrierId?.trim() || "asol",
+    carrierId: sp.carrierId?.trim() || "kaufmann",
     tripId,
     from,
     to,

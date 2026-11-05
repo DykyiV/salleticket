@@ -45,6 +45,10 @@ export type Trip = {
   /** Boarding / drop-off point names, when known. */
   fromStation?: string;
   toStation?: string;
+  /** Carrier contacts for this run, as the carrier gives them (bus / office phones). */
+  carrierPhones?: string;
+  /** Bus plate given by the carrier (e.g. Grandes Tour bus_number). */
+  carrierBus?: string;
   /** Passenger-facing class and services of the bus(es). */
   busCategory?: BusCategory;
   features?: BusFeature[];
@@ -56,7 +60,7 @@ export type Trip = {
 
 const BUS_CARRIERS = [
   { name: "Grandes Tour", short: "GT", vehicle: "Mercedes Tourismo" },
-  { name: "Asol Express", short: "AE", vehicle: "Neoplan Cityliner" },
+  { name: "Kaufmann Express", short: "AE", vehicle: "Neoplan Cityliner" },
   { name: "EuroLines Plus", short: "EL", vehicle: "Setra ComfortClass" },
   { name: "Intercity Bus", short: "IC", vehicle: "Van Hool Astromega" },
   { name: "Gunsel", short: "GS", vehicle: "Mercedes Travego" },

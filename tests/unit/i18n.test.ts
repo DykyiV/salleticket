@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { langFromAcceptLanguage } from "@/lib/i18n/config";
 import { fmt, plural } from "@/lib/i18n/format";
 import { dictionaries } from "@/lib/i18n/dict";
-import { cityLabel, cityNames } from "@/lib/trips/cities";
+import { cityLabel, cityNames, citySuggestions } from "@/lib/trips/cities";
 
 function shape(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(shape);
@@ -39,7 +39,7 @@ describe("language detection", () => {
     expect(langFromAcceptLanguage("es-ES,es;q=0.9,en;q=0.8")).toBe("es");
     expect(langFromAcceptLanguage("ca-ES,ca;q=0.9")).toBe("es");
     expect(langFromAcceptLanguage("en-GB,en;q=0.9")).toBe("en");
-    expect(langFromAcceptLanguage("de-DE,de;q=0.9,en;q=0.5")).toBe("en");
+    expect(langFromAcceptLanguage("de-DE,de;q=0.9,en;q=0.5")).toBe("de");
     expect(langFromAcceptLanguage("ru-RU,ru;q=0.9")).toBe("uk");
     expect(langFromAcceptLanguage("pl-PL")).toBe("uk");
     expect(langFromAcceptLanguage(null)).toBe("uk");
@@ -66,5 +66,31 @@ describe("city names", () => {
     expect(cityLabel("Невідоме", "en")).toBe("Невідоме");
     expect(cityNames("Varsovia")).toContain("Варшава");
     expect(cityNames("valencia")).toContain("Валенсія");
+  });
+});
+
+describe("cities in any language", () => {
+  it("finds the same city whatever language it is typed in", () => {
+    expect(cityNames("München")[0]).toBe("Мюнхен");
+    expect(cityNames("munchen")[0]).toBe("Мюнхен");
+    expect(cityNames("Lwów")[0]).toBe("Львів");
+    expect(cityNames("Leopolis")[0]).toBe("Львів");
+    expect(cityNames("Rzym")[0]).toBe("Рим");
+    expect(cityLabel("Rzym", "de")).toBe("Rom");
+    expect(cityLabel("Aachen", "uk")).toBe("Аахен");
+  });
+
+  it("suggests cities in the site language for any spelling", () => {
+    const de = citySuggestions("mun", "de");
+    expect(de[0]).toMatchObject({ uk: "Мюнхен", label: "München" });
+    expect(citySuggestions("Мюн", "en")).toContainEqual({ uk: "Мюнхен", label: "Munich", alt: "Мюнхен" });
+    expect(citySuggestions("", "uk")).toEqual([]);
+  });
+
+  it("suggests only cities on current routes, but still understands the rest", () => {
+    expect(citySuggestions("Мадр", "uk").map((s) => s.uk)).toContain("Мадрид");
+    expect(citySuggestions("Варш", "uk")).toEqual([]);
+    expect(citySuggestions("Rom", "en").map((s) => s.uk)).not.toContain("Рим");
+    expect(cityNames("Warsaw")[0]).toBe("Варшава");
   });
 });

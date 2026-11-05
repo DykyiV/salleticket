@@ -8,9 +8,9 @@ describe("generateReference", () => {
     }
   });
 
-  it("keeps the AB prefix and zero-pads the digits", () => {
+  it("keeps the KR prefix and zero-pads the digits", () => {
     const ref = generateReference();
-    expect(ref.startsWith("AB-")).toBe(true);
+    expect(ref.startsWith("KR-")).toBe(true);
     expect(ref).toHaveLength(8);
   });
 });

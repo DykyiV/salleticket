@@ -1,4 +1,4 @@
-// Asol BUS — Prisma schema
+// Kaufmann Reisen — Prisma schema
 // Docs: https://pris.ly/d/prisma-schema
 
 generator client {
@@ -85,6 +85,9 @@ model User {
   /// session token carries the version it was issued with, so older tokens
   /// stop working immediately (lib/auth/resolve.ts).
   sessionVersion     Int      @default(0)
+  /// «Забули пароль?»: SHA-256 of the one-time token from the e-mail link, and its expiry.
+  passwordResetHash    String?
+  passwordResetExpires DateTime?
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 
@@ -96,6 +99,8 @@ model User {
 
   @@index([role])
   @@map("users")
+
+  @@index([passwordResetHash])
 }
 
 /// A promo code that can be applied to a booking to get a percentage discount.
@@ -135,7 +140,7 @@ model Carrier {
   /// Default agency commission, percent 0..100, applied to ticket sales when
   /// no route-specific CommissionRule matches.
   commissionPercent Float    @default(10)
-  /// The platform's own fleet (e.g. "Asol BUS" route-template departures).
+  /// The platform's own fleet (e.g. "Kaufmann Reisen" route-template departures).
   /// Own-fleet sales carry no agency/carrier commission split and are never
   /// part of carrier settlements — there is no third party to settle with.
   isOwnFleet        Boolean  @default(false)
@@ -158,6 +163,10 @@ model Trip {
   departureTime DateTime
   arrivalTime   DateTime
   price         Float
+  /// Carrier contacts for this run as the carrier gives them (Grandes Tour: bus/office phones).
+  carrierPhones String?
+  /// Bus plate the carrier gives for this run (Grandes Tour bus_number).
+  carrierBus    String?
   transportType TransportType @default(BUS)
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
@@ -224,6 +233,8 @@ model Ticket {
   settlementId String?
   settlement   Settlement? @relation(fields: [settlementId], references: [id], onDelete: SetNull)
 
+  /// Ticket id in the carrier's system (Grandes Tour: "GT:<order>:<ticket>").
+  carrierRef       String?
   /// Coach seat number (1…) when the departure assigns seats.
   seatNumber       Int?
   /// Segment of the route (stop indices within the departure); null = full route.
@@ -305,7 +316,7 @@ model SeatHold {
   /// Segment the hold covers; null = full route.
   fromStopIndex Int?
   toStopIndex   Int?
-  /// Anonymous visitor id from the server-issued `asol_visitor` cookie
+  /// Anonymous visitor id from the server-issued `kaufmann_visitor` cookie
   /// (never taken from the request body, so it cannot be forged or reused).
   sessionId     String
   /// Hashed client address — caps how many seats one network can hold.

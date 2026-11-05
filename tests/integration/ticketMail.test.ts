@@ -15,7 +15,7 @@ async function clean() {
 
 /** One order of two passengers, both waiting for an online payment. */
 async function makeOrder() {
-  const carrier = await prisma.carrier.create({ data: { name: "Asol BUS" } });
+  const carrier = await prisma.carrier.create({ data: { name: "Kaufmann Reisen" } });
   const trip = await prisma.trip.create({
     data: {
       fromCity: "Київ",
@@ -61,7 +61,7 @@ describe("ticket e-mail", () => {
   function provider() {
     vi.stubEnv("MAIL_PROVIDER", "brevo");
     vi.stubEnv("MAIL_API_KEY", "xkeysib-test");
-    vi.stubEnv("MAIL_FROM", "Asol BUS <tickets@grandes-tour.com.ua>");
+    vi.stubEnv("MAIL_FROM", "Kaufmann Reisen <tickets@grandes-tour.com.ua>");
     const calls: { url: string; body: Record<string, unknown> }[] = [];
     vi.stubGlobal(
       "fetch",
@@ -87,7 +87,7 @@ describe("ticket e-mail", () => {
     const body = calls[0].body as { to: { email: string }[]; subject: string; attachment: { name: string; content: string }[]; htmlContent: string };
     expect(body.to).toEqual([{ email: "buyer@example.com" }]);
     expect(body.subject).toBe("Tu billete AB-70001: Kiev → Berlín");
-    expect(body.attachment[0].name).toBe("asolbus-AB-70001.pdf");
+    expect(body.attachment[0].name).toBe("kaufmann-reisen-AB-70001.pdf");
     expect(Buffer.from(body.attachment[0].content, "base64").subarray(0, 5).toString()).toBe("%PDF-");
     expect(body.htmlContent).toContain("AB-70002");
 

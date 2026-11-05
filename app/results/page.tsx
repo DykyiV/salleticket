@@ -13,7 +13,7 @@ import type { Lang } from "@/lib/i18n/config";
 import { parseTripKind } from "@/lib/tickets/kinds";
 import { getSiteSettings } from "@/lib/settings";
 import { onlinePaymentsEnabled } from "@/lib/paymentMode";
-import { cityLabel, knownCities } from "@/lib/trips/cities";
+import { cityLabel } from "@/lib/trips/cities";
 import { filtersFromParams } from "@/lib/results/filter";
 
 export const dynamic = "force-dynamic";
@@ -50,9 +50,9 @@ function passengerCounts(sp: SearchParams) {
 export async function generateMetadata(props: { searchParams: Promise<SearchParams> }): Promise<Metadata> {
   const sp = await props.searchParams;
   const { t, lang } = await getDict();
-  if (!sp.from || !sp.to) return { title: `${t.nav.trips} — Asol BUS` };
+  if (!sp.from || !sp.to) return { title: `${t.nav.trips} — Kaufmann Reisen` };
   return {
-    title: `${fmt(t.results.metaTitle, { from: cityLabel(sp.from, lang), to: cityLabel(sp.to, lang) })} — Asol BUS`,
+    title: `${fmt(t.results.metaTitle, { from: cityLabel(sp.from, lang), to: cityLabel(sp.to, lang) })} — Kaufmann Reisen`,
   };
 }
 
@@ -104,7 +104,6 @@ export default async function ResultsPage(props: { searchParams: Promise<SearchP
           <SearchSummary
             title={routeTitle}
             details={details}
-            cities={knownCities()}
             today={today}
             initiallyOpen={!hasRoute}
             defaults={{

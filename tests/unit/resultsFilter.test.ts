@@ -36,7 +36,7 @@ function trip(p: Partial<Trip>): Trip {
 }
 
 const A = trip({ id: "a", departure: "07:00", arrival: "19:30", durationMinutes: 750, price: 40, seatsLeft: 5, busCategory: "COMFORT", features: ["wifi", "wc"], luggagePieces: 1 });
-const B = trip({ id: "b", departure: "13:00", arrival: "05:00", durationMinutes: 960, price: 35, seatsLeft: 30, busCategory: "VIP", features: ["wifi", "wc", "water"], luggagePieces: 2, carrier: "Asol BUS", transfers: 1, transferCity: "Львів" });
+const B = trip({ id: "b", departure: "13:00", arrival: "05:00", durationMinutes: 960, price: 35, seatsLeft: 30, busCategory: "VIP", features: ["wifi", "wc", "water"], luggagePieces: 2, carrier: "Kaufmann Reisen", transfers: 1, transferCity: "Львів" });
 const C = trip({ id: "c", departure: "22:30", arrival: "09:00", durationMinutes: 630, price: 60, seatsLeft: 12, busCategory: "STANDARD", features: ["ac"], luggagePieces: 1 });
 const ALL = [A, B, C];
 
@@ -54,7 +54,7 @@ describe("results filters", () => {
     expect(f.arr).toEqual(["night", "morning", "evening"]);
     expect(f.price).toEqual({ min: 35, max: 60 });
     expect(f.stops).toEqual(["direct", "transfer"]);
-    expect(f.carriers).toEqual(["Asol BUS", "Grandes Tour"]);
+    expect(f.carriers).toEqual(["Grandes Tour", "Kaufmann Reisen"]);
     expect(f.features).toEqual(["wifi", "ac", "wc", "water"]);
     expect(f.luggage).toEqual([1, 2]);
   });
@@ -76,7 +76,7 @@ describe("results filters", () => {
   });
 
   it("round-trips through the URL", () => {
-    const f = { ...EMPTY_FILTERS, dep: ["night" as const], maxPrice: 45, features: ["wifi" as const], carriers: ["Asol BUS"] };
+    const f = { ...EMPTY_FILTERS, dep: ["night" as const], maxPrice: 45, features: ["wifi" as const], carriers: ["Kaufmann Reisen"] };
     const params = writeFiltersToParams(new URLSearchParams("from=Київ&to=Берлін"), f, "price");
     expect(params.get("from")).toBe("Київ");
     const back = filtersFromParams(Object.fromEntries(params));

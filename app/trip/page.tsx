@@ -29,7 +29,7 @@ function count(v?: string): number {
 
 export async function generateMetadata(): Promise<Metadata> {
   const { t } = await getDict();
-  return { title: `${t.seat.metaTitle} — Asol BUS` };
+  return { title: `${t.seat.metaTitle} — Kaufmann Reisen` };
 }
 
 export default async function TripPage(props: { searchParams: Promise<SP> }) {
@@ -46,7 +46,7 @@ export default async function TripPage(props: { searchParams: Promise<SP> }) {
   const seniors = count(sp.seniors);
   const passengers = Math.min(6, Math.max(1, adults + children + seniors || count(sp.passengers) || 1));
   const tripKind = parseTripKind(sp.tripKind);
-  const stops = trip && trip.carrierId === "asol" ? await tripStops(trip.id, trip.fromStopIndex, trip.toStopIndex).catch(() => []) : [];
+  const stops = trip && trip.carrierId === "kaufmann" ? await tripStops(trip.id, trip.fromStopIndex, trip.toStopIndex).catch(() => []) : [];
 
   return (
     <div className="flex min-h-screen flex-col">

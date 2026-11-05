@@ -104,7 +104,7 @@ describe("settlements", () => {
   it("settle third-party carriers only — never the platform's own fleet", async () => {
     await sale({ carrierName: "Grandes Tour", commissionPercent: 10, status: "PAID_ONLINE", price: 100 });
     await sale({ carrierName: "Grandes Tour", commissionPercent: 10, status: "PAID_CASH", price: 50 });
-    await sale({ carrierName: "Asol BUS", isOwnFleet: true, status: "PAID_ONLINE", price: 99 });
+    await sale({ carrierName: "Kaufmann Reisen", isOwnFleet: true, status: "PAID_ONLINE", price: 99 });
 
     const report = await getPeriodReport(PERIOD);
     expect(report.map((r) => r.carrierName)).toEqual(["Grandes Tour"]);
@@ -121,7 +121,7 @@ describe("settlements", () => {
     expect(generated[0].carrierName).toBe("Grandes Tour");
 
     const ownFleetTicket = await prisma.ticket.findFirst({
-      where: { trip: { carrier: { name: "Asol BUS" } } },
+      where: { trip: { carrier: { name: "Kaufmann Reisen" } } },
     });
     expect(ownFleetTicket?.settlementId).toBeNull();
   });

@@ -25,13 +25,13 @@ export const CONTACT_FIELDS = Object.keys({
   facebook: 1, instagram: 1, telegram: 1, viber: 1, whatsapp: 1,
 } satisfies Record<keyof SiteContacts, 1>) as (keyof SiteContacts)[];
 
-/** Starting values — the numbers printed on the Grandes Tour coaches. */
+/** Default contact details — replace with real ones in Settings → Contacts. */
 export const DEFAULT_CONTACTS: SiteContacts = {
-  phoneUa: "+38 044 444 00 44",
-  phoneEs: "+34 919 938 888",
-  phoneDe: "+49 721 959 441 24",
-  email: "",
-  website: "grandes-tour.com.ua",
+  phoneUa: "",
+  phoneEs: "",
+  phoneDe: "+49 721 95 944 124",
+  email: "info@kaufmann-reisen.de",
+  website: "kaufmann-reisen.de",
   address: "",
   facebook: "",
   instagram: "",

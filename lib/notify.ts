@@ -29,6 +29,8 @@ export const NOTIFICATION_EVENTS: {
   { kind: "schedule_changed", label: "Змінився час відправлення", defaultRoles: ["MANAGER", "ADMIN", "DISPATCHER"] },
   { kind: "refund_requested", label: "Клієнт запросив повернення", defaultRoles: ["MANAGER", "ADMIN", "ACCOUNTANT"] },
   { kind: "payment_received", label: "Оплату отримано", defaultRoles: ["MANAGER", "ADMIN", "ACCOUNTANT"] },
+  { kind: "carrier_sync_failed", label: "Не вдалося скасувати квиток у перевізника", defaultRoles: ["MANAGER", "ADMIN"] },
+  { kind: "change_requested", label: "Клієнт просить змінити дату", defaultRoles: ["MANAGER", "ADMIN", "DISPATCHER"] },
 ];
 
 export async function seedNotificationRules(db: Db = prisma): Promise<void> {
@@ -142,6 +144,19 @@ export async function notifyRefundRequested(
     {
       kind: "refund_requested",
       title: `Клієнт запросив повернення ${reference}`,
+      link: `/cabinet/tickets/${reference}`,
+    },
+    db
+  );
+}
+
+export async function notifyChangeRequested(reference: string, body: string, db: Db = prisma): Promise<void> {
+  await notifyRoles(
+    [...STAFF_ROLES, "DISPATCHER"],
+    {
+      kind: "change_requested",
+      title: `Клієнт просить змінити дату ${reference}`,
+      body,
       link: `/cabinet/tickets/${reference}`,
     },
     db

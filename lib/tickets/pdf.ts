@@ -9,6 +9,7 @@ import { cityLabel } from "@/lib/trips/cities";
 import { getSiteContacts, type SiteContacts } from "@/lib/siteContacts";
 import { qrCodePngBuffer } from "@/lib/tickets/qrcode";
 import { ETICKET_INCLUDE, toETicket, type ETicket, type ETicketBooking, type ETicketJourney } from "@/lib/tickets/eTicket";
+import { SEAT_PATH } from "@/lib/tickets/glyphs";
 
 /**
  * A4 ticket PDF, one page per passenger, in the visitor's language: the
@@ -27,10 +28,10 @@ const H = 841.89;
 const M = 40;
 
 const C = {
-  navy: rgb(11 / 255, 31 / 255, 58 / 255),
-  brand: rgb(37 / 255, 99 / 255, 235 / 255),
-  brandSoft: rgb(219 / 255, 234 / 255, 254 / 255),
-  brandLight: rgb(147 / 255, 197 / 255, 253 / 255),
+  navy: rgb(20 / 255, 44 / 255, 42 / 255),
+  brand: rgb(15 / 255, 118 / 255, 110 / 255),
+  brandSoft: rgb(204 / 255, 251 / 255, 241 / 255),
+  brandLight: rgb(94 / 255, 234 / 255, 212 / 255),
   ok: rgb(21 / 255, 128 / 255, 61 / 255),
   okSoft: rgb(220 / 255, 252 / 255, 231 / 255),
   warn: rgb(180 / 255, 83 / 255, 9 / 255),
@@ -118,6 +119,31 @@ class Pen {
   }
 }
 
+/** Coach seat icon (same shape as on the ticket page), top-left at (x, top). */
+function drawSeat(pen: Pen, x: number, top: number, height: number) {
+  pen.page.drawSvgPath(SEAT_PATH, { x, y: H - top, scale: height / 22, color: C.brand });
+}
+
+/** Schematic coach (front to the right) with the plate on its body. */
+function drawBus(pen: Pen, x: number, top: number, w: number, plate: string) {
+  const bodyH = 38;
+  const r = 7;
+  const body = `M${r} 0H${w - r}Q${w} 0 ${w} ${r}V${bodyH - r}Q${w} ${bodyH} ${w - r} ${bodyH}H${r}Q0 ${bodyH} 0 ${bodyH - r}V${r}Q0 0 ${r} 0Z`;
+  pen.page.drawSvgPath(body, { x, y: H - top, color: C.brand });
+  const win = rgb(0.86, 0.97, 0.95);
+  for (let wx = x + 6; wx + 13 <= x + w - 28; wx += 16) pen.rect(wx, top + 6, 13, 10, win);
+  pen.rect(x + w - 24, top + 6, 18, 14, win); // windscreen
+  const plateW = w - 46;
+  pen.rect(x + 9, top + 20, plateW, 14, C.white, C.navy);
+  let size = 9.5;
+  while (size > 5 && pen.f.bold.widthOfTextAtSize(clean(plate), size) > plateW - 8) size -= 0.5;
+  pen.text(plate, x + 9, top + 30.5, size, { bold: true, color: C.navy, center: plateW });
+  for (const cx of [x + 22, x + w - 26]) {
+    pen.page.drawCircle({ x: cx, y: H - (top + bodyH + 1), size: 7, color: C.navy });
+    pen.page.drawCircle({ x: cx, y: H - (top + bodyH + 1), size: 2.6, color: C.white });
+  }
+}
+
 function drawJourney(pen: Pen, j: ETicketJourney, t: Dict, lang: Lang, top: number, width: number): number {
   const tt = t.ticket;
   const x = M;
@@ -143,12 +169,19 @@ function drawJourney(pen: Pen, j: ETicketJourney, t: Dict, lang: Lang, top: numb
       : "";
   y = row(j.arriveAt?.slice(11, 16) ?? null, j.to, `${tt.dropoff}${arrivalDay}`, j.alightAddress) + 8;
 
-  const seat = j.freeSeating ? tt.noSeat : fmt(tt.seatN, { n: j.seat ?? "" });
-  const sw = pen.text(`${tt.seat}: `, x, y + 2, 11, { color: C.muted });
-  pen.text(seat, x + sw, y + 2, 11, { bold: true, color: C.navy });
-  y += 16;
-  const facts = [`${tt.bus}: ${j.bus ?? tt.busTbd}`, j.carrier ? `${tt.carrier}: ${j.carrier}` : null].filter(Boolean).join("   ·   ");
-  y = pen.para(facts, x, y, 9, width, { color: C.ink, leading: 12 });
+  // Seat: icon + number; bus: a coach with the plate on it.
+  const tileH = 62;
+  pen.rect(x, y - 6, 112, tileH, C.soft, C.line);
+  drawSeat(pen, x + 10, y + 10, 30);
+  pen.text(tt.seat.toUpperCase(), x + 44, y + 14, 7, { bold: true, color: C.muted });
+  if (j.freeSeating) pen.para(tt.noSeat, x + 44, y + 26, 8, 62, { bold: true, color: C.navy, leading: 10 });
+  else pen.text(String(j.seat ?? ""), x + 44, y + 38, 22, { bold: true, color: C.navy });
+  const bx = x + 124;
+  pen.rect(bx, y - 6, 164, tileH, C.soft, C.line);
+  pen.text(tt.bus.toUpperCase(), bx + 8, y + 4, 7, { bold: true, color: C.muted });
+  drawBus(pen, bx + 8, y + 8, 148, j.bus ?? tt.busTbd);
+  y += tileH + 6;
+  if (j.carrier) y = pen.para(`${tt.carrier}: ${j.carrier}`, x, y, 9, width, { color: C.ink, leading: 12 });
   for (const leg of j.legs) {
     const legSeat = leg.seat != null ? fmt(tt.seatN, { n: leg.seat }) : tt.noSeat;
     y = pen.para(`${tt.transfer}: ${cityLabel(leg.from, lang)} → ${cityLabel(leg.to, lang)} · ${tt.seat} ${legSeat}${leg.bus ? ` · ${leg.bus}` : ""}`, x, y, 9, width, { color: C.muted, leading: 12 });
@@ -164,10 +197,11 @@ async function drawTicketPage(pdf: PDFDocument, e: ETicket, fonts: Fonts, lang: 
 
   // Header band.
   pen.rect(0, 0, W, 86, C.navy);
-  const aw = pen.text("Asol", M, 48, 22, { bold: true, color: C.white });
-  pen.text(" BUS", M + aw, 48, 22, { bold: true, color: C.brandLight });
-  pen.text(tt.pdfTitle, M, 68, 10, { color: C.whiteDim });
-  pen.text(tt.reference, W - M, 36, 9, { color: C.whiteDim, right: true });
+  const kw = pen.text("Kaufmann", M, 48, 20, { bold: true, color: C.white });
+  pen.text(" Reisen", M + kw, 48, 20, { bold: true, color: C.brandLight });
+  // Not paid yet = a reservation: the passenger gets a boarding pass.
+  pen.text((e.state === "paid" ? tt.pdfTitle : tt.boardingPass).toUpperCase(), M, 70, 11, { bold: true, color: C.brandLight });
+  pen.text(tt.referenceSite, W - M, 36, 9, { color: C.whiteDim, right: true });
   pen.text(e.reference, W - M, 64, 24, { bold: true, color: C.white, right: true });
 
   // Status and issue date.
@@ -179,11 +213,21 @@ async function drawTicketPage(pdf: PDFDocument, e: ETicket, fonts: Fonts, lang: 
   const qrSize = 150;
   const qrX = W - M - qrSize;
   const qrTop = 136;
-  pen.rect(qrX - 8, qrTop - 8, qrSize + 16, qrSize + 58, C.soft, C.line);
-  const qr = await pdf.embedPng(await qrCodePngBuffer(e.checkUrl));
+  const carrierBox = e.carrierTicket ? 38 : 0;
+  pen.rect(qrX - 8, qrTop - 8, qrSize + 16, qrSize + 58 + carrierBox, C.soft, C.line);
+  const qr = await pdf.embedPng(await qrCodePngBuffer(e.qrValue));
   page.drawImage(qr, { x: qrX, y: H - qrTop - qrSize, width: qrSize, height: qrSize });
   pen.text(e.reference, qrX, qrTop + qrSize + 16, 11, { bold: true, center: qrSize });
   pen.para(tt.qrHint, qrX, qrTop + qrSize + 31, 8, qrSize, { color: C.muted, leading: 10 });
+  if (e.carrierTicket) {
+    // The carrier's own ticket number (what their dispatcher / driver sees).
+    let ly = qrTop + qrSize + 60;
+    for (const line of wrap(fmt(tt.carrierTicket, { carrier: e.carrierName ?? "" }), fonts.bold, 7, qrSize)) {
+      pen.text(line, qrX, ly, 7, { bold: true, color: C.muted, center: qrSize });
+      ly += 9;
+    }
+    pen.text(e.carrierTicket, qrX, qrTop + qrSize + 84, 11, { bold: true, center: qrSize });
+  }
 
   // Passenger.
   const colW = qrX - 24 - M;
@@ -202,7 +246,7 @@ async function drawTicketPage(pdf: PDFDocument, e: ETicket, fonts: Fonts, lang: 
   }
 
   // Price.
-  y = Math.max(y, qrTop + qrSize + 70) + 4;
+  y = Math.max(y, qrTop + qrSize + 70 + carrierBox) + 4;
   pen.rect(M, y, W - 2 * M, 48, C.soft, C.line);
   pen.text(tt.price.toUpperCase(), M + 14, y + 18, 8, { bold: true, color: C.muted });
   pen.text(money(e.price, lang), M + 14, y + 37, 16, { bold: true, color: C.navy });
@@ -227,12 +271,16 @@ async function drawTicketPage(pdf: PDFDocument, e: ETicket, fonts: Fonts, lang: 
     y = pen.para(rule, M + 12, y, 9, W - 2 * M - 12, { color: C.ink, leading: 12.5 }) + 3;
   }
 
-  // Footer.
-  const phones = [contacts.phoneUa, contacts.phoneEs, contacts.phoneDe].filter(Boolean).join("   ·   ");
-  pen.hr(H - 70);
-  if (phones) pen.text(phones, M, H - 52, 9, { bold: true, color: C.navy });
-  pen.text([contacts.website, contacts.email].filter(Boolean).join("   ·   "), M, H - 38, 8, { color: C.muted });
-  pen.text(tt.pdfValid, W - M, H - 38, 8, { color: C.muted, right: true });
+  // Footer: our contacts and the carrier's, each signed.
+  const labeled = (label: string, value: string, top: number) => {
+    const lw = pen.text(`${label}: `, M, top, 8.5, { bold: true, color: C.navy });
+    return pen.para(value, M + lw, top, 8.5, W - 2 * M - lw, { color: C.ink, leading: 11 });
+  };
+  const site = [contacts.phoneUa, contacts.phoneEs, contacts.phoneDe, contacts.email, contacts.website].filter(Boolean).join("   ·   ");
+  pen.hr(H - 84);
+  let fy = labeled(tt.contactsSite, site, H - 68);
+  if (e.carrierPhones) fy = labeled(fmt(tt.contactsCarrier, { carrier: e.carrierName ?? "" }), e.carrierPhones, fy + 2);
+  pen.text(tt.pdfValid, W - M, Math.max(fy + 2, H - 26), 8, { color: C.muted, right: true });
 }
 
 let fontCache: Promise<[Buffer, Buffer]> | null = null;
@@ -244,7 +292,7 @@ function fontBytes(): Promise<[Buffer, Buffer]> {
 
 /**
  * One PDF with one page per booking, in the given order. `origin` is the
- * site origin (e.g. "https://asolbus.com") used for the QR.
+ * site origin (e.g. "https://kaufmann-reisen.de") used for the QR.
  */
 export async function buildTicketsPdf(bookings: TicketPdfBooking[], origin: string, lang: Lang = "uk"): Promise<Uint8Array> {
   const pdf = await PDFDocument.create();
@@ -252,8 +300,8 @@ export async function buildTicketsPdf(bookings: TicketPdfBooking[], origin: stri
   const [regular, bold] = await fontBytes();
   const fonts: Fonts = { font: await pdf.embedFont(regular, { subset: true }), bold: await pdf.embedFont(bold, { subset: true }) };
   const contacts = await getSiteContacts().catch(() => null);
-  pdf.setTitle(`Asol BUS — ${bookings.map((b) => b.reference).join(", ")}`);
-  pdf.setAuthor("Asol BUS");
+  pdf.setTitle(`Kaufmann Reisen — ${bookings.map((b) => b.reference).join(", ")}`);
+  pdf.setAuthor("Kaufmann Reisen");
   for (const booking of bookings) {
     await drawTicketPage(pdf, toETicket(booking, origin), fonts, lang, contacts ?? ({} as SiteContacts));
   }

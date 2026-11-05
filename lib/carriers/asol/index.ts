@@ -59,7 +59,7 @@ async function vehicleInfo(tripId: string, assignmentIds: string[]) {
   const category: BusCategory | undefined =
     first && isBusCategory(first.category) ? first.category : undefined;
   return {
-    carrier: trip?.carrier.name ?? "Asol BUS",
+    carrier: trip?.carrier.name ?? "Kaufmann Reisen",
     busModel: first?.model ?? trip?.departure?.defaultBus ?? null,
     category,
     features: buses.length ? commonFeatures(buses.map((b) => parseBusFeatures(b.amenities))) : undefined,
@@ -111,7 +111,7 @@ async function toSearchTrip(option: SegmentTripOption): Promise<Trip> {
   const legCount = Math.max(1, coverage.legs.length);
   return {
     id: option.tripId,
-    carrierId: "asol",
+    carrierId: "kaufmann",
     carrier: vehicle.carrier,
     carrierShort: shortName(vehicle.carrier),
     busType: vehicle.busModel ?? "",
@@ -155,8 +155,8 @@ async function toSearchTrip(option: SegmentTripOption): Promise<Trip> {
 }
 
 export class AsolCarrierAdapter implements CarrierAdapter {
-  readonly id = "asol";
-  readonly name = "Asol BUS";
+  readonly id = "kaufmann";
+  readonly name = "Kaufmann Reisen";
   readonly transportType = "BUS" as const;
 
   async search(query: SearchQuery): Promise<Trip[]> {
@@ -209,7 +209,7 @@ export class AsolCarrierAdapter implements CarrierAdapter {
   }> {
     const snapshot = request.tripSnapshot ?? {};
     return {
-      carrierReference: `ASOL-${Math.random()
+      carrierReference: `KAUFF-${Math.random()
         .toString(36)
         .slice(2, 8)
         .toUpperCase()}`,

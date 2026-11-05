@@ -24,7 +24,7 @@ export default function CabinetFrame({
           >
             Меню
           </button>
-          <span className="text-sm font-semibold text-slate-900">Asol BUS</span>
+          <span className="text-sm font-semibold text-slate-900">Kaufmann Reisen</span>
         </header>
         <main className="flex-1 overflow-auto px-3 py-4 sm:px-4 lg:px-5">
           {children}

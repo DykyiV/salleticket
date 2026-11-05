@@ -42,7 +42,7 @@ export default function SeatStep(props: SeatStepProps) {
   const router = useRouter();
   const { t, lang } = useI18n();
   const s = t.seat;
-  const [count, setCount] = useState(Math.min(MAX_SEATS, Math.max(1, props.passengers)));
+  const [countState, setCount] = useState(Math.min(MAX_SEATS, Math.max(1, props.passengers)));
   const [layout, setLayout] = useState<BusLayout | null>(null);
   const [virtual, setVirtual] = useState(false);
   const [seats, setSeats] = useState<number[]>([]);
@@ -59,6 +59,8 @@ export default function SeatStep(props: SeatStepProps) {
 
   const roundTrip = props.tripKind === "ROUND_TRIP";
   const assignsSeats = trip.hasAssignedSeats !== false;
+  // Partner carrier (Grandes Tour): the seat map is theirs, no holds here.
+  const external = trip.carrierId === "grandes-tour";
   const legs = trip.legSegments ?? [];
   const hasLegs = legs.length > 1;
   const segment =
@@ -113,6 +115,7 @@ export default function SeatStep(props: SeatStepProps) {
     if (!roundTrip || !retDate) return;
     let alive = true;
     const q = new URLSearchParams({ from: trip.to, to: trip.from, date: retDate });
+    if (trip.carrierId === "grandes-tour") q.set("carrier", "grandes-tour");
     fetch(`/api/trips?${q}`)
       .then((r) => r.json())
       .then((data: { trips?: ReturnOption[] }) => {
@@ -129,7 +132,7 @@ export default function SeatStep(props: SeatStepProps) {
   }, [roundTrip, retDate, trip.from, trip.to]);
 
   const hold = async (tripId: string, seatNumber: number, seg: { fromIndex: number; toIndex: number } | null) => {
-    if (virtual) return true;
+    if (virtual || external) return true;
     const res = await fetch(`/api/trips/${encodeURIComponent(tripId)}/holds`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -145,7 +148,7 @@ export default function SeatStep(props: SeatStepProps) {
   };
 
   const release = (tripId: string, seatNumber: number) => {
-    if (virtual) return;
+    if (virtual || external) return;
     void fetch(`/api/trips/${encodeURIComponent(tripId)}/holds`, {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
@@ -161,7 +164,8 @@ export default function SeatStep(props: SeatStepProps) {
     n: number,
     tripId: string,
     seg: { fromIndex: number; toIndex: number } | null,
-    onFail?: () => void
+    onFail?: () => void,
+    limit = count
   ) => {
     setError(null);
     if (list.includes(n)) {
@@ -169,7 +173,7 @@ export default function SeatStep(props: SeatStepProps) {
       release(tripId, n);
       return;
     }
-    if (list.length >= count) {
+    if (list.length >= limit) {
       // Replace the last pick so a tap always does something useful.
       const last = list[list.length - 1];
       setBusy(true);
@@ -184,6 +188,19 @@ export default function SeatStep(props: SeatStepProps) {
     if (await hold(tripId, n, seg)) setList([...list, n]);
     else onFail?.();
     setBusy(false);
+  };
+
+  // With a seat map the passengers are the seats picked (no counter).
+  const pickMode = assignsSeats && !virtual && !hasLegs && layout != null;
+  const count = pickMode ? Math.max(1, seats.length) : countState;
+  /** Outbound seats changed; in pick mode fewer of them also trims the return seats. */
+  const setOutboundSeats = (next: number[]) => {
+    setSeats(next);
+    const n = Math.max(1, next.length);
+    if (pickMode && returnSeats.length > n) {
+      if (returnTripId) returnSeats.slice(n).forEach((x) => release(returnTripId, x));
+      setReturnSeats(returnSeats.slice(0, n));
+    }
   };
 
   const changeCount = (next: number) => {
@@ -264,6 +281,14 @@ export default function SeatStep(props: SeatStepProps) {
         <HoldTimer version={holdVersion} />
 
         {/* Passengers count */}
+        {pickMode ? (
+          <div className="rounded-2xl bg-white p-4 shadow-soft ring-1 ring-slate-200/70">
+            <p className="font-semibold text-navy">{s.pickSeatsHint}</p>
+            <p className="text-sm text-ink-soft" aria-live="polite">
+              {fmt(s.pickedCount, { n: seats.length })}
+            </p>
+          </div>
+        ) : (
         <div className="flex items-center justify-between gap-3 rounded-2xl bg-white p-4 shadow-soft ring-1 ring-slate-200/70">
           <div>
             <p className="font-semibold text-navy">{s.passengers}</p>
@@ -293,6 +318,7 @@ export default function SeatStep(props: SeatStepProps) {
             </button>
           </div>
         </div>
+        )}
 
         {/* Outbound map */}
         <section className="rounded-2xl bg-white p-4 shadow-soft ring-1 ring-slate-200/70 sm:p-5">
@@ -305,7 +331,7 @@ export default function SeatStep(props: SeatStepProps) {
               selected={seats}
               basePrice={trip.price}
               busy={busy}
-              onToggle={(n) => void toggleIn(seats, setSeats, n, trip.id, segment, () => void reloadMain())}
+              onToggle={(n) => void toggleIn(seats, setOutboundSeats, n, trip.id, segment, () => void reloadMain(), pickMode ? MAX_SEATS : count)}
             />
           ) : (
             <p className="text-sm text-ink-soft">{s.loading}</p>
@@ -375,7 +401,7 @@ export default function SeatStep(props: SeatStepProps) {
                           onClick={async () => {
                             setReturnTripId(option.id);
                             setReturnSeats([]);
-                            setReturnLayout((await fetchLayout(option.id)).layout);
+                            setReturnLayout(option.hasAssignedSeats ? (await fetchLayout(option.id)).layout : null);
                           }}
                           className={`w-full rounded-xl border-2 px-3 py-2.5 text-left text-sm transition ${
                             on ? "border-brand-600 bg-brand-50" : "border-slate-200 hover:border-brand-300"

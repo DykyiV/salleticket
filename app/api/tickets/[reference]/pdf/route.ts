@@ -29,7 +29,7 @@ export async function GET(req: NextRequest, props: Params) {
   return new NextResponse(Buffer.from(bytes), {
     headers: {
       "Content-Type": "application/pdf",
-      "Content-Disposition": `attachment; filename="asolbus-${reference.replace(/[^A-Za-z0-9-]/g, "")}.pdf"`,
+      "Content-Disposition": `attachment; filename="kaufmann-reisen-${reference.replace(/[^A-Za-z0-9-]/g, "")}.pdf"`,
       "Cache-Control": "private, no-store",
     },
   });

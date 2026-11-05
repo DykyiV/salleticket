@@ -4,6 +4,11 @@ import { prisma } from "@/lib/db";
 import { requireRole } from "@/lib/auth/guard";
 import { ROLE_RANK } from "@/lib/auth/constants";
 import { userChangeRefusal } from "@/lib/auth/userAdmin";
+import {
+  EmailTakenError,
+  createUserWithTemporaryPassword,
+  resetToTemporaryPassword,
+} from "@/lib/auth/userAccounts";
 import { recordAudit } from "@/lib/audit";
 import { requestMeta } from "@/lib/tickets/history";
 
@@ -125,4 +130,80 @@ export async function PATCH(req: NextRequest) {
     });
   }
   return NextResponse.json({ user: updated });
+}
+
+const EMAIL_RE = /^\S+@\S+\.\S+$/;
+
+type PostBody = { email?: string; role?: Role; userId?: string };
+
+/**
+ * POST { email, role } — adds a user; POST { userId } — gives a user a new
+ * password. Mail is not connected yet, so the temporary password comes back
+ * once in the response for the admin to pass on; the user then sets their
+ * own in the cabinet profile. Same who-may-manage-whom rules as PATCH.
+ */
+export async function POST(req: NextRequest) {
+  const guard = await requireRole("ADMIN");
+  if (!guard.ok) return guard.response;
+
+  let body: PostBody;
+  try {
+    body = (await req.json()) as PostBody;
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+  }
+  const actor = { id: guard.session.sub, role: guard.session.role };
+  const superAdminCount = await prisma.user.count({ where: { role: "SUPER_ADMIN" } });
+  const audit = (action: string, targetId: string, changes: Record<string, unknown>) =>
+    recordAudit({
+      actorId: guard.session.sub,
+      actorEmail: guard.session.email,
+      action,
+      targetType: "user",
+      targetId,
+      changes,
+      ipAddress: requestMeta(req).ipAddress,
+    });
+
+  if (body.userId) {
+    const target = await prisma.user.findUnique({ where: { id: body.userId }, select: userSelect });
+    if (!target) {
+      return NextResponse.json({ error: "Користувача не знайдено" }, { status: 404 });
+    }
+    const refusal = userChangeRefusal({ actor, target, superAdminCount });
+    if (refusal) return NextResponse.json({ error: refusal }, { status: 403 });
+    const { password } = await resetToTemporaryPassword(target.id);
+    await audit("user.password", target.id, { email: target.email });
+    return NextResponse.json({ user: target, password });
+  }
+
+  const email = body.email?.trim().toLowerCase() ?? "";
+  if (!EMAIL_RE.test(email) || email.length > 200) {
+    return NextResponse.json({ error: "Вкажіть коректний e-mail" }, { status: 400 });
+  }
+  const role = body.role ?? "CUSTOMER";
+  if (!(role in ROLE_RANK)) {
+    return NextResponse.json({ error: "Unknown role" }, { status: 400 });
+  }
+  const refusal = userChangeRefusal({
+    actor,
+    target: { id: "", role: "CUSTOMER" },
+    newRole: role,
+    superAdminCount,
+  });
+  if (refusal) return NextResponse.json({ error: refusal }, { status: 403 });
+  try {
+    const { id, password } = await createUserWithTemporaryPassword(email, role);
+    await audit("user.create", id, { email, role });
+    const user = await prisma.user.findUnique({ where: { id }, select: userSelect });
+    return NextResponse.json({ user, password }, { status: 201 });
+  } catch (err) {
+    if (err instanceof EmailTakenError) {
+      return NextResponse.json(
+        { error: "Користувач з таким e-mail уже є. Знайдіть його в списку й натисніть «Новий пароль»." },
+        { status: 409 }
+      );
+    }
+    throw err;
+  }
 }

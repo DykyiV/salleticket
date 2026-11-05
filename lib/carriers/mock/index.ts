@@ -13,7 +13,7 @@ import type {
  */
 export class MockCarrierAdapter implements CarrierAdapter {
   readonly id = "mock";
-  readonly name = "Asol Mock Network";
+  readonly name = "Kaufmann Mock Network";
   readonly transportType = "BUS" as const;
 
   async search(query: SearchQuery): Promise<Trip[]> {

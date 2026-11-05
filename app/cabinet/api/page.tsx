@@ -65,7 +65,7 @@ export default function CabinetApiPage() {
 
       <section className="rounded-2xl bg-white p-5 ring-1 ring-slate-200">
         <h2 className="text-sm font-semibold text-slate-900">Архітектура</h2>
-        <pre className="mt-3 overflow-x-auto rounded-xl bg-slate-50 p-4 text-xs leading-relaxed text-slate-700">{`                    ASOL BUS
+        <pre className="mt-3 overflow-x-auto rounded-xl bg-slate-50 p-4 text-xs leading-relaxed text-slate-700">{`                 KAUFMANN REISEN
                        │
           ┌────────────┴────────────┐
           ▼                         ▼

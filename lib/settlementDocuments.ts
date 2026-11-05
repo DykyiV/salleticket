@@ -52,7 +52,7 @@ function parties(carrierName: string): string {
   <div class="parties">
     <div>
       <h2>Постачальник (агент)</h2>
-      <div>ТОВ «Asol BUS Marketplace»</div>
+      <div>Kaufmann Reisen</div>
       <div>ЄДРПОУ 00000000 · Україна, м. Київ</div>
     </div>
     <div>
@@ -132,7 +132,7 @@ export function renderAct(data: SettlementData): string {
   <h1>Акт наданих послуг № ${escapeHtml(actNumber)}</h1>
   <div class="meta">Період: ${escapeHtml(s.period)} · Дата формування: ${s.createdAt.toISOString().slice(0, 10)}</div>
   ${parties(s.carrier.name)}
-  <p style="font-size:14px">Цей акт підтверджує, що агент ТОВ «Asol BUS Marketplace» у звітному періоді
+  <p style="font-size:14px">Цей акт підтверджує, що агент Kaufmann Reisen у звітному періоді
   надав послуги з продажу квитків на рейси перевізника, а саме:</p>
   ${linesTable(data)}
   ${totals(data)}

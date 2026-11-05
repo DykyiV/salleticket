@@ -9,6 +9,7 @@ import { findStopForCity, boardingLabel } from "@/lib/routes/boarding";
 import { formatUkDate } from "@/lib/routes/dates";
 import { weekdayName } from "@/lib/routes/weekdays";
 import { qrCodeDataUrl } from "@/lib/tickets/qrcode";
+import { getSiteContacts } from "@/lib/siteContacts";
 import { AGE_LABEL, eur, TICKET_STATUS_LABEL, TRIP_KIND_LABEL } from "@/lib/tickets/labels";
 import { moneyState, priceBreakdown } from "@/lib/tickets/ticketMoney";
 
@@ -51,11 +52,22 @@ export default async function PrintTicketPage(props: { params: Promise<{ referen
   const bus =
     ticket.legs.map((l) => (l.assignment ? `${l.assignment.bus.model ?? "Автобус"} ${l.assignment.bus.plate}` : null)).find(Boolean) ??
     departure?.defaultBus ??
+    trip?.carrierBus ??
     null;
 
+  const paid = ticket.status === "PAID_ONLINE" || ticket.status === "PAID_CASH";
+  const carrierTicket = ticket.carrierRef?.split(":").pop() || null;
+  const carrierPhones = trip?.carrierPhones ?? returnTrip?.carrierPhones ?? null;
+  const contacts = await getSiteContacts().catch(() => null);
+  const site = contacts
+    ? [contacts.phoneUa, contacts.phoneEs, contacts.phoneDe, contacts.email, contacts.website].filter(Boolean).join(" · ")
+    : "";
+
   const h = await headers();
+  // Grandes Tour tickets: the same QR as the carrier's (their ticket number).
   const qr = await qrCodeDataUrl(
-    `${h.get("x-forwarded-proto") ?? "http"}://${h.get("x-forwarded-host") ?? h.get("host")}/check/${booking.reference}`
+    carrierTicket ??
+      `${h.get("x-forwarded-proto") ?? "http"}://${h.get("x-forwarded-host") ?? h.get("host")}/check/${booking.reference}`
   );
 
   const payment = ticket.payments[0] ?? null;
@@ -88,8 +100,8 @@ export default async function PrintTicketPage(props: { params: Promise<{ referen
       <div className="rounded-2xl border border-slate-300 p-5 print:rounded-none print:border-black">
         <header className="flex items-center justify-between border-b border-slate-200 pb-3">
           <p className="text-sm font-bold tracking-wide">
-            Asol <span className="text-brand-600 print:text-black">BUS</span>
-            <span className="ml-2 font-normal text-slate-500">· посадковий квиток</span>
+            Kaufmann <span className="text-brand-600 print:text-black">Reisen</span>
+            <span className="ml-2 font-normal text-slate-500">· {paid ? "квиток" : "посадковий талон"}</span>
           </p>
           <p className="text-xs text-slate-500">{TRIP_KIND_LABEL[ticket.tripKind] ?? ticket.tripKind}</p>
         </header>
@@ -172,16 +184,41 @@ export default async function PrintTicketPage(props: { params: Promise<{ referen
                 {departure.dispatcherPhone ? `Диспетчер: ${departure.dispatcherPhone}` : ""}
               </p>
             ) : null}
+
+            {carrierPhones || site ? (
+              <section className="space-y-1 border-t border-slate-200 pt-3 text-xs">
+                {carrierPhones ? (
+                  <p>
+                    <span className="font-semibold">Контакти перевізника{trip?.carrier?.name ? ` (${trip.carrier.name})` : ""}:</span>{" "}
+                    {carrierPhones}
+                  </p>
+                ) : null}
+                {site ? (
+                  <p>
+                    <span className="font-semibold">Контакти Kaufmann Reisen:</span> {site}
+                  </p>
+                ) : null}
+              </section>
+            ) : null}
           </div>
 
           {/* Right: status, number, QR, price */}
           <aside className="space-y-3 text-sm">
             <div className="text-center">
               <p className="text-xs font-semibold uppercase">{TICKET_STATUS_LABEL[ticket.status]}</p>
-              <p className="mt-1 font-mono text-xl font-bold tracking-widest">{booking.reference}</p>
+              <p className="mt-1 text-[10px] uppercase tracking-wider text-slate-500">Номер квитка Kaufmann Reisen</p>
+              <p className="font-mono text-xl font-bold tracking-widest">{booking.reference}</p>
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={qr} alt={`QR-код ${booking.reference}`} className="mx-auto mt-2 h-[44mm] w-[44mm]" />
               <p className="text-[10px] text-slate-500">Покажіть QR водієві при посадці</p>
+              {carrierTicket ? (
+                <>
+                  <p className="mt-2 text-[10px] uppercase tracking-wider text-slate-500">
+                    Номер квитка перевізника{trip?.carrier?.name ? ` (${trip.carrier.name})` : ""}
+                  </p>
+                  <p className="font-mono text-base font-bold tracking-wider">{carrierTicket}</p>
+                </>
+              ) : null}
             </div>
             <div className="border-t border-slate-200 pt-2">
               <div className="flex justify-between text-xs">

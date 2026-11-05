@@ -28,6 +28,7 @@ export default async function SiteFooter() {
   const docs = [
     { href: "/rules", label: t.footer.terms },
     { href: "/baggage", label: t.footer.baggage },
+    { href: "/refund", label: t.footer.refund },
     { href: "/rules#rights", label: t.footer.rights },
     { href: "/rules#offer", label: t.footer.offer },
     { href: "/rules#privacy", label: t.footer.privacy },
@@ -38,10 +39,8 @@ export default async function SiteFooter() {
       <div className="container-site grid gap-10 py-12 sm:grid-cols-2 lg:grid-cols-4">
         <div className="lg:col-span-2">
           <p className="flex items-center gap-2 text-lg font-bold text-white">
-            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/10">
-              <Icon name="bus" className="h-5 w-5" />
-            </span>
-            Asol<span className="-ml-1 text-brand-400"> BUS</span>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/logo-white.svg" alt="Kaufmann Reisen" width={160} height={50} className="h-12 w-auto" />
           </p>
           <p className="mt-3 max-w-sm text-sm leading-relaxed text-slate-400">{t.footer.about}</p>
           {socials.length ? (
@@ -118,7 +117,7 @@ export default async function SiteFooter() {
       </div>
       <div className="border-t border-white/10">
         <p className="container-site py-5 text-xs text-slate-500">
-          © {new Date().getFullYear()} Asol BUS · ТзОВ «Грандес Тур». {t.footer.rightsReserved}
+          © {new Date().getFullYear()} Kaufmann Reisen. {t.footer.rightsReserved}
         </p>
       </div>
     </footer>

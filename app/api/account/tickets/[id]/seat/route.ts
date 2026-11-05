@@ -4,6 +4,7 @@ import { ticketRights } from "@/lib/auth/access";
 import { prisma } from "@/lib/db";
 import { requestMeta, recordTicketHistory } from "@/lib/tickets/history";
 import { updateTicketVersioned, VersionConflictError } from "@/lib/tickets/version";
+import { tripChangeRefusal } from "@/lib/tickets/changeRules";
 import {
   SeatRequiredError,
   SeatTakenError,
@@ -30,7 +31,19 @@ export async function PATCH(req: NextRequest, props: Params) {
 
   const ticket = await prisma.ticket.findUnique({
     where: { id: params.id },
-    select: { id: true, userId: true, cashCollectedById: true, tripId: true, returnTripId: true, seatNumber: true, returnSeatNumber: true, version: true },
+    select: {
+      id: true,
+      userId: true,
+      cashCollectedById: true,
+      tripId: true,
+      returnTripId: true,
+      seatNumber: true,
+      returnSeatNumber: true,
+      version: true,
+      carrierRef: true,
+      trip: { select: { departureTime: true } },
+      returnTrip: { select: { departureTime: true } },
+    },
   });
   if (!ticket) {
     return NextResponse.json({ error: "Квиток не знайдено" }, { status: 404 });
@@ -41,6 +54,14 @@ export async function PATCH(req: NextRequest, props: Params) {
   }
 
   const leg = body.leg === "return" ? "return" : "outbound";
+  const refusal = tripChangeRefusal(
+    guard.session.role,
+    (leg === "return" ? ticket.returnTrip : ticket.trip)?.departureTime
+  );
+  if (refusal) return NextResponse.json({ error: refusal }, { status: 403 });
+  if (ticket.carrierRef) {
+    return NextResponse.json({ error: "Місце квитка перевізника змінюють у вікні зміни рейсу" }, { status: 400 });
+  }
   const tripId = leg === "return" ? ticket.returnTripId : ticket.tripId;
   if (!tripId) {
     return NextResponse.json({ error: "Немає рейсу для цієї ділянки" }, { status: 400 });

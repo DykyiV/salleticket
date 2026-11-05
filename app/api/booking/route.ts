@@ -29,6 +29,8 @@ import { notifyNewBooking, notifyTripAlmostFull } from "@/lib/notify";
 import { FULL_ROUTE, resolveSegment, type Segment } from "@/lib/trips/segments";
 import { pickAssignment } from "@/lib/ops/legs";
 import { cityNames } from "@/lib/trips/cities";
+import { isLatinName } from "@/lib/passengerName";
+import { toE164 } from "@/lib/phone";
 import type { BookingPassenger, Trip } from "@/lib/carriers/types";
 import { getLang } from "@/lib/i18n/server";
 import { loadGroupBookings, requestOrigin } from "@/lib/tickets/eTicket";
@@ -51,6 +53,8 @@ type PassengerInput = PassengerPayload & {
   returnSeatNumber?: number | null;
   /** Seat per operational leg (transfer bookings). */
   legSeats?: (number | null)[];
+  /** Carrier ticket type (Grandes Tour passenger type id). */
+  fareTypeId?: number | string | null;
 };
 
 type LegSegmentInput = {
@@ -79,6 +83,8 @@ type CreateBookingBody = {
   promoCode?: string;
   seatNumber?: number | null;
   returnSeatNumber?: number | null;
+  /** Return trip date YYYY-MM-DD (carrier round trips without a stored trip). */
+  returnDate?: string;
 };
 
 const MAX_PASSENGERS = 6;
@@ -105,6 +111,7 @@ type ResolvedPassenger = {
   seatNumber?: number | null;
   returnSeatNumber?: number | null;
   legSeats?: (number | null)[];
+  fareTypeId?: number | null;
 };
 
 function resolvePassenger(p: PassengerInput | undefined, travelDate: Date): ResolvedPassenger {
@@ -147,6 +154,8 @@ function resolvePassenger(p: PassengerInput | undefined, travelDate: Date): Reso
     seatNumber: p.seatNumber ?? null,
     returnSeatNumber: p.returnSeatNumber ?? null,
     legSeats: p.legSeats,
+    fareTypeId:
+      p.fareTypeId != null && Number.isInteger(Number(p.fareTypeId)) ? Number(p.fareTypeId) : null,
   };
 }
 
@@ -204,8 +213,8 @@ export async function POST(req: NextRequest) {
     include: { carrier: true, departure: true },
   });
 
-  const carrierAdapterId = body.carrierId ?? (storedTrip ? "asol" : "mock");
-  const adapter = findCarrier(carrierAdapterId) ?? findCarrier("asol");
+  const carrierAdapterId = body.carrierId ?? (storedTrip ? "kaufmann" : "mock");
+  const adapter = findCarrier(carrierAdapterId) ?? findCarrier("kaufmann");
   if (!adapter) {
     return NextResponse.json(
       { error: `Unknown carrier: ${carrierAdapterId}` },
@@ -214,6 +223,9 @@ export async function POST(req: NextRequest) {
   }
 
   const tripKind = parseTripKind(body.tripKind);
+  // Grandes Tour prices fares (age types, discount cards) and keeps the
+  // tickets itself; our ticket mirrors what their system recorded.
+  const isGt = adapter.id === "grandes-tour";
   const paymentMethod =
     body.paymentMethod === "ONLINE" ? "ONLINE" : "CASH_ON_BUS";
   if (paymentMethod === "ONLINE" && !onlinePaymentsEnabled()) {
@@ -267,6 +279,21 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: err.message }, { status: 400 });
     }
     throw err;
+  }
+
+  // Grandes Tour accepts names in Latin letters only (as in the passport).
+  if (isGt && passengers.some((p) => !isLatinName(p.firstName) || !isLatinName(p.lastName))) {
+    return NextResponse.json(
+      { error: "Імʼя та прізвище — лише латинськими літерами, як у закордонному паспорті (щонайменше 3)" },
+      { status: 400 }
+    );
+  }
+
+  if (isGt && !toE164(phone)) {
+    return NextResponse.json(
+      { error: "Вкажіть справжній номер телефону в міжнародному форматі, напр. +380501234567" },
+      { status: 400 }
+    );
   }
 
   // Passengers booking "pay on the bus" themselves are limited per phone /
@@ -336,6 +363,8 @@ export async function POST(req: NextRequest) {
     const canonicalTrips = await adapter.search({
       from: String(clientSnapshot.from),
       to: String(clientSnapshot.to),
+      // Grandes Tour: the exact day (their search window is a month).
+      ...(isGt && clientSnapshot.date ? { date: String(clientSnapshot.date) } : {}),
     });
     const canonicalTrip = canonicalTrips.find((t) => t.id === body.tripId);
     if (!canonicalTrip) {
@@ -351,7 +380,22 @@ export async function POST(req: NextRequest) {
   }
 
   let returnStoredTrip: typeof storedTrip = null;
-  if (tripKind === "ROUND_TRIP") {
+  let carrierReturn: (Trip & { date?: string }) | null = null;
+  if (tripKind === "ROUND_TRIP" && isGt) {
+    if (!body.returnTripId) {
+      return NextResponse.json({ error: "Оберіть зворотній рейс" }, { status: 400 });
+    }
+    const back = await adapter.search({
+      from: String(snapshot.to),
+      to: String(snapshot.from),
+      date: body.returnDate,
+    });
+    const found = back.find((t) => t.id === body.returnTripId);
+    if (!found) {
+      return NextResponse.json({ error: "Зворотній рейс не знайдено" }, { status: 404 });
+    }
+    carrierReturn = { ...found, date: found.departureAt?.slice(0, 10) ?? body.returnDate };
+  } else if (tripKind === "ROUND_TRIP") {
     if (!body.returnTripId) {
       return NextResponse.json(
         { error: "Оберіть зворотній рейс" },
@@ -385,13 +429,29 @@ export async function POST(req: NextRequest) {
       tripId: body.tripId,
       carrierId: carrierAdapterId,
       passenger: adapterPassenger,
+      passengers: passengers.map((p) => ({
+        name: `${p.firstName} ${p.lastName}`.trim(),
+        phone,
+        email: accountEmail,
+        birthDate: p.birthDate ? p.birthDate.toISOString().slice(0, 10) : undefined,
+        fareTypeId: p.fareTypeId ?? null,
+        seatNumber: p.seatNumber ?? null,
+        returnSeatNumber: p.returnSeatNumber ?? null,
+      })),
       tripSnapshot: snapshot,
+      travelDate: snapshot.date,
+      returnTripId: carrierReturn?.id ?? null,
+      returnDate: carrierReturn?.date,
+      discountCard: isGt ? (passengers.find((p) => p.promoCode)?.promoCode ?? body.promoCode ?? null) : null,
+      paymentAtBoarding: paymentMethod === "CASH_ON_BUS",
     });
   } catch (err) {
+    const details = err instanceof Error ? err.message : String(err);
     return NextResponse.json(
       {
-        error: "Carrier booking failed",
-        details: err instanceof Error ? err.message : String(err),
+        // Shown to the buyer: the carrier's reason (seat taken, card, …).
+        error: `Не вдалося забронювати у перевізника: ${details.replace(/^Grandes Tour [^:]+: /, "")}`,
+        details,
       },
       { status: 502 }
     );
@@ -403,7 +463,7 @@ export async function POST(req: NextRequest) {
   try {
     for (const p of passengers) {
       validatedPromos.push(
-        p.promoCode
+        p.promoCode && !isGt
           ? await validatePromo(prisma, {
               rawCode: p.promoCode,
               currentUserId: session.sub,
@@ -509,10 +569,28 @@ export async function POST(req: NextRequest) {
               departureTime: departureAt,
               arrivalTime: arrivalAt,
               price: snapshot.price,
+              carrierPhones: snapshot.carrierPhones ?? null,
+              carrierBus: snapshot.carrierBus ?? null,
               transportType: snapshot.transportType ?? adapter.transportType,
               carrierId: carrier.id,
             },
           });
+
+      const returnTrip = carrierReturn
+        ? await tx.trip.create({
+            data: {
+              fromCity: carrierReturn.from,
+              toCity: carrierReturn.to,
+              departureTime: new Date(carrierReturn.departureAt ?? combineDateTime(carrierReturn.date, carrierReturn.departure)),
+              arrivalTime: new Date(carrierReturn.arrivalAt ?? combineDateTime(carrierReturn.date, carrierReturn.arrival)),
+              price: carrierReturn.price,
+              carrierPhones: carrierReturn.carrierPhones ?? null,
+              carrierBus: carrierReturn.carrierBus ?? null,
+              transportType: carrierReturn.transportType ?? adapter.transportType,
+              carrierId: carrier.id,
+            },
+          })
+        : null;
 
       const groupRef = groupSize > 1 ? await uniqueReference(tx) : null;
       const items: Array<{
@@ -528,11 +606,14 @@ export async function POST(req: NextRequest) {
           seatMult !== 1
             ? Math.round(legsPrice * seatMult * 100) / 100
             : legsPrice;
-        const pricing = computePrice(
-          paxLegsPrice,
-          p.ageCategory as AgeCategoryId,
-          validatedPromos[i]
-        );
+        const carrierTicket = adapterResult.tickets?.[i];
+        const pricing = carrierTicket
+          ? { basePrice: carrierTicket.priceBeforeDiscount, finalPrice: carrierTicket.price }
+          : computePrice(
+              paxLegsPrice,
+              p.ageCategory as AgeCategoryId,
+              validatedPromos[i]
+            );
         const fullPrice = pricing.finalPrice;
         const farePrice =
           paymentMethod === "ONLINE"
@@ -543,15 +624,18 @@ export async function POST(req: NextRequest) {
         const serviceFee = siteSettings.serviceFeePerPassenger;
         const finalPrice = Math.round((farePrice + serviceFee) * 100) / 100;
 
-        const outboundSeat = await assertSeatAvailable(
-          tx,
-          trip.id,
-          p.seatNumber,
-          undefined,
-          holdSessionId,
-          segment
-        );
-        let returnSeat: number | null = null;
+        // Grandes Tour keeps the seat inventory: the seat was taken there.
+        const outboundSeat = isGt
+          ? (p.seatNumber ?? null)
+          : await assertSeatAvailable(
+              tx,
+              trip.id,
+              p.seatNumber,
+              undefined,
+              holdSessionId,
+              segment
+            );
+        let returnSeat: number | null = isGt && carrierReturn ? (p.returnSeatNumber ?? null) : null;
         if (tripKind === "ROUND_TRIP" && returnStoredTrip) {
           returnSeat = await assertSeatAvailable(
             tx,
@@ -593,12 +677,13 @@ export async function POST(req: NextRequest) {
             // Sales-agent reward % frozen at booking (see agent reconciliation).
             agentRewardPercent: account.agentRewardPercent ?? null,
             seatNumber: outboundSeat,
+            carrierRef: carrierTicket?.ref ?? null,
             fromStopIndex: segmentCities ? segment.fromIndex : null,
             toStopIndex: segmentCities ? segment.toIndex : null,
             fromCity: segmentCities?.fromCity ?? null,
             toCity: segmentCities?.toCity ?? null,
             tripKind: ticketKind,
-            returnTripId: returnStoredTrip?.id ?? null,
+            returnTripId: returnStoredTrip?.id ?? returnTrip?.id ?? null,
             returnSeatNumber: returnSeat,
           },
         });
@@ -698,7 +783,9 @@ export async function POST(req: NextRequest) {
             lang,
             phone,
             email: accountEmail,
-            promoCode: validatedPromos[i]?.code ?? null,
+            promoCode:
+              validatedPromos[i]?.code ??
+              (carrierTicket ? (passengers[i].promoCode ?? null) : null),
             finalPrice,
             ticketId: ticket.id,
           },
@@ -938,6 +1025,11 @@ export async function POST(req: NextRequest) {
       { status: 201 }
     );
   } catch (err) {
+    // Our booking was not saved: release the tickets the carrier already holds.
+    const carrierRefs = adapterResult.tickets?.map((t) => t.ref) ?? [];
+    if (carrierRefs.length && adapter.cancel) {
+      await adapter.cancel(carrierRefs).catch(() => undefined);
+    }
     if (
       err instanceof SeatTakenError ||
       err instanceof SeatHeldError ||

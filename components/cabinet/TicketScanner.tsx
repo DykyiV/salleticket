@@ -25,9 +25,13 @@ export default function TicketScanner() {
           { facingMode: "environment" },
           { fps: 10, qrbox: { width: 220, height: 220 } },
           (decoded) => {
-            const match = /AB-\d{5}/.exec(decoded) ?? /AB-[A-Z0-9]+/i.exec(decoded);
+            const match =
+              /(?:KR|AB)-\d{5}/.exec(decoded) ??
+              /(?:KR|AB)-[A-Z0-9]+/i.exec(decoded) ??
+              // Grandes Tour tickets carry the carrier's ticket number only.
+              /^\s*(\d{5,10})\s*$/.exec(decoded);
             if (!match) return;
-            const reference = match[0].toUpperCase();
+            const reference = (match[1] ?? match[0]).toUpperCase();
             setLast(reference);
             void instance?.stop().catch(() => {});
             router.push(`/check/${reference}`);
@@ -68,7 +72,7 @@ export default function TicketScanner() {
         <input
           value={manual}
           onChange={(e) => setManual(e.target.value)}
-          placeholder="AB-12345"
+          placeholder="KR-12345"
           className="h-11 flex-1 rounded-xl border border-slate-300 px-3 font-mono text-sm uppercase tracking-widest"
         />
         <button

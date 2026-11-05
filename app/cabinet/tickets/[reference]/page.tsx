@@ -14,6 +14,9 @@ import { hasRoleAtLeast } from "@/lib/auth/constants";
 import { ticketRights } from "@/lib/auth/access";
 import { prisma } from "@/lib/db";
 import { reconcileTicketPayment } from "@/lib/payments";
+import { syncCarrierCancellations } from "@/lib/tickets/carrierStatus";
+import { gtChangeBlocked } from "@/lib/tickets/gtChange";
+import { canChangeTrips, tripChangeRefusal } from "@/lib/tickets/changeRules";
 import { getSiteSettings } from "@/lib/settings";
 import { onlinePaymentsEnabled } from "@/lib/paymentMode";
 import { qrCodeDataUrl } from "@/lib/tickets/qrcode";
@@ -53,6 +56,7 @@ export default async function CabinetTicketEditPage(props: {
 
   // Settle / expire a pending online payment before showing the ticket.
   await reconcileTicketPayment(booking.ticketId);
+  await syncCarrierCancellations([booking.ticketId]);
 
   const full = await prisma.booking.findUnique({
     where: { id: booking.id },
@@ -112,7 +116,10 @@ export default async function CabinetTicketEditPage(props: {
   const h = await headers();
   const host = h.get("x-forwarded-host") ?? h.get("host");
   const proto = h.get("x-forwarded-proto") ?? "http";
-  const qrCode = await qrCodeDataUrl(`${proto}://${host}/check/${full.reference}`);
+  // Grandes Tour tickets: the same QR as the carrier's (their ticket number).
+  const qrCode = await qrCodeDataUrl(
+    full.ticket.carrierRef?.split(":").pop() || `${proto}://${host}/check/${full.reference}`
+  );
 
   const trip = ticket.trip;
   const returnTrip = ticket.returnTrip;
@@ -251,6 +258,18 @@ export default async function CabinetTicketEditPage(props: {
               <TicketItineraryEditor
                 ticketId={ticket.id}
                 tripKind={ticket.tripKind}
+                carrier={ticket.carrierRef?.startsWith("GT:") ? "grandes-tour" : null}
+                requestOnly={!canChangeTrips(user.role)}
+                departureTime={trip ? trip.departureTime.toISOString() : null}
+                returnDepartureTime={returnTrip ? returnTrip.departureTime.toISOString() : null}
+                changeBlocked={
+                  tripChangeRefusal(user.role, trip?.departureTime) ??
+                  (ticket.carrierRef?.startsWith("GT:") ? gtChangeBlocked(ticket) : null)
+                }
+                returnChangeBlocked={
+                  tripChangeRefusal(user.role, returnTrip?.departureTime) ??
+                  (ticket.carrierRef?.startsWith("GT:") ? gtChangeBlocked(ticket) : null)
+                }
                 outbound={{
                   tripId: trip?.id ?? null,
                   fromCity: trip?.fromCity ?? "",

@@ -11,7 +11,7 @@ import { prisma } from "@/lib/db";
 import type { Lang } from "@/lib/i18n/config";
 import type { Dict } from "@/lib/i18n/dict";
 import { getDict } from "@/lib/i18n/server";
-import { longDate, money, plural } from "@/lib/i18n/format";
+import { localeOf, longDate, money, plural } from "@/lib/i18n/format";
 import { ETICKET_INCLUDE, siteOrigin, toETicket, type ETicket, type ETicketState } from "@/lib/tickets/eTicket";
 import { cityLabel } from "@/lib/trips/cities";
 
@@ -19,7 +19,7 @@ export const dynamic = "force-dynamic";
 
 export async function generateMetadata(): Promise<Metadata> {
   const { t } = await getDict();
-  return { title: `${t.ticket.listTitle} — Asol BUS`, robots: { index: false } };
+  return { title: `${t.ticket.listTitle} — Kaufmann Reisen`, robots: { index: false } };
 }
 
 type Order = { key: string; tickets: ETicket[]; departAt: string | null; state: ETicketState; total: number };
@@ -137,7 +137,7 @@ function OrderList({ title, orders, t, lang, muted }: { title: string; orders: O
                       <>
                         <span className="block text-xl font-bold leading-none">{Number(j.departAt.slice(8, 10))}</span>
                         <span className="mt-1 block text-[11px] font-semibold uppercase">
-                          {new Intl.DateTimeFormat(lang === "uk" ? "uk-UA" : lang === "es" ? "es-ES" : "en-GB", { month: "short", timeZone: "UTC" }).format(new Date(`${j.departAt.slice(0, 10)}T12:00:00Z`))}
+                          {new Intl.DateTimeFormat(localeOf(lang), { month: "short", timeZone: "UTC" }).format(new Date(`${j.departAt.slice(0, 10)}T12:00:00Z`))}
                         </span>
                       </>
                     ) : (

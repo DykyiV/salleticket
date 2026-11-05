@@ -6,7 +6,7 @@ export const dynamic = "force-dynamic";
 
 export async function generateMetadata(): Promise<Metadata> {
   const { t } = await getDict();
-  return { title: `${t.pages.rulesTitle} — Asol BUS`, description: t.pages.rulesIntro };
+  return { title: `${t.pages.rulesTitle} — Kaufmann Reisen`, description: t.pages.rulesIntro };
 }
 
 export default async function RulesPage() {

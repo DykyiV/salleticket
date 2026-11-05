@@ -1,6 +1,7 @@
 import type { Prisma, PrismaClient, Ticket, TicketStatus, Booking } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { updateTicketVersioned } from "@/lib/tickets/version";
+import { scheduleCarrierCancel } from "@/lib/tickets/carrierSync";
 import {
   recordTicketHistory,
   diffChanges,
@@ -25,6 +26,8 @@ export type UpdateTicketStatusOptions = {
    * null (paid to the driver / carrier on the bus).
    */
   cashCollector?: { id: string | null; label: string };
+  /** The carrier already cancelled the ticket on its side: don't send the cancel back. */
+  carrierCancelled?: boolean;
 };
 
 export type UpdateTicketStatusResult = {
@@ -123,6 +126,10 @@ export async function updateTicketStatus(
       changedBy: userId,
       request: options.request,
     });
+
+    if (changed && newStatus === "CANCELLED" && !options.carrierCancelled) {
+      scheduleCarrierCancel(ticketId, ticket.carrierRef);
+    }
 
     return { ticket: updated, oldStatus, newStatus, changed };
   };

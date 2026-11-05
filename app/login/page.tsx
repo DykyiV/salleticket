@@ -6,7 +6,7 @@ export const dynamic = "force-dynamic";
 
 export async function generateMetadata(): Promise<Metadata> {
   const { t } = await getDict();
-  return { title: `${t.auth.metaLogin} — Asol BUS`, robots: { index: false } };
+  return { title: `${t.auth.metaLogin} — Kaufmann Reisen`, robots: { index: false } };
 }
 
 export default async function LoginPage(props: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {

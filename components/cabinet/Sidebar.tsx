@@ -50,12 +50,8 @@ export default function Sidebar({ user, mobileOpen, onClose }: Props) {
           className="flex items-center gap-2 border-b border-slate-100 px-5 py-4"
           onClick={onClose}
         >
-          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-600 text-sm font-bold text-white">
-            A
-          </span>
-          <span className="text-lg font-semibold tracking-tight text-slate-900">
-            Asol<span className="text-brand-600"> BUS</span>
-          </span>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/logo.svg" alt="Kaufmann Reisen" width={130} height={40} className="h-10 w-auto" />
         </Link>
 
         <div className="flex items-center gap-3 px-5 py-4">

@@ -65,7 +65,7 @@ export function ticketMailContent(
       `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 12px;border:1px solid #e2e8f0;border-radius:12px"><tr><td style="padding:16px">` +
         `<table role="presentation" width="100%" cellpadding="0" cellspacing="0">` +
         `<tr><td style="font-size:15px;font-weight:700;color:#0B1F3A">${escapeHtml(`${e.firstName} ${e.lastName}`)}</td>` +
-        `<td align="right" style="font-family:monospace;font-size:14px;font-weight:700;color:#2563EB">${escapeHtml(e.reference)}</td></tr>` +
+        `<td align="right" style="font-family:monospace;font-size:14px;font-weight:700;color:#0F766E">${escapeHtml(e.reference)}</td></tr>` +
         `</table><table role="presentation" width="100%" cellpadding="0" cellspacing="0">${rows.join("")}` +
         `<tr><td style="padding:10px 0 0;font-size:14px;font-weight:700;color:${e.state === "paid" ? "#15803d" : e.state === "due" ? "#b45309" : "#1F2937"}">${escapeHtml(pay)}</td></tr>` +
         `</table></td></tr></table>`
@@ -78,13 +78,13 @@ export function ticketMailContent(
     `<!doctype html><html lang="${lang}"><body style="margin:0;background:#F8FAFC;font-family:Arial,Helvetica,sans-serif;color:#1F2937">` +
     `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#F8FAFC"><tr><td align="center" style="padding:24px 12px">` +
     `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#ffffff;border-radius:16px;overflow:hidden">` +
-    `<tr><td style="background:#0B1F3A;padding:20px 24px;font-size:20px;font-weight:700;color:#ffffff">Asol <span style="color:#93c5fd">BUS</span></td></tr>` +
+    `<tr><td style="background:#142C2A;padding:20px 24px;font-size:20px;font-weight:700;color:#ffffff">Kaufmann <span style="color:#5EEAD4">Reisen</span></td></tr>` +
     `<tr><td style="padding:24px">` +
     `<p style="margin:0 0 8px;font-size:18px;font-weight:700;color:#0B1F3A">${escapeHtml(fmt(tt.mail.greeting, { name }))}</p>` +
     `<p style="margin:0 0 20px;font-size:15px;line-height:1.5">${escapeHtml(tt.mail.intro)}</p>` +
     cards.join("") +
     `<p style="margin:16px 0;padding:12px 14px;background:#FEF3C7;border-left:4px solid #F59E0B;border-radius:8px;font-size:14px;font-weight:700;line-height:1.45">${escapeHtml(tt.arrive)}</p>` +
-    `<p style="margin:20px 0"><a href="${escapeHtml(link)}" style="display:inline-block;background:#2563EB;color:#ffffff;text-decoration:none;font-weight:700;padding:12px 20px;border-radius:12px">${escapeHtml(tt.mail.open)}</a></p>` +
+    `<p style="margin:20px 0"><a href="${escapeHtml(link)}" style="display:inline-block;background:#0F766E;color:#ffffff;text-decoration:none;font-weight:700;padding:12px 20px;border-radius:12px">${escapeHtml(tt.mail.open)}</a></p>` +
     (phone ? `<p style="margin:0;font-size:13px;color:#64748b">${escapeHtml(fmt(tt.mail.help, { phone }))}</p>` : "") +
     `</td></tr></table></td></tr></table></body></html>`;
 
@@ -112,7 +112,7 @@ export async function sendTicketsEmail(
   const result = await sendMail({
     to,
     ...content,
-    attachments: [{ filename: `asolbus-${active[0].reference}.pdf`, content: pdf }],
+    attachments: [{ filename: `kaufmann-reisen-${active[0].reference}.pdf`, content: pdf }],
   });
 
   for (const b of active) {

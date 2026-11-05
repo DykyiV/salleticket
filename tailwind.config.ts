@@ -1,9 +1,9 @@
 import type { Config } from "tailwindcss";
 
 /**
- * Design tokens (brief «Asol BUS»):
- *   navy   #0B1F3A — primary dark (header text, hero, footer)
- *   brand  #2563EB — accent: buttons, links, focus (Tailwind blue scale)
+ * Design tokens (Kaufmann Reisen):
+ *   navy   #142C2A — primary dark (header text, hero, footer)
+ *   brand  #0F766E — accent: buttons, links, focus (teal scale)
  *   ok     #16A34A — confirmations, free seats
  *   warn   #F59E0B — warnings, unpaid
  *   bg     #F8FAFC, text #1F2937 (ink)
@@ -17,24 +17,24 @@ const config: Config = {
     extend: {
       colors: {
         brand: {
-          50: "#eff6ff",
-          100: "#dbeafe",
-          200: "#bfdbfe",
-          300: "#93c5fd",
-          400: "#60a5fa",
-          500: "#3b82f6",
-          600: "#2563eb",
-          700: "#1d4ed8",
-          800: "#1e40af",
-          900: "#1e3a8a",
+          50: "#f0fdfa",
+          100: "#ccfbf1",
+          200: "#99f6e4",
+          300: "#5eead4",
+          400: "#2dd4bf",
+          500: "#14b8a6",
+          600: "#0d9488",
+          700: "#0f766e",
+          800: "#115e59",
+          900: "#134e4a",
         },
         navy: {
-          DEFAULT: "#0B1F3A",
-          950: "#06132a",
-          900: "#0B1F3A",
-          800: "#132c4f",
-          700: "#1c3a63",
-          600: "#2a4c7a",
+          DEFAULT: "#142C2A",
+          950: "#0a1a19",
+          900: "#142C2A",
+          800: "#1e3d3b",
+          700: "#2a514e",
+          600: "#3a6360",
         },
         ok: { DEFAULT: "#16A34A", 50: "#f0fdf4", 100: "#dcfce7", 600: "#16A34A", 700: "#15803d" },
         warn: { DEFAULT: "#F59E0B", 50: "#fffbeb", 100: "#fef3c7", 500: "#F59E0B", 700: "#b45309" },

@@ -54,11 +54,11 @@ describe("uniqueReference", () => {
   beforeEach(clean);
 
   it("never returns a reference that is already taken", async () => {
-    await makeBooking("AB-00042");
+    await makeBooking("KR-00042");
     for (let i = 0; i < 10; i += 1) {
       const ref = await uniqueReference(prisma);
-      expect(ref).toMatch(/^AB-\d{5}$/);
-      expect(ref).not.toBe("AB-00042");
+      expect(ref).toMatch(/^KR-\d{5}$/);
+      expect(ref).not.toBe("KR-00042");
     }
   });
 

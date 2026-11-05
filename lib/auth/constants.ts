@@ -1,6 +1,6 @@
 import type { Role } from "@prisma/client";
 
-export const SESSION_COOKIE = "asol_session";
+export const SESSION_COOKIE = "kaufmann_session";
 export const SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 7;
 
 /**

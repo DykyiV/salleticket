@@ -13,7 +13,7 @@ import type {
  */
 export class MockTrainAdapter implements CarrierAdapter {
   readonly id = "mock-rail";
-  readonly name = "Asol Mock Rail";
+  readonly name = "Kaufmann Mock Rail";
   readonly transportType = "TRAIN" as const;
 
   async search(query: SearchQuery): Promise<Trip[]> {

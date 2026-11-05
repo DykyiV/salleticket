@@ -62,7 +62,9 @@ export default function ResultsView(props: Props) {
 
   const seatHref = (trip: Trip) => {
     const q = new URLSearchParams({ carrierId: trip.carrierId, tripId: trip.id, from: props.from, to: props.to, tripKind: props.tripKind });
-    if (props.date) q.set("date", props.date);
+    // The trip's own day (a search without a date lists a whole month).
+    const day = props.date ?? trip.departureAt?.slice(0, 10);
+    if (day) q.set("date", day);
     if (trip.fromStopIndex != null) q.set("fi", String(trip.fromStopIndex));
     if (trip.toStopIndex != null) q.set("ti", String(trip.toStopIndex));
     if (props.returnDate) q.set("returnDate", props.returnDate);

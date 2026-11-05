@@ -1,4 +1,6 @@
 import { asolCarrierAdapter } from "@/lib/carriers/asol";
+import { grandesTourCarrierAdapter } from "@/lib/carriers/grandes-tour";
+import { grandesTourEnabled } from "@/lib/carriers/grandes-tour/client";
 import { mockCarrierAdapter } from "@/lib/carriers/mock";
 import { mockFlightAdapter } from "@/lib/carriers/mock-flights";
 import { mockTrainAdapter } from "@/lib/carriers/mock-trains";
@@ -40,7 +42,9 @@ export function demoCarriersEnabled(env: NodeJS.ProcessEnv = process.env): boole
 }
 
 function enabled(): CarrierAdapter[] {
-  return demoCarriersEnabled() ? ALL : ALL.filter((c) => !DEMO_IDS.has(c.id));
+  const list = demoCarriersEnabled() ? ALL : ALL.filter((c) => !DEMO_IDS.has(c.id));
+  // Grandes Tour is live only when its API key is configured.
+  return grandesTourEnabled() ? [...list, grandesTourCarrierAdapter] : list;
 }
 
 export function listCarriers(): CarrierAdapter[] {

@@ -9,12 +9,8 @@ import { siteNav } from "@/components/site/nav";
 export function Logo() {
   return (
     <Link href="/" className="flex shrink-0 items-center gap-2 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500">
-      <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-navy text-white">
-        <Icon name="bus" className="h-5 w-5" />
-      </span>
-      <span className="text-lg font-bold tracking-tight text-navy">
-        Asol<span className="text-brand-600"> BUS</span>
-      </span>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src="/logo.svg" alt="Kaufmann Reisen" width={130} height={40} className="h-10 w-auto" />
     </Link>
   );
 }

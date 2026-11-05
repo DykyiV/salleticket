@@ -8,6 +8,7 @@ import { hasRoleAtLeast } from "@/lib/auth/constants";
 import { isTicketStaff, ticketListWhere } from "@/lib/auth/access";
 import { prisma } from "@/lib/db";
 import { reconcileDuePayments } from "@/lib/payments";
+import { syncCarrierCancellations } from "@/lib/tickets/carrierStatus";
 import { closeNoShowReservations } from "@/lib/tickets/cashLimits";
 import {
   bookedByLabel,
@@ -39,6 +40,7 @@ export default async function CabinetTicketsPage(
   const admin = user ? hasRoleAtLeast(user.role, "ADMIN") : false;
   await reconcileDuePayments();
   await closeNoShowReservations();
+  await syncCarrierCancellations();
   const q = (searchParams.q ?? "").trim();
   const statusFilter =
     searchParams.status && STATUSES.includes(searchParams.status as TicketStatus)
@@ -149,6 +151,8 @@ export default async function CabinetTicketsPage(
                     <span className="sr-only">Вибір</span>
                   </th>
                 ) : null}
+                <th className="whitespace-nowrap px-4 py-2.5">№</th>
+                <th className="whitespace-nowrap px-4 py-2.5">Створено</th>
                 <th className="whitespace-nowrap px-4 py-2.5">ПІБ</th>
                 <th className="whitespace-nowrap px-4 py-2.5">Звідки — куди</th>
                 <th className="whitespace-nowrap px-4 py-2.5">Місце</th>
@@ -160,7 +164,7 @@ export default async function CabinetTicketsPage(
               </tr>
             </thead>
             <tbody>
-              {bookings.map((booking) => {
+              {bookings.map((booking, i) => {
                 const trip = booking.ticket.trip;
                 const status = booking.ticket.status;
                 const price = booking.finalPrice;
@@ -181,6 +185,10 @@ export default async function CabinetTicketsPage(
                         />
                       </td>
                     ) : null}
+                    <td className="whitespace-nowrap px-4 py-2.5 tabular-nums text-slate-500">{i + 1}</td>
+                    <td className="whitespace-nowrap px-4 py-2.5 tabular-nums text-slate-600">
+                      {createdAtLabel(booking.createdAt)}
+                    </td>
                     <td className="whitespace-nowrap px-4 py-2.5">
                       <Link
                         href={`/cabinet/tickets/${booking.reference}`}
@@ -238,4 +246,16 @@ export default async function CabinetTicketsPage(
       )}
     </div>
   );
+}
+
+/** When the booking was made: «05.11.2026, 13:47» (Kyiv time, as elsewhere in the cabinet). */
+function createdAtLabel(d: Date): string {
+  return d.toLocaleString("uk-UA", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "Europe/Kyiv",
+  });
 }
