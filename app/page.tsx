@@ -9,7 +9,7 @@ import { fmt, money, plural } from "@/lib/i18n/format";
 import type { Lang } from "@/lib/i18n/config";
 import type { Dict } from "@/lib/i18n/dict";
 import { cityLabel } from "@/lib/trips/cities";
-import { QUICK_ROUTES, getPopularRouteStats, type RouteStats } from "@/lib/site/popularRoutes";
+import { QUICK_COUNT, getPopularRouteStats, type RouteStats } from "@/lib/site/popularRoutes";
 import { REVIEWS } from "@/lib/site/reviews";
 
 export const dynamic = "force-dynamic";
@@ -31,7 +31,7 @@ export default async function Home() {
     <div className="flex min-h-screen flex-col">
       <Header />
       <main className="flex-1">
-        <Hero t={t} />
+        <Hero t={t} quickRoutes={stats.slice(0, QUICK_COUNT).map(({ from, to }) => ({ from, to }))} />
         <Benefits t={t} />
         <PopularRoutes t={t} lang={lang} stats={stats} />
         <HowItWorks t={t} />
@@ -55,7 +55,7 @@ function SectionTitle({ title, subtitle, id }: { title: string; subtitle?: strin
   );
 }
 
-function Hero({ t }: { t: Dict }) {
+function Hero({ t, quickRoutes }: { t: Dict; quickRoutes: { from: string; to: string }[] }) {
   return (
     <section id="search" aria-labelledby="hero-title" className="relative isolate z-10 bg-navy">
       <div className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(60rem_30rem_at_85%_-10%,rgba(37,99,235,0.45),transparent),radial-gradient(40rem_24rem_at_0%_110%,rgba(37,99,235,0.25),transparent)]" />
@@ -83,7 +83,7 @@ function Hero({ t }: { t: Dict }) {
             />
           </div>
           <div className="order-2 lg:order-3 lg:col-span-2">
-            <SearchPanel quickRoutes={QUICK_ROUTES} today={todayInEurope()} />
+            <SearchPanel quickRoutes={quickRoutes} today={todayInEurope()} />
           </div>
         </div>
       </div>

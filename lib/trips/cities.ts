@@ -66,7 +66,8 @@ export function normCity(name: string): string {
     .toLowerCase();
 }
 
-type CityEntry = { uk: string; labels: { en: string; es: string; de: string }; names: string[] };
+/** `served` — on a current Grandes Tour route (only these are suggested). */
+type CityEntry = { uk: string; labels: { en: string; es: string; de: string }; names: string[]; served: boolean };
 
 /**
  * Every city we know (our list + the Grandes Tour directory), with all its
@@ -85,17 +86,18 @@ const { ENTRIES, BY_NAME } = (() => {
   };
   for (const group of CITY_GROUPS) {
     const uk = group[0];
-    const entry: CityEntry = { uk, labels: CITY_LABEL[uk] ?? { en: uk, es: uk, de: uk }, names: [] };
+    const entry: CityEntry = { uk, labels: CITY_LABEL[uk] ?? { en: uk, es: uk, de: uk }, names: [], served: false };
     entries.push(entry);
     add(entry, group);
   }
-  for (const [, uk, en, es, de, pl] of GT_CITIES) {
+  for (const [, uk, en, es, de, pl, served] of GT_CITIES) {
     const names = [uk, en, es, de, pl];
     let entry = names.map((n) => byName.get(normCity(n))).find(Boolean);
     if (!entry) {
-      entry = { uk, labels: { en: en || uk, es: es || uk, de: de || uk }, names: [] };
+      entry = { uk, labels: { en: en || uk, es: es || uk, de: de || uk }, names: [], served: false };
       entries.push(entry);
     }
+    if (served) entry.served = true;
     add(entry, names);
   }
   return { ENTRIES: entries, BY_NAME: byName };
@@ -125,6 +127,7 @@ export function citySuggestions(query: string, lang: "uk" | "de" | "es" | "en", 
   if (!q) return [];
   const hits: { entry: CityEntry; rank: number; matched: string }[] = [];
   for (const entry of ENTRIES) {
+    if (!entry.served) continue;
     let rank = -1;
     let matched = "";
     for (const n of entry.names) {

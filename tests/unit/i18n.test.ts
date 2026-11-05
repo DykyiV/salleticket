@@ -86,4 +86,11 @@ describe("cities in any language", () => {
     expect(citySuggestions("Мюн", "en")).toContainEqual({ uk: "Мюнхен", label: "Munich", alt: "Мюнхен" });
     expect(citySuggestions("", "uk")).toEqual([]);
   });
+
+  it("suggests only cities on current routes, but still understands the rest", () => {
+    expect(citySuggestions("Мадр", "uk").map((s) => s.uk)).toContain("Мадрид");
+    expect(citySuggestions("Варш", "uk")).toEqual([]);
+    expect(citySuggestions("Rom", "en").map((s) => s.uk)).not.toContain("Рим");
+    expect(cityNames("Warsaw")[0]).toBe("Варшава");
+  });
 });

@@ -1,20 +1,29 @@
 import { unstable_cache } from "next/cache";
 import { prisma } from "@/lib/db";
+import { gtLowestPrices } from "@/lib/carriers/grandes-tour";
+import { grandesTourEnabled } from "@/lib/carriers/grandes-tour/client";
 import { priceForTrip } from "@/lib/pricing/grid";
 import { findSegmentTrips } from "@/lib/trips/segments";
 
-/** Routes shown in «Популярні напрямки» and as quick picks under the search. */
+/**
+ * Candidates for «Популярні напрямки» and the quick picks under the search
+ * (Grandes Tour main lines). Only those with departures in the next month are
+ * shown, so a route that does not run never appears.
+ */
 export const POPULAR_ROUTES: { from: string; to: string }[] = [
-  { from: "Барселона", to: "Київ" },
-  { from: "Барселона", to: "Львів" },
-  { from: "Валенсія", to: "Київ" },
-  { from: "Мадрид", to: "Варшава" },
+  { from: "Київ", to: "Мадрид" },
+  { from: "Львів", to: "Мадрид" },
+  { from: "Київ", to: "Барселона" },
+  { from: "Львів", to: "Берлін" },
   { from: "Київ", to: "Берлін" },
-  { from: "Київ", to: "Марбелья" },
+  { from: "Дніпро", to: "Мадрид" },
+  { from: "Київ", to: "Валенсія" },
+  { from: "Мадрид", to: "Київ" },
 ];
 
+const SHOWN = 6;
 /** How many of them appear as chips under the search form (from the brief). */
-export const QUICK_ROUTES = POPULAR_ROUTES.slice(0, 4);
+export const QUICK_COUNT = 4;
 
 export type RouteStats = {
   from: string;
@@ -41,7 +50,7 @@ async function computeStats(from: string, to: string): Promise<RouteStats> {
     await findSegmentTrips({ fromCity: from, toCity: to, date: isoDay(start), until: isoDay(end) })
   ).filter((o) => new Date(o.departureTime) > start);
 
-  if (options.length === 0) return { from, to, priceFrom: null, hours: null, perWeek: 0 };
+  if (options.length === 0) return gtStats(from, to, start);
 
   const sample = options.slice(0, PRICED_SAMPLE);
   const prices = await Promise.all(
@@ -67,14 +76,31 @@ async function computeStats(from: string, to: string): Promise<RouteStats> {
   };
 }
 
-/** Live «від» price, duration and frequency per popular route (cached 15 min). */
+/** Grandes Tour: lowest fare and departure days over the next month. */
+async function gtStats(from: string, to: string, start: Date): Promise<RouteStats> {
+  const days = grandesTourEnabled() ? Object.values(await gtLowestPrices(from, to, isoDay(start))) : [];
+  return {
+    from,
+    to,
+    priceFrom: days.length ? Math.min(...days) : null,
+    hours: null,
+    perWeek: Math.round((days.length / 31) * 7),
+  };
+}
+
+/**
+ * Live «від» price, duration and frequency of the popular routes that run
+ * (cached 15 min).
+ */
 export const getPopularRouteStats = unstable_cache(
-  async (): Promise<RouteStats[]> =>
-    Promise.all(
+  async (): Promise<RouteStats[]> => {
+    const stats = await Promise.all(
       POPULAR_ROUTES.map((r) =>
         computeStats(r.from, r.to).catch(() => ({ from: r.from, to: r.to, priceFrom: null, hours: null, perWeek: 0 }))
       )
-    ),
-  ["popular-route-stats-v1"],
+    );
+    return stats.filter((s) => s.priceFrom != null || s.perWeek > 0).slice(0, SHOWN);
+  },
+  ["popular-route-stats-v2"],
   { revalidate: 900 }
 );
