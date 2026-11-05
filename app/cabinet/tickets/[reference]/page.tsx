@@ -16,7 +16,7 @@ import { prisma } from "@/lib/db";
 import { reconcileTicketPayment } from "@/lib/payments";
 import { syncCarrierCancellations } from "@/lib/tickets/carrierStatus";
 import { gtChangeBlocked } from "@/lib/tickets/gtChange";
-import { tripChangeRefusal } from "@/lib/tickets/changeRules";
+import { canChangeTrips, tripChangeRefusal } from "@/lib/tickets/changeRules";
 import { getSiteSettings } from "@/lib/settings";
 import { onlinePaymentsEnabled } from "@/lib/paymentMode";
 import { qrCodeDataUrl } from "@/lib/tickets/qrcode";
@@ -259,14 +259,16 @@ export default async function CabinetTicketEditPage(props: {
                 ticketId={ticket.id}
                 tripKind={ticket.tripKind}
                 carrier={ticket.carrierRef?.startsWith("GT:") ? "grandes-tour" : null}
+                requestOnly={!canChangeTrips(user.role)}
                 departureTime={trip ? trip.departureTime.toISOString() : null}
+                returnDepartureTime={returnTrip ? returnTrip.departureTime.toISOString() : null}
                 changeBlocked={
                   tripChangeRefusal(user.role, trip?.departureTime) ??
                   (ticket.carrierRef?.startsWith("GT:") ? gtChangeBlocked(ticket) : null)
                 }
                 returnChangeBlocked={
                   tripChangeRefusal(user.role, returnTrip?.departureTime) ??
-                  (ticket.carrierRef ? "Зворотну поїздку квитка Grandes Tour поки що змінюють у Grandes Tour вручну" : null)
+                  (ticket.carrierRef?.startsWith("GT:") ? gtChangeBlocked(ticket) : null)
                 }
                 outbound={{
                   tripId: trip?.id ?? null,

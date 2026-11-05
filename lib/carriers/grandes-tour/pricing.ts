@@ -182,20 +182,46 @@ export async function gtOrderTicketStatuses(orderId: number): Promise<Map<number
   return new Map((res.tickets ?? []).map((t) => [t.id, t.status]));
 }
 
-/** The passenger of a GT ticket as GT holds it: fare type and discount card. */
-export async function gtTicketPassenger(
+/** One direction of a GT ticket: trip key, seat number, date (YYYY-MM-DD), fare type. */
+export type GtTicketLeg = { key: string; seatNumber: number; date: string; typeId: number | null };
+
+type GtSeatRow = {
+  trip_id?: number;
+  city_from_id?: number;
+  city_to_id?: number;
+  place_name?: string;
+  departure_date?: string;
+  passenger_type_id?: number;
+  discount_cart?: string;
+};
+
+function gtLegOf(row: GtSeatRow | undefined): GtTicketLeg | null {
+  if (!row?.trip_id || !row.city_from_id || !row.city_to_id) return null;
+  const [d, m, y] = (row.departure_date ?? "").split(".");
+  return {
+    key: `gt-${row.trip_id}-${row.city_from_id}-${row.city_to_id}`,
+    seatNumber: Number(row.place_name),
+    date: `${y}-${m}-${d}`,
+    typeId: row.passenger_type_id ?? null,
+  };
+}
+
+/** A GT ticket as GT holds it: both directions (trip, seat, date, fare type) and the card. */
+export async function gtTicketDetails(
   orderId: number,
   ticketId: number,
-): Promise<{ passengerTypeId: number | null; discountCard: string | null }> {
+): Promise<{ to: GtTicketLeg; back: GtTicketLeg | null; discountCard: string | null }> {
   const res = await gtCall<{
-    order_details?: {
-      tickets?: { id: number; trip_seats_to?: { passenger_type_id?: number; discount_cart?: string }[] }[];
-    };
+    order_details?: { tickets?: { id: number; trip_seats_to?: GtSeatRow[]; trip_seats_back?: GtSeatRow[] }[] };
   }>("/api/v2/booking/get_order_details", { method: "POST", json: { id: orderId } });
   const t = res.order_details?.tickets?.find((x) => x.id === ticketId);
-  if (!t) throw new Error(`Grandes Tour: квиток ${ticketId} не знайдено в замовленні ${orderId}`);
-  const seat = t.trip_seats_to?.[0];
-  return { passengerTypeId: seat?.passenger_type_id ?? null, discountCard: seat?.discount_cart?.trim() || null };
+  const to = gtLegOf(t?.trip_seats_to?.[0]);
+  if (!t || !to) throw new Error(`Grandes Tour: квиток ${ticketId} не знайдено в замовленні ${orderId}`);
+  return {
+    to,
+    back: gtLegOf(t.trip_seats_back?.[0]),
+    discountCard: t.trip_seats_to?.[0]?.discount_cart?.trim() || null,
+  };
 }
 
 /** A ticket removed on GT's side (their site or office) has the status "canceled". */

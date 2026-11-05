@@ -22,9 +22,9 @@ export async function PATCH(req: NextRequest, props: Params) {
   const guard = await requireAuth();
   if (!guard.ok) return guard.response;
 
-  let body: { tripId?: string; seatNumber?: number | null; date?: string };
+  let body: { tripId?: string; seatNumber?: number | null; date?: string; leg?: string };
   try {
-    body = (await req.json()) as { tripId?: string; seatNumber?: number | null; date?: string };
+    body = (await req.json()) as typeof body;
   } catch {
     return NextResponse.json({ error: "Некоректний JSON" }, { status: 400 });
   }
@@ -34,7 +34,7 @@ export async function PATCH(req: NextRequest, props: Params) {
 
   const ticket = await prisma.ticket.findUnique({
     where: { id: params.id },
-    include: { trip: true },
+    include: { trip: true, returnTrip: true },
   });
   if (!ticket) {
     return NextResponse.json({ error: "Квиток не знайдено" }, { status: 404 });
@@ -44,7 +44,11 @@ export async function PATCH(req: NextRequest, props: Params) {
   if (!rights.isOwner && !rights.canEdit) {
     return NextResponse.json({ error: "Немає доступу" }, { status: 403 });
   }
-  const refusal = tripChangeRefusal(guard.session.role, ticket.trip?.departureTime);
+  const leg = body.leg === "return" ? "return" : "outbound";
+  const refusal = tripChangeRefusal(
+    guard.session.role,
+    (leg === "return" ? ticket.returnTrip : ticket.trip)?.departureTime
+  );
   if (refusal) return NextResponse.json({ error: refusal }, { status: 403 });
 
   // Grandes Tour: a new reservation there, then the old one is cancelled.
@@ -58,6 +62,7 @@ export async function PATCH(req: NextRequest, props: Params) {
     try {
       const result = await changeGtTicketTrip({
         ticketId: ticket.id,
+        leg,
         tripKey: body.tripId,
         date: body.date ?? "",
         seatNumber: body.seatNumber,
@@ -78,6 +83,9 @@ export async function PATCH(req: NextRequest, props: Params) {
     }
   }
 
+  if (leg === "return") {
+    return NextResponse.json({ error: "Зворотний рейс змінюється через /return" }, { status: 400 });
+  }
   const nextTrip = await prisma.trip.findUnique({
     where: { id: body.tripId },
   });

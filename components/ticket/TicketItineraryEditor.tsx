@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import SeatPickerModal from "@/components/ticket/SeatPickerModal";
 import TripChangeModal from "@/components/ticket/TripChangeModal";
+import ChangeRequestModal from "@/components/ticket/ChangeRequestModal";
 import { addUtcDays, formatUkDate, toIsoDate, utcDateOnly } from "@/lib/routes/dates";
 import { TRIP_KIND_LABEL } from "@/lib/tickets/labels";
 
@@ -25,6 +26,8 @@ export default function TicketItineraryEditor({
   departureTime = null,
   changeBlocked = null,
   returnChangeBlocked = null,
+  returnDepartureTime = null,
+  requestOnly = false,
 }: {
   ticketId: string;
   tripKind: string;
@@ -38,23 +41,30 @@ export default function TicketItineraryEditor({
   changeBlocked?: string | null;
   /** The same for the return trip. */
   returnChangeBlocked?: string | null;
+  /** Return departure, ISO (preselected in the change window). */
+  returnDepartureTime?: string | null;
+  /** Passengers (and staff without the right) ask for a change instead of making it. */
+  requestOnly?: boolean;
 }) {
   const router = useRouter();
   const [seatModal, setSeatModal] = useState<"return" | null>(null);
   const [dateModal, setDateModal] = useState<"outbound" | "return" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [requestLeg, setRequestLeg] = useState<"outbound" | "return" | null>(null);
 
   /** Seat or date of the outbound trip: one window with the calendar and the seat map. */
   const openOutbound = () => {
     setNotice(null);
-    if (changeBlocked) setError(changeBlocked);
+    if (requestOnly) setRequestLeg("outbound");
+    else if (changeBlocked) setError(changeBlocked);
     else setDateModal("outbound");
   };
 
   const openReturnLeg = (open: () => void) => {
     setNotice(null);
-    if (returnChangeBlocked) setError(returnChangeBlocked);
+    if (requestOnly) setRequestLeg("return");
+    else if (returnChangeBlocked) setError(returnChangeBlocked);
     else open();
   };
 
@@ -107,13 +117,39 @@ export default function TicketItineraryEditor({
             date={returnLeg.date}
             seatNumber={returnLeg.seatNumber}
             hasAssignedSeats={returnLeg.hasAssignedSeats}
-            onSeat={() => openReturnLeg(() => returnLeg.tripId && setSeatModal("return"))}
+            onSeat={() => openReturnLeg(() => (carrier ? setDateModal("return") : returnLeg.tripId && setSeatModal("return")))}
             onDate={() => openReturnLeg(() => setDateModal("return"))}
           />
         ) : null
       ) : null}
       {error ? <p className="text-sm text-rose-700">{error}</p> : null}
       {notice ? <p className="text-sm text-emerald-700">{notice}</p> : null}
+      {requestOnly ? (
+        <p className="text-xs text-slate-500">
+          Щоб змінити дату чи місце, натисніть на дату — надішлемо запит менеджеру.
+        </p>
+      ) : null}
+      {requestLeg ? (
+        <ChangeRequestModal
+          ticketId={ticketId}
+          initialLeg={requestLeg}
+          onClose={() => setRequestLeg(null)}
+          legs={[
+            { key: "outbound" as const, label: "Туди", fromCity: outbound.fromCity, toCity: outbound.toCity, date: outbound.date },
+            ...(tripKind !== "ONE_WAY"
+              ? [
+                  {
+                    key: "return" as const,
+                    label: "Назад",
+                    fromCity: returnLeg?.fromCity ?? outbound.toCity,
+                    toCity: returnLeg?.toCity ?? outbound.fromCity,
+                    date: returnLeg?.date ?? null,
+                  },
+                ]
+              : []),
+          ]}
+        />
+      ) : null}
 
       {seatModal === "return" && returnLeg?.tripId ? (
         <SeatPickerModal
@@ -156,7 +192,28 @@ export default function TicketItineraryEditor({
           }}
         />
       ) : null}
-      {dateModal === "return" ? (
+      {dateModal === "return" && carrier ? (
+        <TripChangeModal
+          fromCity={returnLeg?.fromCity ?? outbound.toCity}
+          toCity={returnLeg?.toCity ?? outbound.fromCity}
+          initialDate={returnLeg?.date ?? toIsoDate(new Date())}
+          exceptTicketId={ticketId}
+          title="Зворотний рейс: дата і місце"
+          confirmLabel="Зберегти"
+          carrier={carrier}
+          currentDeparture={returnDepartureTime}
+          initialSeat={returnLeg?.seatNumber ?? null}
+          onClose={() => setDateModal(null)}
+          onSave={async (tripId, seatNumber, date) => {
+            const result = await patch(`/api/account/tickets/${ticketId}/trip`, { tripId, seatNumber, date, leg: "return" });
+            setDateModal(null);
+            if (result.price != null && result.oldPrice != null && result.price !== result.oldPrice) {
+              setNotice(`Квиток перенесено. Ціна за новими рейсами: €${result.price.toFixed(2)} (було €${result.oldPrice.toFixed(2)}).`);
+            } else setNotice("Квиток перенесено.");
+          }}
+        />
+      ) : null}
+      {dateModal === "return" && !carrier ? (
         <TripChangeModal
           fromCity={outbound.toCity}
           toCity={outbound.fromCity}
