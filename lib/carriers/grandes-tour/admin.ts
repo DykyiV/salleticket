@@ -1,17 +1,27 @@
 /**
  * Admin helpers for Grandes Tour data: upcoming trips, seat occupancy,
- * buses by carrier, routes with their stops. Used by the admin-only cabinet
- * sections (Виїзди GT, Перевізники, Маршрути GT). Read-only.
+ * buses (with photos), buses by carrier, routes with their stops. Used by the
+ * cabinet sections Виїзди, Перевізники and Маршрути GT. Read-only.
  *
  * GT endpoints (swagger v3): GET /api/v4/booking/trips?from&to (trips with
  * their stops; `from` must be in the future), GET
  * /api/v3/booking/get_bus_map_for_trip_id (needs the boarding / leaving city),
- * GET /api/v3/cache/routes and POST /api/v2/references/route_details.
+ * POST /api/v2/references/buses, GET /api/v3/cache/routes and
+ * POST /api/v2/references/route_details.
  */
 
 import { gtCall } from "@/lib/carriers/grandes-tour/client";
 
 // ─────────────────────────── Types ───────────────────────────
+
+/** A visible stop of a GT trip. */
+export type GtTripStop = {
+  cityId?: number;
+  city: string;
+  date: string; // YYYY-MM-DD
+  time: string; // HH:MM
+  place?: string;
+};
 
 export type GtDepartureItem = {
   id: number;
@@ -30,6 +40,12 @@ export type GtDepartureItem = {
   busId?: number;
   price?: number;
   status?: string;
+  /** "to" / "back" as GT gives it. */
+  direction?: string;
+  routeId?: number;
+  /** Bus and office phones of the route. */
+  phones?: string;
+  stops?: GtTripStop[];
 };
 
 export type GtPlaceItem = {
@@ -42,11 +58,21 @@ export type GtPlaceItem = {
   y?: number;
 };
 
-export type GtOccupancy = {
-  places: GtPlaceItem[];
-  total: number;
-  sold: number;
-  free: number;
+/** Seats of a trip by GT status: free, reserved (unpaid), purchased (paid), closed (hidden). */
+export type GtSeatCounts = { total: number; free: number; reserved: number; purchased: number; closed: number };
+
+export type GtTripSeats = { places: GtPlaceItem[]; counts: GtSeatCounts };
+
+/** A GT bus: plate, make, seats, decks, photo and comfort. */
+export type GtBus = {
+  id: number;
+  number: string;
+  mark: string;
+  seats: number;
+  floors: number;
+  photo: string | null;
+  thumb: string | null;
+  amenities: string[];
 };
 
 export type BusEntry = {
@@ -88,7 +114,10 @@ type RawTripCity = {
   IsHidden?: boolean;
   Date?: string; // dd.mm.yyyy
   Time?: string; // HH:MM:SS
+  PlaceName?: string;
 };
+
+type RawTripRoute = { RouteId?: number; PhonesDay1?: string };
 
 /** One item of GET /api/v4/booking/trips (TripCities and Route come as JSON strings). */
 export type RawGtTrip = {
@@ -101,6 +130,7 @@ export type RawGtTrip = {
   Date?: string;
   Direction?: string;
   TripCities?: string | RawTripCity[];
+  Route?: string | RawTripRoute;
 };
 
 type RawGtRoute = {
@@ -147,7 +177,7 @@ function parseJson<T>(raw: string | T | undefined): T | null {
   }
 }
 
-/** A GT trip as the board shows it: first and last visible stop. */
+/** A GT trip as the board shows it: first and last visible stop, all visible stops, route. */
 export function mapGtTrip(t: RawGtTrip): GtDepartureItem | null {
   const stops = (parseJson<RawTripCity[]>(t.TripCities) ?? [])
     .filter((c) => !c.IsHidden && c.CityName)
@@ -155,6 +185,7 @@ export function mapGtTrip(t: RawGtTrip): GtDepartureItem | null {
   const first = stops[0];
   const last = stops[stops.length - 1];
   if (!first || !last || first === last) return null;
+  const route = parseJson<RawTripRoute>(t.Route);
   return {
     id: t.Id,
     from: first.CityName ?? "",
@@ -169,6 +200,16 @@ export function mapGtTrip(t: RawGtTrip): GtDepartureItem | null {
     busNumber: t.BusNumber ?? "",
     busId: t.BusId,
     status: t.Direction === "back" ? "назад" : t.Direction === "to" ? "туди" : undefined,
+    direction: t.Direction,
+    routeId: route?.RouteId,
+    phones: route?.PhonesDay1?.trim() || undefined,
+    stops: stops.map((c) => ({
+      cityId: c.CityId,
+      city: c.CityName ?? "",
+      date: normaliseDate(c.Date),
+      time: (c.Time ?? "").slice(0, 5),
+      place: c.PlaceName?.trim() || undefined,
+    })),
   };
 }
 
@@ -176,7 +217,12 @@ export function mapGtTrip(t: RawGtTrip): GtDepartureItem | null {
  * GT trips departing between `from` and `to` (YYYY-MM-DD, both included).
  * GT only lists trips from now on, so a past `from` starts from now.
  */
+const TRIPS_TTL_MS = 2 * 60 * 1000;
+const tripsCache = new Map<string, { at: number; trips: GtDepartureItem[] }>();
+
 export async function gtListTrips(from: string, to: string): Promise<GtDepartureItem[]> {
+  const cached = tripsCache.get(`${from}|${to}`);
+  if (cached && Date.now() - cached.at < TRIPS_TTL_MS) return cached.trips;
   const soon = new Date(Date.now() + 60_000);
   const start = new Date(`${from}T00:00:00Z`) > soon ? `${from}T00:00:00` : soon.toISOString().slice(0, 19);
   const end = new Date(`${to}T00:00:00Z`);
@@ -185,11 +231,13 @@ export async function gtListTrips(from: string, to: string): Promise<GtDeparture
     const raw = await gtCall<RawGtTrip[]>("/api/v4/booking/trips", {
       query: { from: start, to: end.toISOString().slice(0, 10) },
     });
-    return (Array.isArray(raw) ? raw : [])
+    const trips = (Array.isArray(raw) ? raw : [])
       .filter((t) => !t.IsHidden && !t.IsDeleted)
       .map(mapGtTrip)
       .filter((t): t is GtDepartureItem => t !== null)
       .sort((a, b) => `${a.departureDate} ${a.departureTime}`.localeCompare(`${b.departureDate} ${b.departureTime}`));
+    tripsCache.set(`${from}|${to}`, { at: Date.now(), trips });
+    return trips;
   } catch {
     return [];
   }
@@ -197,9 +245,26 @@ export async function gtListTrips(from: string, to: string): Promise<GtDeparture
 
 // ─────────────────────────── Bus map / occupancy ───────────────────────────
 
-/** Seat map of a trip between two of its stops (whole trip: first → last) and the counts. */
-export async function gtTripPassengers(tripId: number, cityFromId?: number, cityToId?: number): Promise<GtOccupancy> {
-  if (!cityFromId || !cityToId) return { places: [], total: 0, sold: 0, free: 0 };
+const isSeat = (p: { type: string }) => p.type.startsWith("seat");
+
+/** Seat counts by GT status (any seat type: GT also has turned seats, "seat90" etc.). */
+export function countSeats(places: GtPlaceItem[]): GtSeatCounts {
+  const seats = places.filter(isSeat);
+  const by = (...st: string[]) => seats.filter((p) => st.includes(p.status)).length;
+  const free = by("free");
+  const reserved = by("reserved", "inProgress");
+  const purchased = by("purchased");
+  return { total: seats.length, free, reserved, purchased, closed: seats.length - free - reserved - purchased };
+}
+
+const SEATS_TTL_MS = 2 * 60 * 1000;
+const seatsCache = new Map<string, { at: number; seats: GtTripSeats }>();
+
+/** Seat map of a trip between two of its stops (whole trip: first → last) with the counts; null when GT fails. */
+export async function gtTripSeats(tripId: number, cityFromId: number, cityToId: number): Promise<GtTripSeats | null> {
+  const key = `${tripId}|${cityFromId}|${cityToId}`;
+  const cached = seatsCache.get(key);
+  if (cached && Date.now() - cached.at < SEATS_TTL_MS) return cached.seats;
   try {
     const res = await gtCall<{ busPlaces?: GtPlaceItem[] }>("/api/v3/booking/get_bus_map_for_trip_id", {
       query: { TripId: tripId, CityFromId: cityFromId, CityToId: cityToId },
@@ -213,12 +278,68 @@ export async function gtTripPassengers(tripId: number, cityFromId?: number, city
       x: p.x,
       y: p.y,
     }));
-    const seats = places.filter((p) => p.type === "seat" && p.status !== "hidden");
-    const sold = seats.filter((p) => p.status === "purchased" || p.status === "reserved").length;
-    const free = seats.filter((p) => p.status === "free").length;
-    return { places, total: seats.length, sold, free };
+    const seats = { places, counts: countSeats(places) };
+    seatsCache.set(key, { at: Date.now(), seats });
+    return seats;
   } catch {
-    return { places: [], total: 0, sold: 0, free: 0 };
+    return null;
+  }
+}
+
+// ─────────────────────────── Buses ───────────────────────────
+
+type RawGtBus = {
+  id: number;
+  number?: string;
+  mark?: string;
+  places_count?: number;
+  floors_count?: number;
+  image_url?: string | null;
+  image_thumb_url?: string | null;
+} & Record<string, unknown>;
+
+const AMENITIES: [string, string][] = [
+  ["has_air_condition", "Кондиціонер"],
+  ["has_wifi", "Wi-Fi"],
+  ["has_wc", "WC"],
+  ["has_adjustable_seats", "Регульовані сидіння"],
+  ["has_hot_drinks", "Гарячі напої"],
+  ["has_drinks", "Напої"],
+  ["has_microwave", "Мікрохвильовка"],
+  ["has_tv", "TV"],
+  ["has_places_for_persons_with_disabilities", "Місця для людей з інвалідністю"],
+  ["has_seat_belts", "Ремені безпеки"],
+];
+
+export function mapGtBus(b: RawGtBus): GtBus {
+  return {
+    id: b.id,
+    number: b.number?.trim() ?? "",
+    mark: b.mark?.trim() ?? "",
+    seats: b.places_count ?? 0,
+    floors: b.floors_count ?? 1,
+    photo: b.image_url || null,
+    thumb: b.image_thumb_url || null,
+    amenities: AMENITIES.filter(([k]) => b[k] === true).map(([, label]) => label),
+  };
+}
+
+const BUSES_TTL_MS = 60 * 60 * 1000;
+let busesCache: { at: number; buses: Map<number, GtBus> } | null = null;
+
+/** GT buses by id, with their photos (cached 1 h; the photo links stay valid for a year). */
+export async function gtBuses(): Promise<Map<number, GtBus>> {
+  if (busesCache && Date.now() - busesCache.at < BUSES_TTL_MS) return busesCache.buses;
+  try {
+    const res = await gtCall<{ buses?: RawGtBus[] }>("/api/v2/references/buses", {
+      method: "POST",
+      json: { include_photos: true, page_number: 0, page_size: 200 },
+    });
+    const buses = new Map((res.buses ?? []).map((b) => [b.id, mapGtBus(b)]));
+    busesCache = { at: Date.now(), buses };
+    return buses;
+  } catch {
+    return busesCache?.buses ?? new Map();
   }
 }
 

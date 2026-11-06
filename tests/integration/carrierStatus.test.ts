@@ -193,9 +193,12 @@ describe("syncCarrierTickets (Grandes Tour → site)", () => {
       carrierBus: "BC 1234 AA",
     });
     expect(after.trip!.carrierToMap).toContain("google.com/maps/search");
+    expect(after.trip!.carrierTripKey).toBe("gt-501-1-3");
     const other = await ticketOf(stays.id);
     expect(other.tripId).toBe(shared.id);
-    expect(other.trip).toMatchObject({ toCity: "Мадрид", departureTime: DEP });
+    // GT's trip id is filled in on the shared row in place, silently.
+    expect(other.trip).toMatchObject({ toCity: "Мадрид", departureTime: DEP, carrierTripKey: "gt-501-1-2" });
+    expect(await actions(stays.id)).toEqual([]);
 
     const changes = JSON.parse((await prisma.ticketHistory.findFirstOrThrow({ where: { ticketId: moved.id } })).changes!);
     expect(changes).toMatchObject({
@@ -265,6 +268,7 @@ describe("carrierLegChanges", () => {
     carrierToMap: null,
     carrierBus: "AA 0001 BB",
     carrierPhones: null,
+    carrierTripKey: "gt-1-2-3",
   };
   const gt = (over: Partial<GtLegState> = {}): GtLegState => ({
     key: "gt-1-2-3",

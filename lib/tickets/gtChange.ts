@@ -152,6 +152,7 @@ export async function changeGtTicketTrip(input: {
           carrierToPlace: found.toStation ?? null,
           carrierFromMap: found.fromMap ?? null,
           carrierToMap: found.toMap ?? null,
+          carrierTripKey: input.tripKey,
           transportType: found.transportType ?? grandesTourCarrierAdapter.transportType,
           carrierId: legTrip.carrierId,
         },

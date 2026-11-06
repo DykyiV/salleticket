@@ -40,6 +40,7 @@ type TripPart = Pick<
   | "carrierToMap"
   | "carrierBus"
   | "carrierPhones"
+  | "carrierTripKey"
 >;
 
 export type LegChanges = {
@@ -76,6 +77,7 @@ export function carrierLegChanges(trip: TripPart, seat: number | null, gt: GtLeg
   }
   if (gt.bus && !same(gt.bus, trip.carrierBus)) out.carrierBus = gt.bus;
   if (gt.phones && !same(gt.phones, trip.carrierPhones)) out.carrierPhones = gt.phones;
+  if (gt.key !== trip.carrierTripKey) out.carrierTripKey = gt.key;
 
   const newSeat = Number.isInteger(gt.seatNumber) && gt.seatNumber > 0 && gt.seatNumber !== seat ? gt.seatNumber : null;
   return { trip: out, seat: newSeat };
@@ -92,6 +94,7 @@ const HISTORY_FIELD: Record<keyof TripPart, string> = {
   carrierToMap: "",
   carrierBus: "bus",
   carrierPhones: "carrierPhones",
+  carrierTripKey: "",
 };
 const historyValue = (v: unknown) => (v instanceof Date ? v.toISOString() : (v ?? null));
 
@@ -120,7 +123,7 @@ export async function applyCarrierChanges(ticket: SyncedTicket, gt: GtOrderTicke
   const fareChanged = gtFare != null && Math.abs(gtFare - fare) >= 0.01;
   if (!legChanged && !(fareChanged && !keepsPrice)) return false;
 
-  await prisma.$transaction(async (tx) => {
+  return prisma.$transaction(async (tx) => {
     const data: Prisma.TicketUncheckedUpdateInput = {};
     const changes: Record<string, { from: unknown; to: unknown }> = {};
     for (const leg of legs) {
@@ -132,7 +135,9 @@ export async function applyCarrierChanges(ticket: SyncedTicket, gt: GtOrderTicke
         const shared = await tx.ticket.count({
           where: { id: { not: ticket.id }, OR: [{ tripId: leg.trip.id }, { returnTripId: leg.trip.id }] },
         });
-        if (shared) {
+        // GT's trip id filled in on an older row holds for the whole group.
+        const keyOnly = Object.keys(tripFields).length === 1 && leg.trip.carrierTripKey == null && "carrierTripKey" in tripFields;
+        if (shared && !keyOnly) {
           const t = leg.trip;
           const created = await tx.trip.create({
             data: {
@@ -147,6 +152,7 @@ export async function applyCarrierChanges(ticket: SyncedTicket, gt: GtOrderTicke
               carrierToPlace: t.carrierToPlace,
               carrierFromMap: t.carrierFromMap,
               carrierToMap: t.carrierToMap,
+              carrierTripKey: t.carrierTripKey,
               transportType: t.transportType,
               carrierId: t.carrierId,
               ...tripFields,
@@ -186,6 +192,7 @@ export async function applyCarrierChanges(ticket: SyncedTicket, gt: GtOrderTicke
 
     // The version bump also keeps a concurrent edit from being overwritten.
     await updateTicketVersioned(tx, ticket.id, ticket.version, data);
+    if (!Object.keys(changes).length) return false;
     await recordTicketHistory(tx, {
       ticketId: ticket.id,
       action: "CHANGED_BY_CARRIER",
@@ -193,8 +200,8 @@ export async function applyCarrierChanges(ticket: SyncedTicket, gt: GtOrderTicke
       changedBy: null,
       changes,
     });
+    return true;
   });
-  return true;
 }
 
 /**

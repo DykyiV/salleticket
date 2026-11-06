@@ -41,7 +41,7 @@ export default function CarriersPanel({ carriers, asOf }: Props) {
       <div className="rounded-lg border border-dashed border-gray-300 bg-white p-10 text-center shadow-sm">
         <p className="text-sm font-medium text-gray-600">Дані про перевізників відсутні</p>
         <p className="mt-1 text-xs text-gray-400">
-          Інформація про автобуси збирається з рейсів — почніть пошук виїздів у розділі «Виїзди GT»
+          Інформація про автобуси збирається з рейсів — рейси перевізника видно в розділі «Виїзди»
         </p>
       </div>
     );

@@ -172,6 +172,9 @@ model Trip {
   carrierToPlace   String?
   carrierFromMap   String?
   carrierToMap     String?
+  /// The carrier's id of this run as we book it (Grandes Tour: "gt-<trip>-<from city>-<to city>"):
+  /// ties our tickets to the carrier's departure (Виїзди).
+  carrierTripKey   String?
   transportType TransportType @default(BUS)
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
@@ -194,6 +197,7 @@ model Trip {
   @@index([fromCity, toCity, departureTime])
   @@index([carrierId])
   @@index([departureId])
+  @@index([carrierTripKey])
   @@map("trips")
 }
 

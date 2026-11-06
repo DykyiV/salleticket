@@ -29,7 +29,6 @@ export const CABINET_NAV: NavItem[] = [
   { href: "/cabinet/tickets", label: "Квитки", icon: "tickets", minRole: "CUSTOMER" },
   { href: "/cabinet/departures", label: "Виїзди", icon: "departures", minRole: "AGENT" },
   { href: "/cabinet/buses", label: "Автобуси", icon: "departures", minRole: "ADMIN" },
-  { href: "/cabinet/gt-departures", label: "Виїзди GT", icon: "departures", minRole: "ADMIN" },
   { href: "/cabinet/carriers", label: "Перевізники", icon: "departures", minRole: "ADMIN" },
   { href: "/cabinet/scan", label: "Сканер квитків", icon: "tickets", minRole: "DRIVER" },
   { href: "/cabinet/routes", label: "Маршрути шаблони", icon: "routes", minRole: "ADMIN" },
