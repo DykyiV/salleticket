@@ -167,6 +167,11 @@ model Trip {
   carrierPhones String?
   /// Bus plate the carrier gives for this run (Grandes Tour bus_number).
   carrierBus    String?
+  /// Boarding / drop-off point as the carrier gives it (Grandes Tour: address with platform) and its map link.
+  carrierFromPlace String?
+  carrierToPlace   String?
+  carrierFromMap   String?
+  carrierToMap     String?
   transportType TransportType @default(BUS)
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt

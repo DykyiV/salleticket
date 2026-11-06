@@ -13,7 +13,7 @@ import { getDict } from "@/lib/i18n/server";
 import { fmt, longDate, money, plural } from "@/lib/i18n/format";
 import { mailConfigured } from "@/lib/mail";
 import { reconcileTicketPayment } from "@/lib/payments";
-import { syncCarrierCancellations } from "@/lib/tickets/carrierStatus";
+import { syncCarrierTickets } from "@/lib/tickets/carrierStatus";
 import { getSiteContacts, telHref } from "@/lib/siteContacts";
 import { siteOrigin, toETicket, viewableGroup, type ETicket } from "@/lib/tickets/eTicket";
 import { qrCodeDataUrl } from "@/lib/tickets/qrcode";
@@ -43,7 +43,7 @@ export default async function TicketPage(props: Props) {
   // Settle or expire pending online payments before showing the status.
   const before = await viewableGroup(reference, who);
   if (before) await Promise.all(before.map((b) => reconcileTicketPayment(b.ticketId)));
-  if (before) await syncCarrierCancellations(before.map((b) => b.ticketId));
+  if (before) await syncCarrierTickets(before.map((b) => b.ticketId));
   const group = before ? await viewableGroup(reference, who) : null;
 
   const h = await headers();

@@ -14,7 +14,7 @@ import { hasRoleAtLeast } from "@/lib/auth/constants";
 import { ticketRights } from "@/lib/auth/access";
 import { prisma } from "@/lib/db";
 import { reconcileTicketPayment } from "@/lib/payments";
-import { syncCarrierCancellations } from "@/lib/tickets/carrierStatus";
+import { syncCarrierTickets } from "@/lib/tickets/carrierStatus";
 import { gtChangeBlocked } from "@/lib/tickets/gtChange";
 import { canChangeTrips, tripChangeRefusal } from "@/lib/tickets/changeRules";
 import { getSiteSettings } from "@/lib/settings";
@@ -56,7 +56,7 @@ export default async function CabinetTicketEditPage(props: {
 
   // Settle / expire a pending online payment before showing the ticket.
   await reconcileTicketPayment(booking.ticketId);
-  await syncCarrierCancellations([booking.ticketId]);
+  await syncCarrierTickets([booking.ticketId]);
 
   const full = await prisma.booking.findUnique({
     where: { id: booking.id },
@@ -230,6 +230,11 @@ export default async function CabinetTicketEditPage(props: {
               <div className="mt-2 grid gap-x-4 gap-y-1 sm:grid-cols-2">
                 <BoardingHint label="Посадка" stop={board} />
                 <BoardingHint label="Висадка" stop={alight} />
+              </div>
+            ) : trip?.carrierFromPlace || trip?.carrierToPlace ? (
+              <div className="mt-2 grid gap-x-4 gap-y-1 sm:grid-cols-2">
+                <CarrierPoint label="Посадка" place={trip.carrierFromPlace} map={trip.carrierFromMap} />
+                <CarrierPoint label="Висадка" place={trip.carrierToPlace} map={trip.carrierToMap} />
               </div>
             ) : null}
 
@@ -439,6 +444,25 @@ export default async function CabinetTicketEditPage(props: {
           </section>
         </div>
       </div>
+    </div>
+  );
+}
+
+/** Boarding / drop-off point given by the carrier (Grandes Tour), with its map link. */
+function CarrierPoint({ label, place, map }: { label: string; place: string | null; map: string | null }) {
+  if (!place) return null;
+  return (
+    <div className="text-sm text-slate-700">
+      <span className="font-medium">{label}: </span>
+      <span className="text-xs text-slate-600">{place}</span>
+      {map ? (
+        <>
+          {" "}
+          <a href={map} target="_blank" rel="noreferrer" className="text-brand-700 underline">
+            карта
+          </a>
+        </>
+      ) : null}
     </div>
   );
 }
