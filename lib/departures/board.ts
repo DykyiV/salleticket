@@ -10,6 +10,7 @@ import type { TicketStatus } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { ticketListWhere } from "@/lib/auth/access";
 import { grandesTourEnabled } from "@/lib/carriers/grandes-tour/client";
+import { GT_CITIES } from "@/lib/trips/gtCities";
 import {
   gtBuses,
   gtListRoutes,
@@ -32,7 +33,7 @@ export type BoardDeparture = {
   /** Filter key and label of the route both directions share. */
   routeKey: string;
   routeName: string;
-  /** ISO country of the route abroad (flag), "" when unknown. */
+  /** ISO country it leaves from (flag, grouping within the day), "" when unknown. */
   countryCode: string;
   direction: "to" | "back" | null;
   from: string;
@@ -106,6 +107,16 @@ export function routeTitle(name: string | undefined, direction: string | undefin
   return `${from} — ${to}`;
 }
 
+const COUNTRY_BY_CITY = new Map(GT_CITIES.map(([country, uk]) => [uk.trim().toLowerCase(), country]));
+
+/** Where a GT trip leaves from: its first stop's country (GT routes go Ukraine ↔ abroad). */
+export function gtDepartureCountry(firstStop: string, direction: string | undefined, routeCountry: string | undefined): string {
+  return (
+    COUNTRY_BY_CITY.get(firstStop.trim().toLowerCase()) ??
+    (direction === "to" ? "UA" : direction === "back" ? (routeCountry?.toUpperCase() ?? "") : "")
+  );
+}
+
 async function gtBoard(from: string, to: string): Promise<{ trips: GtDepartureItem[]; rows: Omit<BoardDeparture, "ours">[] }> {
   const [trips, routes, buses] = await Promise.all([gtListTrips(from, to), gtListRoutes(), gtBuses()]);
   const routeById = new Map(routes.map((r) => [r.id, r]));
@@ -118,7 +129,7 @@ async function gtBoard(from: string, to: string): Promise<{ trips: GtDepartureIt
       route: routeTitle(route?.name, t.direction, t.from, t.to),
       routeKey: route ? `gt-${route.id}` : `gt-${t.from}-${t.to}`,
       routeName: route?.name.replace(/\s+-\s+/g, " — ") ?? `${t.from} — ${t.to}`,
-      countryCode: route?.countryIso?.toUpperCase() ?? "",
+      countryCode: gtDepartureCountry(t.from, t.direction, route?.countryIso),
       direction: t.direction === "to" || t.direction === "back" ? t.direction : null,
       from: t.from,
       to: t.to,

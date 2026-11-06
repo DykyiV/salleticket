@@ -109,6 +109,7 @@ describe("Виїзди: departures of every carrier in one list", () => {
           return json([
             rawTrip(31189, "back", 1289, [[420, "Марбелья", "07:00"], [98, "Севілія", "09:00"], [1, "Вінниця", "23:00"]]),
             rawTrip(31200, "to", 1188, [[1, "Вінниця", "08:00"], [420, "Марбелья", "22:00"]]),
+            rawTrip(31210, "back", 1188, [[98, "Севілія", "09:30"], [1, "Вінниця", "23:30"]]),
             rawTrip(31300, "to", 1188, [[30, "Запоріжжя", "10:00"], [32, "Фрайбург", "23:00"]], 132),
           ]);
         if (path === "/api/v3/cache/routes")
@@ -125,8 +126,10 @@ describe("Виїзди: departures of every carrier in one list", () => {
               { id: 1289, number: "BC0056IE", mark: "Van Hool", places_count: 70, floors_count: 2, image_url: "https://img/1289.png", image_thumb_url: "https://img/1289-t.png", has_wifi: true, has_wc: true, has_tv: false },
             ],
           });
-        if (path === "/api/v3/booking/get_bus_map_for_trip_id")
-          return json({ busPlaces: new URL(String(url)).searchParams.get("TripId") === "31200" ? BUS_MAP_31200 : BUS_MAP });
+        if (path === "/api/v3/booking/get_bus_map_for_trip_id") {
+          const trip = new URL(String(url)).searchParams.get("TripId");
+          return json({ busPlaces: trip === "31200" || trip === "31210" ? BUS_MAP_31200 : BUS_MAP });
+        }
         return new Response("not found", { status: 404 });
       }),
     );
@@ -153,7 +156,7 @@ describe("Виїзди: departures of every carrier in one list", () => {
 
   it("lists GT departures with route, flag, bus and our passengers the viewer may see", async () => {
     const list = await listBoardDepartures(who(users.admin), iso(0), iso(30));
-    expect(list.map((d) => d.id)).toEqual(["gt-31189", "gt-31200", "gt-31300"]);
+    expect(list.map((d) => d.id)).toEqual(["gt-31189", "gt-31200", "gt-31210", "gt-31300"]);
     expect(list[0]).toMatchObject({
       carrier: "GRANDES TOUR",
       route: "Севілія — Вінниця",
@@ -169,10 +172,12 @@ describe("Виїзди: departures of every carrier in one list", () => {
       seatsUrl: "/api/agent/departures/gt-31189/seats?from=420&to=1",
       ours: 3,
     });
-    expect(list[1]).toMatchObject({ route: "Вінниця — Севілія", direction: "to", ours: 1, bus: { mark: "", seats: 0 } });
+    // The flag is the country it leaves from: the way there starts in Ukraine.
+    expect(list[1]).toMatchObject({ route: "Вінниця — Севілія", direction: "to", countryCode: "UA", ours: 1, bus: { mark: "", seats: 0 } });
+    expect(list[3]).toMatchObject({ route: "Запоріжжя — Фрайбург", countryCode: "UA" });
 
     const agentView = await listBoardDepartures(who(users.agent), iso(0), iso(30));
-    expect(agentView.map((d) => d.ours)).toEqual([1, 0, 0]);
+    expect(agentView.map((d) => d.ours)).toEqual([1, 0, 0, 0]);
   });
 
   it("a departure: our passengers by boarding time, bus with photo, seat plan", async () => {
@@ -213,35 +218,35 @@ describe("Виїзди: departures of every carrier in one list", () => {
   });
 
   it("passengers by city for transfers: departures of one day and one country", async () => {
-    const summary = await transferSummary(who(users.admin), TOMORROW, ["gt-31189", "gt-31200"]);
+    const summary = await transferSummary(who(users.admin), TOMORROW, ["gt-31189", "gt-31210"]);
     if (!summary.ok) throw new Error(summary.error);
     expect(summary.countryCode).toBe("ES");
     expect(summary.buses).toEqual([
       { id: "gt-31189", route: "Севілія — Вінниця", time: "07:00", bus: "Van Hool [BC0056IE]", busy: 2 },
-      { id: "gt-31200", route: "Вінниця — Севілія", time: "08:00", bus: "[BC0079IT]", busy: 2 },
+      { id: "gt-31210", route: "Севілія — Вінниця", time: "09:30", bus: "[BC0079IT]", busy: 2 },
     ]);
     // GT's bookings: on 31189 one from Марбелья and one from Севілія, both to Вінниця (the hidden
-    // seat belongs to another trip of the bus); on 31200 two from Вінниця to Марбелья.
+    // seat belongs to another trip of the bus); on 31210 two from Севілія to Вінниця.
     expect(summary.cities.map((c) => [c.city, c.at.slice(11), c.perBus, c.board, c.alight])).toEqual([
-      ["Марбелья", "07:00", [{ board: 1, alight: 0 }, { board: 0, alight: 2 }], 1, 2],
-      ["Вінниця", "08:00", [{ board: 0, alight: 2 }, { board: 2, alight: 0 }], 2, 2],
-      ["Севілія", "09:00", [{ board: 1, alight: 0 }, { board: 0, alight: 0 }], 1, 0],
+      ["Марбелья", "07:00", [{ board: 1, alight: 0 }, { board: 0, alight: 0 }], 1, 0],
+      ["Севілія", "09:00", [{ board: 1, alight: 0 }, { board: 2, alight: 0 }], 3, 0],
+      ["Вінниця", "23:00", [{ board: 0, alight: 2 }, { board: 0, alight: 2 }], 0, 4],
     ]);
     const vin = summary.cities.find((c) => c.city === "Вінниця")!;
     expect(vin.ours.map((o) => [o.name, o.kind, o.bus]).sort()).toEqual([
       ["Ivan Agentov", "alight", 0],
       ["Olha Other", "alight", 0],
       ["Roman Roundtrip", "alight", 0],
-      ["Roman Roundtrip", "board", 1],
     ]);
 
     // An agent sees only the passengers it sold; counts stay the carrier's.
-    const agent = await transferSummary(who(users.agent), TOMORROW, ["gt-31189", "gt-31200"]);
+    const agent = await transferSummary(who(users.agent), TOMORROW, ["gt-31189", "gt-31210"]);
     if (!agent.ok) throw new Error(agent.error);
     expect(agent.cities.flatMap((c) => c.ours.map((o) => o.name))).toEqual(["Ivan Agentov", "Ivan Agentov"]);
-    expect(agent.cities.map((c) => c.board)).toEqual([1, 2, 1]);
+    expect(agent.cities.map((c) => c.board)).toEqual([1, 3, 0]);
 
-    expect(await transferSummary(who(users.admin), TOMORROW, ["gt-31189", "gt-31300"])).toEqual({
+    // From Spain and from Ukraine are two lists.
+    expect(await transferSummary(who(users.admin), TOMORROW, ["gt-31189", "gt-31200"])).toEqual({
       ok: false,
       error: "Оберіть виїзди однієї країни.",
     });

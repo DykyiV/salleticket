@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { inputClass } from "@/components/admin/Field";
-import { flagEmoji } from "@/lib/routes/countries";
+import { countryNameByCode, flagEmoji } from "@/lib/routes/countries";
 import type { BoardDeparture, SeatCounts } from "@/lib/departures/board";
 import { SEAT_COLORS, SeatLegend } from "@/components/departures/seatColors";
 
@@ -131,7 +131,11 @@ export default function DepartureBoard({
     for (const d of shown) groups.set(d.date, [...(groups.get(d.date) ?? []), d]);
     return [...groups.entries()]
       .sort(([a], [b]) => a.localeCompare(b))
-      .map(([date, items]) => ({ date, items: items.sort(order) }));
+      // Within a day the departures of one country stay together (as on GT's board).
+      .map(([date, items]) => ({
+        date,
+        items: items.sort((a, b) => (a.countryCode || "ZZ").localeCompare(b.countryCode || "ZZ") || order(a, b)),
+      }));
   }, [departures, route, direction, day, query, sort]);
 
   const shown = days.flatMap((g) => g.items);
@@ -321,7 +325,13 @@ export default function DepartureBoard({
                 {g.date === today ? " (Сьогодні)" : g.date === addDays(today, 1) ? " (Завтра)" : ""}
               </header>
               <ul className="divide-y divide-slate-100">
-                {g.items.map((d) => (
+                {g.items.map((d, i) => [
+                  i === 0 || g.items[i - 1].countryCode !== d.countryCode ? (
+                    <li key={`${d.countryCode}-head`} className="bg-slate-50/60 px-4 py-1.5 text-xs font-medium text-slate-500">
+                      {d.countryCode ? `${flagEmoji(d.countryCode)} Звідки: ${countryNameByCode(d.countryCode)}` : "Країна невідома"} ·{" "}
+                      {g.items.filter((x) => x.countryCode === d.countryCode).length}
+                    </li>
+                  ) : null,
                   <li
                     key={d.id}
                     className="grid grid-cols-[1fr_auto] items-center gap-x-3 gap-y-2 px-4 py-2.5 text-sm md:grid-cols-[minmax(0,2.2fr)_4.5rem_3.5rem_minmax(0,2fr)_minmax(0,1.5fr)]"
@@ -366,8 +376,8 @@ export default function DepartureBoard({
                         {d.bus.number ? `[${d.bus.number}]` : "—"}
                       </span>
                     </span>
-                  </li>
-                ))}
+                  </li>,
+                ])}
               </ul>
             </section>
           ))}

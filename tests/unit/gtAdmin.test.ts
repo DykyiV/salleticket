@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { groupBusesByCarrier, mapGtBus, mapGtTrip, type RawGtTrip } from "@/lib/carriers/grandes-tour/admin";
-import { routeTitle } from "@/lib/departures/board";
+import { gtDepartureCountry, routeTitle } from "@/lib/departures/board";
 
 // Shape of GET /api/v4/booking/trips (TripCities comes as a JSON string).
 const trip = (id: number, bus: string, stops: object[], extra: Partial<RawGtTrip> = {}): RawGtTrip => ({
@@ -81,5 +81,13 @@ describe("Grandes Tour admin data", () => {
     expect(
       mapGtBus({ id: 1289, number: " BC0056IE", mark: "Van Hool", places_count: 70, floors_count: 2, image_url: "https://p", image_thumb_url: "", has_wifi: true, has_tv: false, has_wc: true }),
     ).toEqual({ id: 1289, number: "BC0056IE", mark: "Van Hool", seats: 70, floors: 2, photo: "https://p", thumb: null, amenities: ["Wi-Fi", "WC"] });
+  });
+
+  it("a departure's flag is the country it leaves from", () => {
+    expect(gtDepartureCountry("Дніпро", "to", "DE")).toBe("UA");
+    expect(gtDepartureCountry("Марбелья", "back", "ES")).toBe("ES");
+    expect(gtDepartureCountry("Невідоме", "to", "ES")).toBe("UA");
+    expect(gtDepartureCountry("Невідоме", "back", "de")).toBe("DE");
+    expect(gtDepartureCountry("Невідоме", undefined, "DE")).toBe("");
   });
 });
