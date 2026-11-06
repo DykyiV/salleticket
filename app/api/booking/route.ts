@@ -533,8 +533,10 @@ export async function POST(req: NextRequest) {
         ? TripKind.ROUND_TRIP
         : TripKind.ONE_WAY;
 
-  const departureAt = combineDateTime(snapshot.date, snapshot.departure);
-  const arrivalAt = combineDateTime(snapshot.date, snapshot.arrival);
+  // Grandes Tour gives the exact arrival (a trip can take two days or more).
+  const gtTimes = isGt && snapshot.departureAt && snapshot.arrivalAt;
+  const departureAt = gtTimes ? new Date(snapshot.departureAt!) : combineDateTime(snapshot.date, snapshot.departure);
+  const arrivalAt = gtTimes ? new Date(snapshot.arrivalAt!) : combineDateTime(snapshot.date, snapshot.arrival);
   if (arrivalAt <= departureAt) {
     arrivalAt.setUTCDate(arrivalAt.getUTCDate() + 1);
   }

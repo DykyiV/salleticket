@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { checkCronAuth } from "@/lib/security/cron";
 import { reconcileDuePayments } from "@/lib/payments";
 import { closeNoShowReservations } from "@/lib/tickets/cashLimits";
-import { syncCarrierCancellations } from "@/lib/tickets/carrierStatus";
+import { syncCarrierTickets } from "@/lib/tickets/carrierStatus";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -23,6 +23,12 @@ export async function POST(req: NextRequest) {
   const before = Date.now();
   await reconcileDuePayments();
   const noShow = await closeNoShowReservations();
-  const carrierCancelled = await syncCarrierCancellations();
-  return NextResponse.json({ ok: true, noShow, carrierCancelled, ms: Date.now() - before });
+  const carrier = await syncCarrierTickets();
+  return NextResponse.json({
+    ok: true,
+    noShow,
+    carrierCancelled: carrier.cancelled,
+    carrierChanged: carrier.changed,
+    ms: Date.now() - before,
+  });
 }
