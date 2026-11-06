@@ -91,22 +91,31 @@ export type CarrierGroup = {
   buses: BusEntry[];
 };
 
-export type GtStop = {
-  cityName: string;
-  place?: string;
-  /** Departure time from this stop on the way there / on the way back (HH:MM). */
-  outTime?: string | null;
-  backTime?: string | null;
-};
-
+/** A GT route as the list shows it: name, country abroad, carrier, departure days. */
 export type GtRoute = {
   id: number;
   name: string;
   countryIso?: string;
-  scheduleDays?: string[];
-  description?: string;
-  stops?: GtStop[];
+  countryName?: string;
+  carrierName: string;
+  /** GT's note on the route ("KHARKIV", "NEW"…), shown to tell same-named routes apart. */
+  comment?: string;
+  /** Departure days, each "there / back" pair as GT names them ("Четвер", "Неділя"). */
+  schedule: { there: string; back: string }[];
 };
+
+/** A stop of a route schedule: day and time there and back (as GT gives them). */
+export type GtRouteStop = {
+  city: string;
+  place?: string;
+  map?: string;
+  thereDay?: string;
+  thereTime?: string;
+  backDay?: string;
+  backTime?: string;
+};
+
+export type GtRouteDetail = GtRoute & { schedules: { title: string; stops: GtRouteStop[] }[] };
 
 // ─────────────────────────── Raw GT shapes ───────────────────────────
 
@@ -140,10 +149,22 @@ type RawGtRoute = {
   id: number;
   name?: string;
   countryISO?: string;
+  countryName?: string;
+  carrier_name?: string;
+  comment?: string;
   Schedule?: { departure_day?: string; return_day?: string }[];
 };
 
-type RawRouteItem = { city_name?: string; place?: string; departure_time_str?: string; return_time_str?: string };
+type RawRouteItem = {
+  city_name?: string;
+  place?: string;
+  latitude?: number;
+  longitude?: number;
+  departure_day_str?: string;
+  departure_time_str?: string;
+  return_day_str?: string;
+  return_time_str?: string;
+};
 
 // ─────────────────────────── Date helpers ───────────────────────────
 
@@ -388,37 +409,70 @@ export async function gtCarrierBuses(from: string, to: string): Promise<CarrierG
 
 // ─────────────────────────── GT Routes ───────────────────────────
 
+export function mapGtRoute(r: RawGtRoute): GtRoute {
+  return {
+    id: r.id,
+    name: r.name?.trim() || `Маршрут ${r.id}`,
+    countryIso: r.countryISO?.toUpperCase() || undefined,
+    countryName: r.countryName?.trim() || undefined,
+    carrierName: r.carrier_name?.trim() || "GRANDES TOUR",
+    comment: r.comment?.trim() || undefined,
+    schedule: (r.Schedule ?? []).map((d) => ({ there: d.departure_day?.trim() ?? "", back: d.return_day?.trim() ?? "" })),
+  };
+}
+
+export function mapGtRouteDetail(
+  route: RawGtRoute,
+  schedules: { title?: string; items?: RawRouteItem[] }[],
+): GtRouteDetail {
+  return {
+    ...mapGtRoute(route),
+    schedules: schedules.map((sch) => ({
+      title: sch.title?.trim() ?? "",
+      stops: (sch.items ?? []).map((i) => ({
+        city: i.city_name?.trim() ?? "",
+        place: i.place?.trim() || undefined,
+        map: i.latitude && i.longitude ? `https://www.google.com/maps?q=${i.latitude},${i.longitude}` : undefined,
+        thereDay: i.departure_day_str?.trim() || undefined,
+        thereTime: i.departure_time_str?.trim() || undefined,
+        backDay: i.return_day_str?.trim() || undefined,
+        backTime: i.return_time_str?.trim() || undefined,
+      })),
+    })),
+  };
+}
+
 const ROUTES_TTL_MS = 60 * 60 * 1000;
 let routesCache: { at: number; routes: GtRoute[] } | null = null;
+const routeDetailCache = new Map<number, { at: number; route: GtRouteDetail }>();
 
-/** GT routes with their days and stops (cached 1 h). */
+/** GT routes with their departure days (cached 1 h). */
 export async function gtListRoutes(): Promise<GtRoute[]> {
   if (routesCache && Date.now() - routesCache.at < ROUTES_TTL_MS) return routesCache.routes;
   try {
     const res = await gtCall<{ routes?: RawGtRoute[] }>("/api/v3/cache/routes");
-    const routes = await Promise.all(
-      (res.routes ?? []).map(async (r): Promise<GtRoute> => {
-        const details = await gtCall<{ schedules?: { items?: RawRouteItem[] }[] }>("/api/v2/references/route_details", {
-          method: "POST",
-          json: { id: r.id },
-        }).catch(() => null);
-        return {
-          id: r.id,
-          name: r.name ?? `Маршрут ${r.id}`,
-          countryIso: r.countryISO,
-          scheduleDays: (r.Schedule ?? []).map((s) => `${s.departure_day ?? "?"} / ${s.return_day ?? "?"}`),
-          stops: (details?.schedules?.[0]?.items ?? []).map((i) => ({
-            cityName: i.city_name ?? "",
-            place: i.place,
-            outTime: i.departure_time_str ?? null,
-            backTime: i.return_time_str ?? null,
-          })),
-        };
-      }),
-    );
+    const routes = (res.routes ?? []).map(mapGtRoute);
     routesCache = { at: Date.now(), routes };
     return routes;
   } catch {
-    return [];
+    return routesCache?.routes ?? [];
+  }
+}
+
+/** One GT route with every schedule's stops, days and times (cached 1 h); null when GT has no such route. */
+export async function gtRouteDetail(id: number): Promise<GtRouteDetail | null> {
+  const cached = routeDetailCache.get(id);
+  if (cached && Date.now() - cached.at < ROUTES_TTL_MS) return cached.route;
+  try {
+    const res = await gtCall<{ route?: RawGtRoute; schedules?: { title?: string; items?: RawRouteItem[] }[] }>(
+      "/api/v2/references/route_details",
+      { method: "POST", json: { id } },
+    );
+    if (!res.route?.id) return null;
+    const route = mapGtRouteDetail(res.route, res.schedules ?? []);
+    routeDetailCache.set(id, { at: Date.now(), route });
+    return route;
+  } catch {
+    return cached?.route ?? null;
   }
 }

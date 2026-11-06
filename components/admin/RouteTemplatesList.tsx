@@ -4,7 +4,6 @@ import { useMemo, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { TemplateDTO } from "@/lib/routes/serialize";
-import { weekdayName } from "@/lib/routes/weekdays";
 import Field, { btnGhost, btnPrimary, inputClass } from "@/components/admin/Field";
 
 export type CountryOption = {
@@ -144,9 +143,6 @@ export default function RouteTemplatesList({
                     <tr>
                       <th className="px-4 py-2">Маршрут</th>
                       <th className="px-4 py-2">Дні виїзду</th>
-                      <th className="px-4 py-2">З України / повернення</th>
-                      <th className="px-4 py-2">Автобус</th>
-                      <th className="px-4 py-2">Виїздів</th>
                       <th className="px-4 py-2 text-right">Дії</th>
                     </tr>
                   </thead>
@@ -154,35 +150,14 @@ export default function RouteTemplatesList({
                     {group.items.map((row) => (
                       <tr key={row.id} className="border-t border-slate-100">
                         <td className="px-4 py-3">
-                          <p className="font-semibold text-slate-900">{row.name}</p>
-                          <p className="text-xs text-slate-500">
-                            {row.originCity} → {row.destinationCity}
-                            {row.comment ? ` · ${row.comment}` : ""}
-                          </p>
+                          <Link href={`/cabinet/routes/${row.id}`} className="font-semibold text-brand-700 hover:underline">
+                            {row.name}
+                          </Link>
                         </td>
                         <td className="px-4 py-3">{row.departureWeekdaysLabel}</td>
-                        <td className="px-4 py-3 text-xs">
-                          {weekdayName(row.ukraineDepartureWeekday)} /{" "}
-                          {weekdayName(row.ukraineReturnWeekday)}
-                        </td>
-                        <td className="px-4 py-3 text-xs">
-                          {row.defaultBus ?? "—"}
-                          <div className="text-slate-400">
-                            {row.busPhone ?? ""}
-                          </div>
-                        </td>
-                        <td className="px-4 py-3 tabular-nums">
-                          {row.departureCount}
-                        </td>
                         <td className="px-4 py-3 text-right">
                           <Link
-                            href={`/cabinet/routes/${row.id}`}
-                            className="mr-2 rounded border border-slate-300 bg-white px-2 py-1 text-xs"
-                          >
-                            Редагувати
-                          </Link>
-                          <Link
-                            href={`/cabinet/departures?templateId=${row.id}`}
+                            href={`/cabinet/departures?tab=own&templateId=${row.id}`}
                             className="mr-2 rounded border border-slate-300 bg-white px-2 py-1 text-xs"
                           >
                             Виїзди

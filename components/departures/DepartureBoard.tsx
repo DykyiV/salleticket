@@ -74,15 +74,18 @@ export default function DepartureBoard({
   from,
   to,
   today,
+  initialRoute,
 }: {
   departures: BoardDeparture[];
   from: string;
   to: string;
   today: string;
+  /** Route filter to start with ("gt-145", from a route's page). */
+  initialRoute?: string;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
-  const [route, setRoute] = useState("");
+  const [route, setRoute] = useState(initialRoute ?? "");
   const [direction, setDirection] = useState("");
   const [day, setDay] = useState("");
   const [query, setQuery] = useState("");

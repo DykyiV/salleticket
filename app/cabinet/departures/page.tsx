@@ -23,6 +23,7 @@ export default async function CabinetDeparturesPage(
       to?: string;
       page?: string;
       tab?: string;
+      route?: string;
     }>;
   }
 ) {
@@ -69,7 +70,7 @@ export default async function CabinetDeparturesPage(
           subtitle="Рейси всіх перевізників, які ми продаємо (зараз Grandes Tour). Натисніть на маршрут — пасажири, автобус і схема салону."
         />
         {tabs}
-        <DepartureBoard departures={departures} from={from} to={to} today={today} />
+        <DepartureBoard departures={departures} from={from} to={to} today={today} initialRoute={searchParams?.route} />
       </div>
     );
   }

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { groupBusesByCarrier, mapGtBus, mapGtTrip, type RawGtTrip } from "@/lib/carriers/grandes-tour/admin";
+import { groupBusesByCarrier, mapGtBus, mapGtRoute, mapGtRouteDetail, mapGtTrip, type RawGtTrip } from "@/lib/carriers/grandes-tour/admin";
+import { weekdayShortByName } from "@/lib/routes/weekdays";
 import { gtDepartureCountry, routeTitle } from "@/lib/departures/board";
 
 // Shape of GET /api/v4/booking/trips (TripCities comes as a JSON string).
@@ -89,5 +90,51 @@ describe("Grandes Tour admin data", () => {
     expect(gtDepartureCountry("Невідоме", "to", "ES")).toBe("UA");
     expect(gtDepartureCountry("Невідоме", "back", "de")).toBe("DE");
     expect(gtDepartureCountry("Невідоме", undefined, "DE")).toBe("");
+  });
+
+  it("a route: name, country, carrier, note and its departure days", () => {
+    const raw = {
+      id: 141,
+      name: "Херсон - Трієр - Херсон",
+      countryISO: "de",
+      countryName: "Німеччина",
+      carrier_name: "GRANDES TOUR",
+      comment: " KHARKIV ",
+      Schedule: [
+        { departure_day: "Середа", return_day: "Субота" },
+        { departure_day: "Субота", return_day: "Вівторок" },
+      ],
+    };
+    expect(mapGtRoute(raw)).toEqual({
+      id: 141,
+      name: "Херсон - Трієр - Херсон",
+      countryIso: "DE",
+      countryName: "Німеччина",
+      carrierName: "GRANDES TOUR",
+      comment: "KHARKIV",
+      schedule: [
+        { there: "Середа", back: "Субота" },
+        { there: "Субота", back: "Вівторок" },
+      ],
+    });
+    const detail = mapGtRouteDetail(raw, [
+      {
+        title: "Середа / Субота",
+        items: [
+          { city_name: "Херсон", place: "АС Херсон", latitude: 46.6, longitude: 32.6, departure_day_str: "Середа", departure_time_str: "06:00", return_day_str: "Понеділок", return_time_str: "23:30" },
+          { city_name: "Трієр", place: "", latitude: 0, longitude: 0, departure_day_str: "Четвер", departure_time_str: "20:00" },
+        ],
+      },
+    ]);
+    expect(detail.schedules).toEqual([
+      {
+        title: "Середа / Субота",
+        stops: [
+          { city: "Херсон", place: "АС Херсон", map: "https://www.google.com/maps?q=46.6,32.6", thereDay: "Середа", thereTime: "06:00", backDay: "Понеділок", backTime: "23:30" },
+          { city: "Трієр", place: undefined, map: undefined, thereDay: "Четвер", thereTime: "20:00", backDay: undefined, backTime: undefined },
+        ],
+      },
+    ]);
+    expect(["Четвер", "П'ятниця", "пʼятниця", "Неділя", "Funday"].map(weekdayShortByName)).toEqual(["Чт", "Пт", "Пт", "Нд", "Funday"]);
   });
 });
