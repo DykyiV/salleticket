@@ -231,6 +231,11 @@ export default async function CabinetTicketEditPage(props: {
                 <BoardingHint label="Посадка" stop={board} />
                 <BoardingHint label="Висадка" stop={alight} />
               </div>
+            ) : trip?.carrierFromPlace || trip?.carrierToPlace ? (
+              <div className="mt-2 grid gap-x-4 gap-y-1 sm:grid-cols-2">
+                <CarrierPoint label="Посадка" place={trip.carrierFromPlace} map={trip.carrierFromMap} />
+                <CarrierPoint label="Висадка" place={trip.carrierToPlace} map={trip.carrierToMap} />
+              </div>
             ) : null}
 
             {ticket.legs.length > 1 ? (
@@ -439,6 +444,25 @@ export default async function CabinetTicketEditPage(props: {
           </section>
         </div>
       </div>
+    </div>
+  );
+}
+
+/** Boarding / drop-off point given by the carrier (Grandes Tour), with its map link. */
+function CarrierPoint({ label, place, map }: { label: string; place: string | null; map: string | null }) {
+  if (!place) return null;
+  return (
+    <div className="text-sm text-slate-700">
+      <span className="font-medium">{label}: </span>
+      <span className="text-xs text-slate-600">{place}</span>
+      {map ? (
+        <>
+          {" "}
+          <a href={map} target="_blank" rel="noreferrer" className="text-brand-700 underline">
+            карта
+          </a>
+        </>
+      ) : null}
     </div>
   );
 }

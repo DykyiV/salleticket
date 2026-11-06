@@ -150,6 +150,8 @@ export default async function PrintTicketPage(props: { params: Promise<{ referen
                 <p className="font-medium">{board ? boardingLabel(board) : trip?.fromCity ?? "—"}</p>
                 {board?.boardingAddress && board.boardingAddress !== boardingLabel(board) ? (
                   <p className="text-xs text-slate-600">{board.boardingAddress}</p>
+                ) : !board && trip?.carrierFromPlace ? (
+                  <p className="text-xs text-slate-600">{trip.carrierFromPlace}</p>
                 ) : null}
                 {board?.outboundTime ? <p className="text-xl font-bold tabular-nums">{board.outboundTime}</p> : null}
               </div>
@@ -158,6 +160,8 @@ export default async function PrintTicketPage(props: { params: Promise<{ referen
                 <p className="font-medium">{alight ? boardingLabel(alight) : trip?.toCity ?? "—"}</p>
                 {alight?.boardingAddress && alight.boardingAddress !== boardingLabel(alight) ? (
                   <p className="text-xs text-slate-600">{alight.boardingAddress}</p>
+                ) : !alight && trip?.carrierToPlace ? (
+                  <p className="text-xs text-slate-600">{trip.carrierToPlace}</p>
                 ) : null}
                 {alight?.outboundTime ? <p className="text-xl font-bold tabular-nums">{alight.outboundTime}</p> : null}
               </div>
