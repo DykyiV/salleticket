@@ -1,6 +1,6 @@
 import { readFile } from "fs/promises";
 import path from "path";
-import { PDFDocument, rgb, type PDFFont, type PDFPage, type RGB } from "pdf-lib";
+import { PDFDocument, rgb, type PDFFont, type PDFImage, type PDFPage, type RGB } from "pdf-lib";
 import fontkit from "@pdf-lib/fontkit";
 import type { Lang } from "@/lib/i18n/config";
 import { dictionaries, type Dict } from "@/lib/i18n/dict";
@@ -47,7 +47,8 @@ const C = {
   whiteDim: rgb(0.78, 0.84, 0.92),
 };
 
-type Fonts = { font: PDFFont; bold: PDFFont };
+/** Fonts and the bus picture, embedded once per document. */
+type Fonts = { font: PDFFont; bold: PDFFont; bus: PDFImage };
 
 /** Intl output uses no-break spaces; keep them printable in every viewer. */
 const clean = (s: string) => s.replace(/[  ]/g, " ");
@@ -124,24 +125,16 @@ function drawSeat(pen: Pen, x: number, top: number, height: number) {
   pen.page.drawSvgPath(SEAT_PATH, { x, y: H - top, scale: height / 22, color: C.brand });
 }
 
-/** Schematic coach (front to the right) with the plate on its body. */
+/** The bus picture (public/bus.png) with its plate next to it, as on the ticket page. */
 function drawBus(pen: Pen, x: number, top: number, w: number, plate: string) {
-  const bodyH = 38;
-  const r = 7;
-  const body = `M${r} 0H${w - r}Q${w} 0 ${w} ${r}V${bodyH - r}Q${w} ${bodyH} ${w - r} ${bodyH}H${r}Q0 ${bodyH} 0 ${bodyH - r}V${r}Q0 0 ${r} 0Z`;
-  pen.page.drawSvgPath(body, { x, y: H - top, color: C.brand });
-  const win = rgb(0.86, 0.97, 0.95);
-  for (let wx = x + 6; wx + 13 <= x + w - 28; wx += 16) pen.rect(wx, top + 6, 13, 10, win);
-  pen.rect(x + w - 24, top + 6, 18, 14, win); // windscreen
-  const plateW = w - 46;
-  pen.rect(x + 9, top + 20, plateW, 14, C.white, C.navy);
-  let size = 9.5;
+  const side = 44;
+  pen.page.drawImage(pen.f.bus, { x, y: H - top - side, width: side, height: side });
+  const px = x + side + 6;
+  const plateW = w - side - 6;
+  pen.rect(px, top + side / 2 - 9, plateW, 18, C.white, C.navy);
+  let size = 11;
   while (size > 5 && pen.f.bold.widthOfTextAtSize(clean(plate), size) > plateW - 8) size -= 0.5;
-  pen.text(plate, x + 9, top + 30.5, size, { bold: true, color: C.navy, center: plateW });
-  for (const cx of [x + 22, x + w - 26]) {
-    pen.page.drawCircle({ x: cx, y: H - (top + bodyH + 1), size: 7, color: C.navy });
-    pen.page.drawCircle({ x: cx, y: H - (top + bodyH + 1), size: 2.6, color: C.white });
-  }
+  pen.text(plate, px, top + side / 2 + size * 0.35, size, { bold: true, color: C.navy, center: plateW });
 }
 
 function drawJourney(pen: Pen, j: ETicketJourney, t: Dict, lang: Lang, top: number, width: number): number {
@@ -169,7 +162,7 @@ function drawJourney(pen: Pen, j: ETicketJourney, t: Dict, lang: Lang, top: numb
       : "";
   y = row(j.arriveAt?.slice(11, 16) ?? null, j.to, `${tt.dropoff}${arrivalDay}`, j.alightAddress) + 8;
 
-  // Seat: icon + number; bus: a coach with the plate on it.
+  // Seat: icon + number; bus: the bus picture with its plate.
   const tileH = 62;
   pen.rect(x, y - 6, 112, tileH, C.soft, C.line);
   drawSeat(pen, x + 10, y + 10, 30);
@@ -283,6 +276,12 @@ async function drawTicketPage(pdf: PDFDocument, e: ETicket, fonts: Fonts, lang: 
   pen.text(tt.pdfValid, W - M, Math.max(fy + 2, H - 26), 8, { color: C.muted, right: true });
 }
 
+let busCache: Promise<Buffer> | null = null;
+function busPng(): Promise<Buffer> {
+  busCache ??= readFile(path.join(process.cwd(), "public", "bus.png"));
+  return busCache;
+}
+
 let fontCache: Promise<[Buffer, Buffer]> | null = null;
 function fontBytes(): Promise<[Buffer, Buffer]> {
   const dir = path.join(process.cwd(), "assets", "fonts");
@@ -298,7 +297,11 @@ export async function buildTicketsPdf(bookings: TicketPdfBooking[], origin: stri
   const pdf = await PDFDocument.create();
   pdf.registerFontkit(fontkit);
   const [regular, bold] = await fontBytes();
-  const fonts: Fonts = { font: await pdf.embedFont(regular, { subset: true }), bold: await pdf.embedFont(bold, { subset: true }) };
+  const fonts: Fonts = {
+    font: await pdf.embedFont(regular, { subset: true }),
+    bold: await pdf.embedFont(bold, { subset: true }),
+    bus: await pdf.embedPng(await busPng()),
+  };
   const contacts = await getSiteContacts().catch(() => null);
   pdf.setTitle(`Kaufmann Reisen — ${bookings.map((b) => b.reference).join(", ")}`);
   pdf.setAuthor("Kaufmann Reisen");

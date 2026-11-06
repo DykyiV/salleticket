@@ -168,7 +168,7 @@ describe("Виїзди: departures of every carrier in one list", () => {
       to: "Вінниця",
       date: TOMORROW,
       time: "07:00",
-      bus: { number: "BC0056IE", mark: "Van Hool", seats: 70, thumb: "https://img/1289-t.png" },
+      bus: { number: "BC0056IE", mark: "Van Hool", seats: 70 },
       seatsUrl: "/api/agent/departures/gt-31189/seats?from=420&to=1",
       ours: 3,
     });

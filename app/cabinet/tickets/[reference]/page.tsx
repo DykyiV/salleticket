@@ -32,6 +32,7 @@ import {
   TICKET_STATUS_LABEL,
 } from "@/lib/tickets/labels";
 import { MONEY_TONE_CLASS, moneyState, priceBreakdown } from "@/lib/tickets/ticketMoney";
+import { BusGlyph } from "@/components/ticket/TicketGlyphs";
 
 export const dynamic = "force-dynamic";
 
@@ -159,7 +160,7 @@ export default async function CabinetTicketEditPage(props: {
         .filter((b): b is string => Boolean(b))
     ),
   ];
-  const busLabel = buses.length ? buses.join(", ") : departure?.defaultBus ?? null;
+  const busLabel = buses.length ? buses.join(", ") : departure?.defaultBus ?? trip?.carrierBus ?? null;
 
   return (
     <div className="space-y-3">
@@ -209,7 +210,7 @@ export default async function CabinetTicketEditPage(props: {
             <dl className="mt-3 grid gap-x-4 gap-y-1 text-sm sm:grid-cols-2">
               <div className="flex gap-2">
                 <dt className="text-slate-500">Автобус:</dt>
-                <dd className="text-slate-900">{busLabel ?? "не призначено"}</dd>
+                <dd className="text-slate-900">{busLabel ? <BusGlyph plate={busLabel} className="h-8" /> : "не призначено"}</dd>
               </div>
               <div className="flex gap-2">
                 <dt className="text-slate-500">Місце:</dt>

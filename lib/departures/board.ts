@@ -42,7 +42,7 @@ export type BoardDeparture = {
   time: string; // HH:MM
   arrivalDate: string;
   arrivalTime: string;
-  bus: { number: string; mark: string; seats: number; thumb: string | null };
+  bus: { number: string; mark: string; seats: number };
   /** Where the board loads the seat counts from. */
   seatsUrl: string | null;
   /** Our tickets on this departure the viewer may see. */
@@ -137,7 +137,7 @@ async function gtBoard(from: string, to: string): Promise<{ trips: GtDepartureIt
       time: t.departureTime,
       arrivalDate: t.arrivalDate,
       arrivalTime: t.arrivalTime,
-      bus: { number: t.busNumber, mark: bus?.mark ?? "", seats: bus?.seats ?? 0, thumb: bus?.thumb ?? null },
+      bus: { number: t.busNumber, mark: bus?.mark ?? "", seats: bus?.seats ?? 0 },
       seatsUrl:
         t.cityFromId && t.cityToId ? `/api/agent/departures/gt-${t.id}/seats?from=${t.cityFromId}&to=${t.cityToId}` : null,
     };

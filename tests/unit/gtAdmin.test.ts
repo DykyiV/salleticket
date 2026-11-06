@@ -80,7 +80,7 @@ describe("Grandes Tour admin data", () => {
   it("a bus: plate, make, seats, photo and only the comfort it has", () => {
     expect(
       mapGtBus({ id: 1289, number: " BC0056IE", mark: "Van Hool", places_count: 70, floors_count: 2, image_url: "https://p", image_thumb_url: "", has_wifi: true, has_tv: false, has_wc: true }),
-    ).toEqual({ id: 1289, number: "BC0056IE", mark: "Van Hool", seats: 70, floors: 2, photo: "https://p", thumb: null, amenities: ["Wi-Fi", "WC"] });
+    ).toEqual({ id: 1289, number: "BC0056IE", mark: "Van Hool", seats: 70, floors: 2, photo: "https://p", amenities: ["Wi-Fi", "WC"] });
   });
 
   it("a departure's flag is the country it leaves from", () => {

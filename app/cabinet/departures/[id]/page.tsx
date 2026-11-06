@@ -134,8 +134,12 @@ export default async function DeparturePage(props: {
               <img src={d.busInfo.photo} alt={`Автобус ${d.busInfo.mark} ${d.busInfo.number}`} className="aspect-[16/10] w-full bg-slate-100 object-cover" />
             ) : null}
             <div className="space-y-2 p-4 text-sm">
-              <h2 className="text-base font-semibold text-slate-900">
-                {d.busInfo?.mark || d.bus.mark || "Автобус"} <span className="font-mono">[{d.busInfo?.number || d.bus.number || "—"}]</span>
+              <h2 className="flex items-center gap-2 text-base font-semibold text-slate-900">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src="/bus.png" alt="" className="h-9 w-9 shrink-0" />
+                <span>
+                  {d.busInfo?.mark || d.bus.mark || "Автобус"} <span className="font-mono">[{d.busInfo?.number || d.bus.number || "—"}]</span>
+                </span>
               </h2>
               {d.busInfo ? (
                 <p className="text-slate-600">

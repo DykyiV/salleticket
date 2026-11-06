@@ -75,7 +75,6 @@ export type GtBus = {
   seats: number;
   floors: number;
   photo: string | null;
-  thumb: string | null;
   amenities: string[];
 };
 
@@ -304,7 +303,6 @@ type RawGtBus = {
   places_count?: number;
   floors_count?: number;
   image_url?: string | null;
-  image_thumb_url?: string | null;
 } & Record<string, unknown>;
 
 const AMENITIES: [string, string][] = [
@@ -328,7 +326,6 @@ export function mapGtBus(b: RawGtBus): GtBus {
     seats: b.places_count ?? 0,
     floors: b.floors_count ?? 1,
     photo: b.image_url || null,
-    thumb: b.image_thumb_url || null,
     amenities: AMENITIES.filter(([k]) => b[k] === true).map(([, label]) => label),
   };
 }

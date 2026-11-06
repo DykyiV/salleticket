@@ -367,10 +367,8 @@ export default function DepartureBoard({
                       <SeatBar url={d.seatsUrl} />
                     </div>
                     <span className="col-span-2 flex min-w-0 items-center gap-2 text-slate-700 md:col-span-1">
-                      {d.bus.thumb ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img src={d.bus.thumb} alt="" className="h-7 w-10 shrink-0 rounded object-cover" loading="lazy" />
-                      ) : null}
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src="/bus.png" alt="" className="h-8 w-8 shrink-0" />
                       <span className="truncate">
                         {d.bus.mark ? `${d.bus.mark} ` : ""}
                         {d.bus.number ? `[${d.bus.number}]` : "—"}
