@@ -91,6 +91,24 @@ describe("e-ticket model", () => {
     expect(e.checkUrl).toBe("https://asol.test/check/AB-12345");
   });
 
+  it("a carrier's trip (Grandes Tour) shows the carrier's boarding point and its map", () => {
+    const b = booking();
+    const t = b.ticket as unknown as { trip: Record<string, unknown> };
+    t.trip = {
+      ...t.trip,
+      departure: null,
+      fromCity: "Львів",
+      carrierFromPlace: "AС, вул. Стрийська, 109 ( 1-3 платформа )",
+      carrierFromMap: "https://www.google.com/maps/search/?api=1&query=x",
+      carrierToPlace: "АС біля радіо башні «Функтурм» Мазуреналле 4-6",
+      carrierToMap: "https://www.google.com/maps?q=52.50738496,13.27910737",
+    };
+    const j = toETicket(b, "https://asol.test").journeys[0];
+    expect(j.boardAddress).toBe("AС, вул. Стрийська, 109 ( 1-3 платформа )");
+    expect(j.boardMap).toContain("google.com/maps");
+    expect(j.alightMap).toBe("https://www.google.com/maps?q=52.50738496,13.27910737");
+  });
+
   it("reads the return run backwards with its own times", () => {
     const e = toETicket(booking({ ret: true }), "https://asol.test");
     const back = e.journeys[1];
