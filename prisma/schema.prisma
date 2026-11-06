@@ -167,6 +167,14 @@ model Trip {
   carrierPhones String?
   /// Bus plate the carrier gives for this run (Grandes Tour bus_number).
   carrierBus    String?
+  /// Boarding / drop-off point as the carrier gives it (Grandes Tour: address with platform) and its map link.
+  carrierFromPlace String?
+  carrierToPlace   String?
+  carrierFromMap   String?
+  carrierToMap     String?
+  /// The carrier's id of this run as we book it (Grandes Tour: "gt-<trip>-<from city>-<to city>"):
+  /// ties our tickets to the carrier's departure (Виїзди).
+  carrierTripKey   String?
   transportType TransportType @default(BUS)
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
@@ -189,6 +197,7 @@ model Trip {
   @@index([fromCity, toCity, departureTime])
   @@index([carrierId])
   @@index([departureId])
+  @@index([carrierTripKey])
   @@map("trips")
 }
 

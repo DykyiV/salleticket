@@ -34,11 +34,15 @@ type GtTrip = {
   departure_city_id: number;
   departure_city: string;
   departure_place: string;
+  departure_place_latitude?: number;
+  departure_place_longitude?: number;
   departure_date: string; // dd.mm.yyyy
   departure_time_hhmm: string;
   arrival_city_id: number;
   arrival_city: string;
   arrival_place: string;
+  arrival_place_latitude?: number;
+  arrival_place_longitude?: number;
   arrival_date: string;
   arrival_time_hhmm: string;
   price: number;
@@ -185,6 +189,13 @@ export async function gtSeatLayout(tripKeyId: string, deckNames: [string, string
   return { hasAssignedSeats: true, decks, seatCount: seats.length, seats };
 }
 
+/** Map link of a GT stop: its coordinates when GT has them (not 0), else a search for the address. */
+export function gtPlaceMap(place: string | undefined, city: string, lat?: number, lng?: number): string | undefined {
+  if (lat && lng) return `https://www.google.com/maps?q=${lat},${lng}`;
+  if (!place?.trim()) return undefined;
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${place.trim()}, ${city}`)}`;
+}
+
 function toTrip(t: GtTrip, currency: string, seatsLeft: number): Trip {
   const date = isoDate(t.departure_date);
   const departureAt = `${date}T${t.departure_time_hhmm}:00.000Z`;
@@ -209,8 +220,10 @@ function toTrip(t: GtTrip, currency: string, seatsLeft: number): Trip {
     hasAssignedSeats: true,
     departureAt,
     arrivalAt,
-    fromStation: t.departure_place || undefined,
-    toStation: t.arrival_place || undefined,
+    fromStation: t.departure_place?.trim() || undefined,
+    toStation: t.arrival_place?.trim() || undefined,
+    fromMap: gtPlaceMap(t.departure_place, t.departure_city, t.departure_place_latitude, t.departure_place_longitude),
+    toMap: gtPlaceMap(t.arrival_place, t.arrival_city, t.arrival_place_latitude, t.arrival_place_longitude),
     carrierPhones: t.phoneNumber?.trim() || undefined,
     carrierBus: t.bus_number?.trim() || undefined,
     transfers: 0,
