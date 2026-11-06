@@ -89,6 +89,8 @@ export default function DepartureBoard({
   const [sort, setSort] = useState<Sort>("time");
   const [customFrom, setCustomFrom] = useState(from);
   const [customTo, setCustomTo] = useState(to);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [menuOpen, setMenuOpen] = useState(false);
 
   const presets = [
     { key: "today", label: "Сьогодні", from: today, to: today },
@@ -132,7 +134,25 @@ export default function DepartureBoard({
       .map(([date, items]) => ({ date, items: items.sort(order) }));
   }, [departures, route, direction, day, query, sort]);
 
-  const count = days.reduce((n, d) => n + d.items.length, 0);
+  const shown = days.flatMap((g) => g.items);
+  const count = shown.length;
+  const chosen = shown.filter((d) => selected.has(d.id));
+  const allChosen = count > 0 && chosen.length === count;
+  const toggle = (id: string) =>
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  const toggleAll = () => setSelected(allChosen ? new Set() : new Set(shown.map((d) => d.id)));
+
+  // Transfers list: departures of one day and one country.
+  const transferBlocked = !chosen.length
+    ? "Позначте виїзди галочками."
+    : new Set(chosen.map((d) => d.date)).size > 1 || new Set(chosen.map((d) => d.countryCode)).size > 1
+      ? "Оберіть виїзди одного дня й однієї країни (напр. вівторок, усі з Німеччини)."
+      : null;
 
   return (
     <div className="space-y-4">
@@ -236,7 +256,57 @@ export default function DepartureBoard({
           {departures.length ? "Нічого не знайдено за цими фільтрами." : "Немає виїздів у цьому періоді."}
         </p>
       ) : (
-        <div className={`overflow-hidden rounded-2xl bg-white ring-1 ring-slate-200 ${pending ? "opacity-60" : ""}`}>
+        <div className={`rounded-2xl bg-white ring-1 ring-slate-200 ${pending ? "opacity-60" : ""}`}>
+          <div className="relative flex items-center gap-3 border-b border-slate-200 px-4 py-2 text-sm">
+            <input
+              type="checkbox"
+              className="h-4 w-4"
+              checked={allChosen}
+              ref={(el) => {
+                if (el) el.indeterminate = chosen.length > 0 && !allChosen;
+              }}
+              onChange={toggleAll}
+              aria-label="Позначити всі показані виїзди"
+            />
+            <button
+              type="button"
+              className="rounded px-2 py-1 text-lg leading-none text-slate-600 hover:bg-slate-100"
+              aria-label="Дії з позначеними виїздами"
+              aria-expanded={menuOpen}
+              onClick={() => setMenuOpen((o) => !o)}
+            >
+              ⋮
+            </button>
+            <span className="text-xs text-slate-500">{chosen.length ? `Позначено: ${chosen.length}` : "Позначте виїзди, щоб виконати дію"}</span>
+            {menuOpen ? (
+              <>
+                <button type="button" aria-label="Закрити" className="fixed inset-0 z-10 cursor-default" onClick={() => setMenuOpen(false)} />
+                <div className="absolute left-4 top-full z-20 mt-1 w-80 rounded-xl bg-white p-2 text-sm shadow-lg ring-1 ring-slate-200">
+                  <button
+                    type="button"
+                    disabled={!!transferBlocked}
+                    className="w-full rounded-lg px-3 py-2 text-left hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                    onClick={() => {
+                      setMenuOpen(false);
+                      router.push(`/cabinet/departures/transfers?date=${chosen[0].date}&ids=${chosen.map((d) => d.id).join(",")}`);
+                    }}
+                  >
+                    <span className="block font-medium text-slate-900">Пасажири по містах (для пересадок)</span>
+                    <span className="block text-xs text-slate-500">
+                      {transferBlocked ?? "Хто скільки сідає й виходить у кожному місті з кожного автобуса."}
+                    </span>
+                  </button>
+                  <p className="mt-1 border-t border-slate-100 px-3 pt-2 text-xs text-slate-500">
+                    Показати чи приховати місто, місця, змінити телефон — для наших рейсів:{" "}
+                    <Link href="/cabinet/departures?tab=own" className="text-brand-700 hover:underline">
+                      «Наші рейси»
+                    </Link>
+                    . Рейси Grandes Tour змінюються лише в системі GT.
+                  </p>
+                </div>
+              </>
+            ) : null}
+          </div>
           <div className="hidden grid-cols-[minmax(0,2.2fr)_4.5rem_3.5rem_minmax(0,2fr)_minmax(0,1.5fr)] gap-3 border-b border-slate-200 px-4 py-2 text-xs font-medium text-slate-500 md:grid">
             <span>Маршрут</span>
             <span>Час</span>
@@ -257,6 +327,13 @@ export default function DepartureBoard({
                     className="grid grid-cols-[1fr_auto] items-center gap-x-3 gap-y-2 px-4 py-2.5 text-sm md:grid-cols-[minmax(0,2.2fr)_4.5rem_3.5rem_minmax(0,2fr)_minmax(0,1.5fr)]"
                   >
                     <div className="min-w-0">
+                      <input
+                        type="checkbox"
+                        className="mr-2 h-4 w-4 align-middle"
+                        checked={selected.has(d.id)}
+                        onChange={() => toggle(d.id)}
+                        aria-label={`Позначити ${d.route} ${d.time}`}
+                      />
                       <Link href={`/cabinet/departures/${d.id}?date=${d.date}`} className="font-medium text-brand-700 hover:underline">
                         <span className="mr-1.5" aria-hidden="true">
                           {d.countryCode ? flagEmoji(d.countryCode) : "🚌"}

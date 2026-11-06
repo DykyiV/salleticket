@@ -5,7 +5,7 @@ import { departureSeatCounts } from "@/lib/departures/board";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-/** GET /api/admin/departures/gt-31189/seats?from=<city id>&to=<city id> → seat counts for the Виїзди bar. */
+/** GET /api/agent/departures/gt-31189/seats?from=<city id>&to=<city id> → seat counts for the Виїзди bar. */
 export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const guard = await requireRole("AGENT");
   if (!guard.ok) return guard.response;

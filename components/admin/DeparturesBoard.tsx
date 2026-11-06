@@ -48,6 +48,7 @@ const BULK_ACTIONS: {
     { value: "showStops", label: "Показати міста", key: "canHideStops" },
     { value: "setSaleEnabled", label: "Продаж місць у місті", key: "canHideSeats" },
     { value: "setStopTime", label: "Змінити години", key: "canEdit" },
+    { value: "setPhones", label: "Змінити телефони", key: "canEdit" },
   ];
 
 function ukCount(n: number): string {
@@ -105,6 +106,8 @@ export default function DeparturesBoard({
   const [outboundTime, setOutboundTime] = useState("");
   const [returnTime, setReturnTime] = useState("");
   const [saleEnabled, setSaleEnabled] = useState(false);
+  const [busPhone, setBusPhone] = useState("");
+  const [dispatcherPhone, setDispatcherPhone] = useState("");
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
   const patchDepartureUrl = (id: string) =>
@@ -259,6 +262,10 @@ export default function DeparturesBoard({
       if (action === "setSaleEnabled") {
         body.saleEnabled = saleEnabled;
       }
+      if (action === "setPhones") {
+        body.busPhone = busPhone.trim() || null;
+        body.dispatcherPhone = dispatcherPhone.trim() || null;
+      }
       const res = await fetch(bulkUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -267,7 +274,9 @@ export default function DeparturesBoard({
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error ?? "Не вдалося оновити");
       setMessage(
-        `Оновлено зупинок: ${data.updatedStops} у ${data.updatedDepartures} виїздах.`
+        action === "setPhones"
+          ? `Оновлено телефони у ${data.updatedDepartures} виїздах.`
+          : `Оновлено зупинок: ${data.updatedStops} у ${data.updatedDepartures} виїздах.`
       );
       await load(page);
     } catch (err) {
@@ -330,8 +339,8 @@ export default function DeparturesBoard({
             Масове редагування ({selected.size} вибрано)
           </h2>
           <p className="mt-1 text-xs text-slate-500">
-            Відмітьте однакові маршрути й змініть видимість міст, продаж місць або
-            години. Доступно адміну та агенту з відповідним правом.
+            Відмітьте однакові маршрути й змініть видимість міст, продаж місць,
+            години або телефони. Доступно адміну та агенту з відповідним правом.
           </p>
           <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <Field label="Дія">
@@ -347,6 +356,27 @@ export default function DeparturesBoard({
                 ))}
               </select>
             </Field>
+            {action === "setPhones" ? (
+              <>
+                <Field label="Телефон автобуса">
+                  <input
+                    className={inputClass}
+                    value={busPhone}
+                    onChange={(e) => setBusPhone(e.target.value)}
+                    placeholder="+380…"
+                  />
+                </Field>
+                <Field label="Телефон диспетчера">
+                  <input
+                    className={inputClass}
+                    value={dispatcherPhone}
+                    onChange={(e) => setDispatcherPhone(e.target.value)}
+                    placeholder="+380…"
+                  />
+                </Field>
+              </>
+            ) : (
+              <>
             <Field label="Місто (або залиште порожнім)">
               <input
                 className={inputClass}
@@ -373,6 +403,8 @@ export default function DeparturesBoard({
                 onChange={(e) => setSortTo(e.target.value)}
               />
             </Field>
+              </>
+            )}
             {action === "setStopTime" ? (
               <>
                 <Field label="Новий час туди">

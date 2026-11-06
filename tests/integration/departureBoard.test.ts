@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import type { Role, TicketStatus } from "@prisma/client";
 import { prisma } from "@/lib/db";
-import { findDeparture, listBoardDepartures } from "@/lib/departures/board";
+import { findDeparture, listBoardDepartures, transferSummary } from "@/lib/departures/board";
 
 async function clean() {
   await prisma.ticketHistory.deleteMany();
@@ -17,7 +17,7 @@ const gtDay = (isoDay: string) => isoDay.split("-").reverse().join(".");
 const TOMORROW = iso(1);
 
 /** GET /api/v4/booking/trips item (TripCities and Route as JSON strings, as GT sends them). */
-const rawTrip = (id: number, direction: string, busId: number, cities: [number, string, string][]) => ({
+const rawTrip = (id: number, direction: string, busId: number, cities: [number, string, string][], routeId = 145) => ({
   Id: id,
   IsHidden: false,
   IsDeleted: false,
@@ -26,7 +26,7 @@ const rawTrip = (id: number, direction: string, busId: number, cities: [number, 
   CarrierName: "GRANDES TOUR",
   Date: gtDay(TOMORROW),
   Direction: direction,
-  Route: JSON.stringify({ RouteId: 145, PhonesDay1: "+380675554537 (автобус)" }),
+  Route: JSON.stringify({ RouteId: routeId, PhonesDay1: "+380675554537 (автобус)" }),
   TripCities: JSON.stringify(
     cities.map(([cityId, name, time], i) => ({
       Number: i + 1,
@@ -40,13 +40,19 @@ const rawTrip = (id: number, direction: string, busId: number, cities: [number, 
   ),
 });
 
+/** Seat map of a trip; `trips` = the seat's bookings (stop positions, from 0), as GT sends them. */
+const seg = (from: number, to: number) => ({ TripCityFromIndex: from, TripCityToIndex: to, PlaceStatus: { status: "purchased", isBusy: true } });
 const BUS_MAP = [
-  { id: 1, name: "1", type: "seat", status: "free", floor: 1, x: 1, y: 1 },
-  { id: 2, name: "2", type: "seat", status: "purchased", floor: 1, x: 1, y: 2 },
+  { id: 1, name: "1", type: "seat", status: "free", floor: 1, x: 1, y: 1, trips: [] },
+  { id: 2, name: "2", type: "seat", status: "purchased", floor: 1, x: 1, y: 2, trips: [seg(0, 2)] },
   { id: 3, name: "", type: "path", status: "none", floor: 1, x: 1, y: 3 },
-  { id: 4, name: "3", type: "seat90", status: "reserved", floor: 1, x: 1, y: 4 },
-  { id: 5, name: "4", type: "seat", status: "hidden", floor: 1, x: 1, y: 5 },
+  { id: 4, name: "3", type: "seat90", status: "reserved", floor: 1, x: 1, y: 4, trips: [seg(1, 2)] },
+  { id: 5, name: "4", type: "seat", status: "hidden", floor: 1, x: 1, y: 5, trips: [seg(0, 1)] },
   { id: 6, name: "", type: "toilet", status: "none", floor: 1, x: 2, y: 1 },
+];
+const BUS_MAP_31200 = [
+  { id: 1, name: "1", type: "seat", status: "purchased", floor: 1, x: 1, y: 1, trips: [seg(0, 1)] },
+  { id: 2, name: "2", type: "seat", status: "reserved", floor: 1, x: 1, y: 2, trips: [seg(0, 1)] },
 ];
 
 let users: Record<"admin" | "agent" | "other", { id: string; role: Role }>;
@@ -103,8 +109,15 @@ describe("Виїзди: departures of every carrier in one list", () => {
           return json([
             rawTrip(31189, "back", 1289, [[420, "Марбелья", "07:00"], [98, "Севілія", "09:00"], [1, "Вінниця", "23:00"]]),
             rawTrip(31200, "to", 1188, [[1, "Вінниця", "08:00"], [420, "Марбелья", "22:00"]]),
+            rawTrip(31300, "to", 1188, [[30, "Запоріжжя", "10:00"], [32, "Фрайбург", "23:00"]], 132),
           ]);
-        if (path === "/api/v3/cache/routes") return json({ routes: [{ id: 145, name: "Вінниця - Севілія - Вінниця", countryISO: "ES" }] });
+        if (path === "/api/v3/cache/routes")
+          return json({
+            routes: [
+              { id: 145, name: "Вінниця - Севілія - Вінниця", countryISO: "ES" },
+              { id: 132, name: "Запоріжжя - Фрайбург - Запоріжжя", countryISO: "DE" },
+            ],
+          });
         if (path === "/api/v2/references/route_details") return json({ schedules: [] });
         if (path === "/api/v2/references/buses")
           return json({
@@ -112,7 +125,8 @@ describe("Виїзди: departures of every carrier in one list", () => {
               { id: 1289, number: "BC0056IE", mark: "Van Hool", places_count: 70, floors_count: 2, image_url: "https://img/1289.png", image_thumb_url: "https://img/1289-t.png", has_wifi: true, has_wc: true, has_tv: false },
             ],
           });
-        if (path === "/api/v3/booking/get_bus_map_for_trip_id") return json({ busPlaces: BUS_MAP });
+        if (path === "/api/v3/booking/get_bus_map_for_trip_id")
+          return json({ busPlaces: new URL(String(url)).searchParams.get("TripId") === "31200" ? BUS_MAP_31200 : BUS_MAP });
         return new Response("not found", { status: 404 });
       }),
     );
@@ -139,7 +153,7 @@ describe("Виїзди: departures of every carrier in one list", () => {
 
   it("lists GT departures with route, flag, bus and our passengers the viewer may see", async () => {
     const list = await listBoardDepartures(who(users.admin), iso(0), iso(30));
-    expect(list.map((d) => d.id)).toEqual(["gt-31189", "gt-31200"]);
+    expect(list.map((d) => d.id)).toEqual(["gt-31189", "gt-31200", "gt-31300"]);
     expect(list[0]).toMatchObject({
       carrier: "GRANDES TOUR",
       route: "Севілія — Вінниця",
@@ -152,13 +166,13 @@ describe("Виїзди: departures of every carrier in one list", () => {
       date: TOMORROW,
       time: "07:00",
       bus: { number: "BC0056IE", mark: "Van Hool", seats: 70, thumb: "https://img/1289-t.png" },
-      seatsUrl: "/api/admin/departures/gt-31189/seats?from=420&to=1",
+      seatsUrl: "/api/agent/departures/gt-31189/seats?from=420&to=1",
       ours: 3,
     });
     expect(list[1]).toMatchObject({ route: "Вінниця — Севілія", direction: "to", ours: 1, bus: { mark: "", seats: 0 } });
 
     const agentView = await listBoardDepartures(who(users.agent), iso(0), iso(30));
-    expect(agentView.map((d) => d.ours)).toEqual([1, 0]);
+    expect(agentView.map((d) => d.ours)).toEqual([1, 0, 0]);
   });
 
   it("a departure: our passengers by boarding time, bus with photo, seat plan", async () => {
@@ -196,5 +210,42 @@ describe("Виїзди: departures of every carrier in one list", () => {
     expect((await findDeparture(who(users.admin), "gt-31189"))?.id).toBe("gt-31189");
     expect(await findDeparture(who(users.admin), "gt-99999", TOMORROW)).toBeNull();
     expect(await findDeparture(who(users.admin), "xx-1", TOMORROW)).toBeNull();
+  });
+
+  it("passengers by city for transfers: departures of one day and one country", async () => {
+    const summary = await transferSummary(who(users.admin), TOMORROW, ["gt-31189", "gt-31200"]);
+    if (!summary.ok) throw new Error(summary.error);
+    expect(summary.countryCode).toBe("ES");
+    expect(summary.buses).toEqual([
+      { id: "gt-31189", route: "Севілія — Вінниця", time: "07:00", bus: "Van Hool [BC0056IE]", busy: 2 },
+      { id: "gt-31200", route: "Вінниця — Севілія", time: "08:00", bus: "[BC0079IT]", busy: 2 },
+    ]);
+    // GT's bookings: on 31189 one from Марбелья and one from Севілія, both to Вінниця (the hidden
+    // seat belongs to another trip of the bus); on 31200 two from Вінниця to Марбелья.
+    expect(summary.cities.map((c) => [c.city, c.at.slice(11), c.perBus, c.board, c.alight])).toEqual([
+      ["Марбелья", "07:00", [{ board: 1, alight: 0 }, { board: 0, alight: 2 }], 1, 2],
+      ["Вінниця", "08:00", [{ board: 0, alight: 2 }, { board: 2, alight: 0 }], 2, 2],
+      ["Севілія", "09:00", [{ board: 1, alight: 0 }, { board: 0, alight: 0 }], 1, 0],
+    ]);
+    const vin = summary.cities.find((c) => c.city === "Вінниця")!;
+    expect(vin.ours.map((o) => [o.name, o.kind, o.bus]).sort()).toEqual([
+      ["Ivan Agentov", "alight", 0],
+      ["Olha Other", "alight", 0],
+      ["Roman Roundtrip", "alight", 0],
+      ["Roman Roundtrip", "board", 1],
+    ]);
+
+    // An agent sees only the passengers it sold; counts stay the carrier's.
+    const agent = await transferSummary(who(users.agent), TOMORROW, ["gt-31189", "gt-31200"]);
+    if (!agent.ok) throw new Error(agent.error);
+    expect(agent.cities.flatMap((c) => c.ours.map((o) => o.name))).toEqual(["Ivan Agentov", "Ivan Agentov"]);
+    expect(agent.cities.map((c) => c.board)).toEqual([1, 2, 1]);
+
+    expect(await transferSummary(who(users.admin), TOMORROW, ["gt-31189", "gt-31300"])).toEqual({
+      ok: false,
+      error: "Оберіть виїзди однієї країни.",
+    });
+    expect((await transferSummary(who(users.admin), TOMORROW, ["gt-99999"])).ok).toBe(false);
+    expect((await transferSummary(who(users.admin), "", ["gt-31189"])).ok).toBe(false);
   });
 });

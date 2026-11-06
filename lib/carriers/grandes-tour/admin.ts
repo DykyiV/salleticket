@@ -16,6 +16,8 @@ import { gtCall } from "@/lib/carriers/grandes-tour/client";
 
 /** A visible stop of a GT trip. */
 export type GtTripStop = {
+  /** Position among all the trip's stops (hidden too) — what GT's seat bookings point at. */
+  index: number;
   cityId?: number;
   city: string;
   date: string; // YYYY-MM-DD
@@ -56,6 +58,8 @@ export type GtPlaceItem = {
   floor?: number;
   x?: number;
   y?: number;
+  /** Bookings of this seat: from / to stop position (GtTripStop.index), boarding at `from`, leaving at `to`. */
+  segments?: { from: number; to: number }[];
 };
 
 /** Seats of a trip by GT status: free, reserved (unpaid), purchased (paid), closed (hidden). */
@@ -179,9 +183,8 @@ function parseJson<T>(raw: string | T | undefined): T | null {
 
 /** A GT trip as the board shows it: first and last visible stop, all visible stops, route. */
 export function mapGtTrip(t: RawGtTrip): GtDepartureItem | null {
-  const stops = (parseJson<RawTripCity[]>(t.TripCities) ?? [])
-    .filter((c) => !c.IsHidden && c.CityName)
-    .sort((a, b) => (a.Number ?? 0) - (b.Number ?? 0));
+  const all = (parseJson<RawTripCity[]>(t.TripCities) ?? []).sort((a, b) => (a.Number ?? 0) - (b.Number ?? 0));
+  const stops = all.filter((c) => !c.IsHidden && c.CityName);
   const first = stops[0];
   const last = stops[stops.length - 1];
   if (!first || !last || first === last) return null;
@@ -204,6 +207,7 @@ export function mapGtTrip(t: RawGtTrip): GtDepartureItem | null {
     routeId: route?.RouteId,
     phones: route?.PhonesDay1?.trim() || undefined,
     stops: stops.map((c) => ({
+      index: all.indexOf(c),
       cityId: c.CityId,
       city: c.CityName ?? "",
       date: normaliseDate(c.Date),
@@ -266,7 +270,9 @@ export async function gtTripSeats(tripId: number, cityFromId: number, cityToId: 
   const cached = seatsCache.get(key);
   if (cached && Date.now() - cached.at < SEATS_TTL_MS) return cached.seats;
   try {
-    const res = await gtCall<{ busPlaces?: GtPlaceItem[] }>("/api/v3/booking/get_bus_map_for_trip_id", {
+    const res = await gtCall<{
+      busPlaces?: (GtPlaceItem & { trips?: { TripCityFromIndex?: number; TripCityToIndex?: number }[] })[];
+    }>("/api/v3/booking/get_bus_map_for_trip_id", {
       query: { TripId: tripId, CityFromId: cityFromId, CityToId: cityToId },
     });
     const places: GtPlaceItem[] = (res.busPlaces ?? []).map((p) => ({
@@ -277,6 +283,9 @@ export async function gtTripSeats(tripId: number, cityFromId: number, cityToId: 
       floor: p.floor,
       x: p.x,
       y: p.y,
+      segments: (p.trips ?? [])
+        .filter((s) => s.TripCityFromIndex != null && s.TripCityToIndex != null)
+        .map((s) => ({ from: s.TripCityFromIndex!, to: s.TripCityToIndex! })),
     }));
     const seats = { places, counts: countSeats(places) };
     seatsCache.set(key, { at: Date.now(), seats });

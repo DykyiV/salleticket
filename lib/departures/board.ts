@@ -128,7 +128,7 @@ async function gtBoard(from: string, to: string): Promise<{ trips: GtDepartureIt
       arrivalTime: t.arrivalTime,
       bus: { number: t.busNumber, mark: bus?.mark ?? "", seats: bus?.seats ?? 0, thumb: bus?.thumb ?? null },
       seatsUrl:
-        t.cityFromId && t.cityToId ? `/api/admin/departures/gt-${t.id}/seats?from=${t.cityFromId}&to=${t.cityToId}` : null,
+        t.cityFromId && t.cityToId ? `/api/agent/departures/gt-${t.id}/seats?from=${t.cityFromId}&to=${t.cityToId}` : null,
     };
   });
   return { trips, rows };
@@ -266,5 +266,120 @@ export async function findDeparture(who: Who, id: string, date?: string): Promis
         }
       : null,
     passengers,
+  };
+}
+
+// ─────────────────────────── Transfers ───────────────────────────
+
+export type TransferBus = { id: string; route: string; time: string; bus: string; busy: number };
+
+export type TransferCity = {
+  city: string;
+  /** Earliest stop here among the buses ("YYYY-MM-DD HH:MM"). */
+  at: string;
+  /** Passengers getting on / off here, per bus (same order as `buses`), and in all. */
+  perBus: { board: number; alight: number }[];
+  board: number;
+  alight: number;
+  /** Our passengers getting on / off here. */
+  ours: { name: string; reference: string; seat: number | null; bus: number; kind: "board" | "alight" }[];
+};
+
+export type TransferSummary =
+  | { ok: true; date: string; countryCode: string; buses: TransferBus[]; cities: TransferCity[] }
+  | { ok: false; error: string };
+
+const BUSY = new Set(["reserved", "purchased", "inProgress"]);
+const cityKey = (c: string) => c.trim().toLowerCase();
+
+/**
+ * Passengers by city for organising transfers: departures of one day and one
+ * country, how many get on and off in every city from every bus (GT gives
+ * each seat's booked stops, without names), with our own passengers by name.
+ */
+export async function transferSummary(who: Who, date: string, ids: string[]): Promise<TransferSummary> {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return { ok: false, error: "Не вказано день." };
+  const wanted = [...new Set(ids)].filter((id) => /^gt-\d+$/.test(id)).slice(0, 30);
+  if (!wanted.length || !enabledSources().includes("gt")) return { ok: false, error: "Оберіть виїзди." };
+  const { trips, rows } = await gtBoard(date, date);
+  const chosen = wanted.map((id) => rows.findIndex((r) => r.id === id));
+  if (chosen.some((i) => i < 0 || rows[i].date !== date)) {
+    return { ok: false, error: "Не всі обрані виїзди знайдено на цей день — оновіть список." };
+  }
+  const countries = new Set(chosen.map((i) => rows[i].countryCode));
+  if (countries.size > 1) return { ok: false, error: "Оберіть виїзди однієї країни." };
+
+  const loaded = await Promise.all(
+    chosen.map(async (i) => {
+      const trip = trips[i];
+      const [seats, passengers] = await Promise.all([
+        trip.cityFromId && trip.cityToId ? gtTripSeats(trip.id, trip.cityFromId, trip.cityToId) : Promise.resolve(null),
+        ourPassengers(who, rows[i].id),
+      ]);
+      return { row: rows[i], trip, seats, passengers };
+    }),
+  );
+
+  const cities = new Map<string, TransferCity>();
+  const cityAt = (name: string, at: string) => {
+    const key = cityKey(name);
+    let c = cities.get(key);
+    if (!c) {
+      c = { city: name, at, perBus: loaded.map(() => ({ board: 0, alight: 0 })), board: 0, alight: 0, ours: [] };
+      cities.set(key, c);
+    }
+    if (at && (!c.at || at < c.at)) c.at = at;
+    return c;
+  };
+
+  const buses: TransferBus[] = loaded.map(({ row, trip, seats, passengers }, b) => {
+    const byIndex = new Map((trip.stops ?? []).map((s) => [s.index, s]));
+    let busy = 0;
+    for (const place of seats?.places ?? []) {
+      if (!place.type.startsWith("seat") || !BUSY.has(place.status)) continue;
+      busy++;
+      for (const seg of place.segments ?? []) {
+        for (const [index, kind] of [
+          [seg.from, "board"],
+          [seg.to, "alight"],
+        ] as const) {
+          const stop = byIndex.get(index);
+          if (!stop) continue;
+          const c = cityAt(stop.city, `${stop.date} ${stop.time}`);
+          c.perBus[b][kind]++;
+          c[kind]++;
+        }
+      }
+    }
+    for (const p of passengers) {
+      for (const [name, kind] of [
+        [p.from, "board"],
+        [p.to, "alight"],
+      ] as const) {
+        const stop = (trip.stops ?? []).find((s) => cityKey(s.city) === cityKey(name));
+        cityAt(name, stop ? `${stop.date} ${stop.time}` : "").ours.push({
+          name: p.name,
+          reference: p.reference,
+          seat: p.seat,
+          bus: b,
+          kind,
+        });
+      }
+    }
+    return {
+      id: row.id,
+      route: row.route,
+      time: row.time,
+      bus: `${row.bus.mark ? `${row.bus.mark} ` : ""}${row.bus.number ? `[${row.bus.number}]` : ""}`.trim() || "—",
+      busy,
+    };
+  });
+
+  return {
+    ok: true,
+    date,
+    countryCode: rows[chosen[0]].countryCode,
+    buses,
+    cities: [...cities.values()].sort((a, b) => (a.at || "9").localeCompare(b.at || "9")),
   };
 }
