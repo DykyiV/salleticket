@@ -48,6 +48,11 @@ const nextConfig = {
         destination: "https://kaufmann-reisen.de/:path*",
         permanent: true,
       },
+      // Usual addresses of the legal pages.
+      { source: "/privacy", destination: "/datenschutz", permanent: true },
+      { source: "/datenschutzerklaerung", destination: "/datenschutz", permanent: true },
+      { source: "/imprint", destination: "/impressum", permanent: true },
+      { source: "/legal", destination: "/impressum", permanent: true },
       { source: "/admin/settlements", destination: "/cabinet/finance", permanent: true },
       { source: "/admin/commissions", destination: "/cabinet/finance/commissions", permanent: true },
       { source: "/admin/reports/carrier", destination: "/cabinet/finance/carrier-report", permanent: true },

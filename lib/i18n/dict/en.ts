@@ -509,6 +509,7 @@ const en: Dict = {
     documents: "Documents",
     terms: "Conditions of carriage",
     privacy: "Privacy policy",
+    imprint: "Legal notice",
     baggage: "Baggage rules",
     rights: "Passenger rights",
     offer: "Public offer",
@@ -521,9 +522,6 @@ const en: Dict = {
     baggageIntro: "What you can bring and how to get your baggage ready for the trip.",
     rulesTitle: "Conditions of carriage",
     rulesIntro: "The terms on which we carry passengers and baggage. By booking a ticket you accept them.",
-    privacyTitle: "Personal data",
-    privacyText:
-      "Your personal data is used only to organise your journey: issuing the ticket, contacting you about the trip and processing refunds.",
     questions: "Still have questions?",
     callUs: "Call us — we answer in Ukrainian, German, Spanish or English.",
   },

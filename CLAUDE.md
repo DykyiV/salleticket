@@ -27,6 +27,7 @@
 |---|---|
 | Сторінки (головна, результати, рейс, оформлення, квиток, кабінет) | `app/` (`page.tsx`, `results/`, `trip/`, `booking/`, `tickets/`, `cabinet/`) |
 | Інфосторінки: багаж, правила, повернення | `app/baggage`, `app/rules`, `app/refund` (тексти в `dict.legal.*`) |
+| Impressum і політика конфіденційності (DDG, DSGVO; німецький текст обовʼязковий) | `app/impressum`, `app/datenschutz`, тексти в `lib/legal/texts.ts`, реквізити компанії в `lib/legal/company.ts` (вони ж у підписі кожного листа) |
 | Пошук (форма, міста будь-якою мовою, календар з цінами) | `components/home/SearchPanel.tsx`, `CityInput.tsx`, `DatePicker.tsx` |
 | Ціни на дні для календаря | `app/api/calendar/route.ts` |
 | Крок «Місця» (схема салону; скільки місць обрано — стільки пасажирів) | `components/checkout/SeatStep.tsx`, `SeatMapView.tsx` |
@@ -92,6 +93,5 @@
 ## Що ще не зроблено
 
 - Онлайн-оплата (останній етап).
-- Пошта: провайдер не підключений (`MAIL_*` порожні), рекомендовано Resend. Без нього листи з квитками не відправляються.
 - Перемикач валют: зараз усе в EUR.
 - Postgres замість SQLite і регулярні бекапи БД.
