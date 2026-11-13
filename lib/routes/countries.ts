@@ -67,6 +67,11 @@ export function countryShort(code: string, fallbackName = ""): string {
   return fallbackName.slice(0, 3);
 }
 
+/** "DE" → "Німеччина" (the code itself when unknown). */
+export function countryNameByCode(code: string): string {
+  return Object.keys(CODE_BY_NAME).find((name) => CODE_BY_NAME[name] === code) ?? code;
+}
+
 export function flagEmoji(code: string): string {
   if (!/^[A-Z]{2}$/.test(code)) return "🏳️";
   return String.fromCodePoint(

@@ -1,6 +1,6 @@
 /**
- * Pictures on the ticket: a coach seat with its number, and a schematic bus
- * with the plate on it. The PDF draws the same shapes (lib/tickets/pdf.ts).
+ * Pictures on the ticket: a coach seat with its number, and the bus picture
+ * with its plate. The PDF draws the same (lib/tickets/pdf.ts).
  */
 
 import { SEAT_PATH } from "@/lib/tickets/glyphs";
@@ -13,40 +13,18 @@ export function SeatGlyph({ className }: { className?: string }) {
   );
 }
 
-/** Coach seen from the side (front to the right) with the plate on its body. */
+/** The bus picture (public/bus.png) with its plate next to it. The PDF draws the same (lib/tickets/pdf.ts). */
 export function BusGlyph({ plate, className }: { plate: string; className?: string }) {
-  const windows = [6, 22, 38, 54, 70, 86];
   return (
-    <svg viewBox="0 0 132 48" className={className} role="img" aria-label={plate}>
-      <rect x="1" y="1" width="130" height="38" rx="7" className="fill-brand-600" />
-      {windows.map((x) => (
-        <rect key={x} x={x} y="6" width="13" height="10" rx="2" fill="#fff" fillOpacity="0.85" />
-      ))}
-      {/* windscreen and door */}
-      <path d="M106 6h14a6 6 0 0 1 6 6v8h-20z" fill="#fff" fillOpacity="0.85" />
-      <rect x="106" y="22" width="9" height="15" rx="1.5" fill="#fff" fillOpacity="0.35" />
-      {/* plate */}
-      <rect x="10" y="20" width="88" height="15" rx="2.5" fill="#fff" stroke="#142C2A" strokeWidth="1" />
-      <text
-        x="54"
-        y="31.2"
-        textAnchor="middle"
-        fontSize="10"
-        fontWeight="700"
-        fontFamily="ui-monospace, monospace"
-        fill="#142C2A"
-        letterSpacing="0.6"
-        // Long text («уточнюється») is squeezed to fit the plate.
-        {...(plate.length > 11 ? { textLength: 82, lengthAdjust: "spacingAndGlyphs" } : {})}
+    <span className={`inline-flex items-center gap-2 ${className ?? ""}`} role="img" aria-label={plate}>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src="/bus.png" alt="" className="h-full w-auto shrink-0" />
+      <span
+        aria-hidden="true"
+        className="whitespace-nowrap rounded-md border border-navy bg-white px-1.5 py-0.5 font-mono text-sm font-bold tracking-wider text-navy"
       >
         {plate}
-      </text>
-      {[24, 104].map((cx) => (
-        <g key={cx}>
-          <circle cx={cx} cy="40" r="7" fill="#142C2A" />
-          <circle cx={cx} cy="40" r="2.6" fill="#fff" />
-        </g>
-      ))}
-    </svg>
+      </span>
+    </span>
   );
 }

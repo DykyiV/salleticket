@@ -3,6 +3,7 @@ import { isLatinName } from "@/lib/passengerName";
 import { toE164 } from "@/lib/phone";
 import { gtIsCancelled, gtKindForAge, gtKindForBirthDate, gtLegFromKey, gtRefParts, gtTicketIdFromRef, gtTicketRef, gtTypeFor } from "@/lib/carriers/grandes-tour/pricing";
 import { zoneFromCountries, zoneFromNames } from "@/lib/trips/baggage";
+import { gtPlaceMap } from "@/lib/carriers/grandes-tour";
 
 describe("Grandes Tour fare types", () => {
   it("maps ages to GT passenger kinds", () => {
@@ -80,6 +81,16 @@ describe("phone for Grandes Tour", () => {
     expect(toE164("+49 959 44 124")).toBeNull();
     expect(toE164("+49 721 95 944 124")).toBe("+4972195944124");
     expect(toE164("12345")).toBeNull();
+  });
+});
+
+describe("Grandes Tour stop map links", () => {
+  it("uses coordinates when GT has them, else searches the address", () => {
+    expect(gtPlaceMap("АС Мазуреналле 4-6", "Берлін", 52.507, 13.279)).toBe("https://www.google.com/maps?q=52.507,13.279");
+    expect(gtPlaceMap("AС, вул. Стрийська, 109", "Львів", 0, 0)).toBe(
+      `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent("AС, вул. Стрийська, 109, Львів")}`,
+    );
+    expect(gtPlaceMap("", "Львів")).toBeUndefined();
   });
 });
 

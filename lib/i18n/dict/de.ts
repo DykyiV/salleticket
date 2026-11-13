@@ -509,6 +509,7 @@ const de: Dict = {
     documents: "Dokumente",
     terms: "Beförderungsbedingungen",
     privacy: "Datenschutz",
+    imprint: "Impressum",
     baggage: "Gepäckregeln",
     rights: "Fahrgastrechte",
     offer: "Öffentliches Angebot",
@@ -521,9 +522,6 @@ const de: Dict = {
     baggageIntro: "Was Sie mitnehmen dürfen und wie Sie Ihr Gepäck für die Reise vorbereiten.",
     rulesTitle: "Beförderungsbedingungen",
     rulesIntro: "Die Bedingungen, zu denen wir Fahrgäste und Gepäck befördern. Mit der Buchung akzeptieren Sie diese.",
-    privacyTitle: "Personenbezogene Daten",
-    privacyText:
-      "Ihre personenbezogenen Daten werden nur zur Organisation Ihrer Reise verwendet: Ausstellung des Tickets, Kontakt wegen der Fahrt und Bearbeitung von Erstattungen.",
     questions: "Noch Fragen?",
     callUs: "Rufen Sie uns an — wir antworten auf Ukrainisch, Deutsch, Spanisch oder Englisch.",
   },

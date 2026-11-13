@@ -45,6 +45,9 @@ export type Trip = {
   /** Boarding / drop-off point names, when known. */
   fromStation?: string;
   toStation?: string;
+  /** Map links of those points (coordinates when the carrier gives them, else an address search). */
+  fromMap?: string;
+  toMap?: string;
   /** Carrier contacts for this run, as the carrier gives them (bus / office phones). */
   carrierPhones?: string;
   /** Bus plate given by the carrier (e.g. Grandes Tour bus_number). */

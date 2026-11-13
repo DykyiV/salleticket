@@ -49,6 +49,25 @@ const FIELD_LABEL: Record<string, string> = {
   commission: "Комісія",
   cashCollector: "Готівку отримав",
   sms: "SMS",
+  departure: "Відправлення",
+  arrival: "Прибуття",
+  returnDeparture: "Відправлення назад",
+  returnArrival: "Прибуття назад",
+  fromCity: "Звідки",
+  toCity: "Куди",
+  returnFromCity: "Звідки назад",
+  returnToCity: "Куди назад",
+  fromPlace: "Місце посадки",
+  toPlace: "Місце висадки",
+  returnFromPlace: "Місце посадки назад",
+  returnToPlace: "Місце висадки назад",
+  bus: "Автобус",
+  returnBus: "Автобус назад",
+  carrierPhones: "Телефони перевізника",
+  returnCarrierPhones: "Телефони перевізника назад",
+  carrierFare: "Тариф перевізника",
+  carrierRef: "Квиток перевізника",
+  leg: "Напрямок",
 };
 
 type Obj = Record<string, unknown>;
@@ -82,11 +101,16 @@ function formatObject(field: string, o: Obj): string | null {
   return null;
 }
 
-const PRICE_FIELDS = new Set(["finalPrice", "basePrice", "amount"]);
+const PRICE_FIELDS = new Set(["finalPrice", "basePrice", "amount", "carrierFare"]);
+const TIME_FIELDS = new Set(["departure", "arrival", "returnDeparture", "returnArrival"]);
 
 function formatValue(field: string, value: unknown): string {
   if (value == null) return "—";
   if (PRICE_FIELDS.has(field) && typeof value === "number") return eur(value);
+  if (TIME_FIELDS.has(field) && typeof value === "string" && !Number.isNaN(Date.parse(value))) {
+    return new Date(value).toISOString().slice(0, 16).replace("T", " ");
+  }
+  if (field === "leg" && value === "return") return "назад";
   if (field === "status" && typeof value === "string") {
     return TICKET_STATUS_LABEL[value as never] ?? value;
   }

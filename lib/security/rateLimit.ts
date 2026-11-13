@@ -1,5 +1,4 @@
 import { createHash } from "node:crypto";
-import type { NextRequest } from "next/server";
 import { prisma } from "@/lib/db";
 
 export type RateLimitRule = { limit: number; windowMs: number };
@@ -19,14 +18,18 @@ export const RESET_PER_EMAIL: RateLimitRule = { limit: 3, windowMs: 60 * 60_000 
 export const RESET_PER_IP: RateLimitRule = { limit: 10, windowMs: 60 * 60_000 };
 
 /**
- * Client address as reported by the reverse proxy, or null when the request
- * carries none. Per-IP limits are skipped then — otherwise every visitor
- * would share one "unknown" bucket and block each other.
+ * The visitor's IP as our own proxy saw it, or null when the request carries
+ * none (per-IP limits are skipped then, so visitors don't share one bucket).
+ * nginx sets X-Real-IP to the connecting address (a value a visitor sends is
+ * overwritten) and appends that address to X-Forwarded-For, so without
+ * X-Real-IP only the last entry is trustworthy: anything before it is
+ * whatever the visitor typed.
  */
-export function clientIp(req: NextRequest): string | null {
-  const fwd = req.headers.get("x-forwarded-for");
-  const ip = fwd ? fwd.split(",")[0]?.trim() : req.headers.get("x-real-ip");
-  return ip || null;
+export function clientIp(req: { headers: Headers }): string | null {
+  const real = req.headers.get("x-real-ip")?.trim();
+  if (real) return real;
+  const hops = (req.headers.get("x-forwarded-for") ?? "").split(",").map((h) => h.trim()).filter(Boolean);
+  return hops.at(-1) ?? null;
 }
 
 /** Keys are hashed so e-mails and IPs are not stored in plain text. */

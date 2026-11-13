@@ -1,6 +1,7 @@
 import Link from "next/link";
 import Icon, { type IconName } from "@/components/site/Icon";
 import { getDict } from "@/lib/i18n/server";
+import { COMPANY } from "@/lib/legal/company";
 import {
   getSiteContacts,
   telHref,
@@ -31,7 +32,8 @@ export default async function SiteFooter() {
     { href: "/refund", label: t.footer.refund },
     { href: "/rules#rights", label: t.footer.rights },
     { href: "/rules#offer", label: t.footer.offer },
-    { href: "/rules#privacy", label: t.footer.privacy },
+    { href: "/datenschutz", label: t.footer.privacy },
+    { href: "/impressum", label: t.footer.imprint },
   ];
 
   return (
@@ -117,7 +119,7 @@ export default async function SiteFooter() {
       </div>
       <div className="border-t border-white/10">
         <p className="container-site py-5 text-xs text-slate-500">
-          © {new Date().getFullYear()} Kaufmann Reisen. {t.footer.rightsReserved}
+          © {new Date().getFullYear()} Kaufmann Reisen · {COMPANY.name}, {COMPANY.city}. {t.footer.rightsReserved}
         </p>
       </div>
     </footer>

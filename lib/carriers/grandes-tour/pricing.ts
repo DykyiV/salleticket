@@ -176,34 +176,107 @@ export function gtRefParts(ref: string | null | undefined): { orderId: number; t
   return m ? { orderId: Number(m[1]), ticketId: Number(m[2]) } : null;
 }
 
-/** Current status of each ticket of a GT order ("reserved", "canceled", …), by GT ticket id. */
-export async function gtOrderTicketStatuses(orderId: number): Promise<Map<number, string>> {
-  const res = await gtCall<{ tickets?: { id: number; status: string }[] }>(`/api/v4/booking/order/${orderId}/tickets`);
-  return new Map((res.tickets ?? []).map((t) => [t.id, t.status]));
-}
-
 /** One direction of a GT ticket: trip key, seat number, date (YYYY-MM-DD), fare type. */
 export type GtTicketLeg = { key: string; seatNumber: number; date: string; typeId: number | null };
+
+/** One direction of a GT ticket as GT holds it now (times as local "YYYY-MM-DDTHH:MM"). */
+export type GtLegState = GtTicketLeg & {
+  fromCity: string;
+  toCity: string;
+  departureAt: string;
+  arrivalAt: string;
+  fromPlace: string | null;
+  toPlace: string | null;
+  bus: string | null;
+  phones: string | null;
+};
+
+/** A ticket of a GT order: status ("reserved", "canceled", …), fare (both directions), legs. */
+export type GtOrderTicket = {
+  id: number;
+  status: string;
+  price: number | null;
+  to: GtLegState | null;
+  back: GtLegState | null;
+  discountCard: string | null;
+};
 
 type GtSeatRow = {
   trip_id?: number;
   city_from_id?: number;
+  city_from_name?: string;
+  city_from_place_name?: string;
   city_to_id?: number;
+  city_to_name?: string;
+  city_to_place_name?: string;
   place_name?: string;
   departure_date?: string;
+  departure_time_hhmm?: string;
+  arrival_date?: string;
+  arrival_time_hhmm?: string;
   passenger_type_id?: number;
   discount_cart?: string;
+  bus_number?: string;
+  bus_phones?: string;
 };
 
-function gtLegOf(row: GtSeatRow | undefined): GtTicketLeg | null {
+type GtRawOrderTicket = {
+  id: number;
+  status?: string;
+  price?: number;
+  trip_seats_to?: GtSeatRow[];
+  trip_seats_back?: GtSeatRow[];
+};
+
+/** "24.11.2026" → "2026-11-24" ("" when GT sent something else). */
+function gtDay(ddmmyyyy: string | undefined): string {
+  const m = /^(\d{2})\.(\d{2})\.(\d{4})$/.exec(ddmmyyyy?.trim() ?? "");
+  return m ? `${m[3]}-${m[2]}-${m[1]}` : "";
+}
+
+const clean = (v: string | undefined) => v?.replace(/\s+/g, " ").trim() || null;
+
+function gtLegOf(row: GtSeatRow | undefined): GtLegState | null {
   if (!row?.trip_id || !row.city_from_id || !row.city_to_id) return null;
-  const [d, m, y] = (row.departure_date ?? "").split(".");
+  const date = gtDay(row.departure_date);
+  const arrivalDay = gtDay(row.arrival_date);
+  const at = (day: string, hhmm: string | undefined) =>
+    day && /^\d{2}:\d{2}$/.test(hhmm?.trim() ?? "") ? `${day}T${hhmm!.trim()}` : "";
   return {
     key: `gt-${row.trip_id}-${row.city_from_id}-${row.city_to_id}`,
     seatNumber: Number(row.place_name),
-    date: `${y}-${m}-${d}`,
+    date,
     typeId: row.passenger_type_id ?? null,
+    fromCity: clean(row.city_from_name) ?? "",
+    toCity: clean(row.city_to_name) ?? "",
+    departureAt: at(date, row.departure_time_hhmm),
+    arrivalAt: at(arrivalDay, row.arrival_time_hhmm),
+    fromPlace: clean(row.city_from_place_name),
+    toPlace: clean(row.city_to_place_name),
+    bus: clean(row.bus_number),
+    phones: clean(row.bus_phones),
   };
+}
+
+/** Every ticket of a GT order as GT holds it now, by GT ticket id. */
+export async function gtOrderTickets(orderId: number): Promise<Map<number, GtOrderTicket>> {
+  const res = await gtCall<{ order_details?: { tickets?: GtRawOrderTicket[] } }>(
+    "/api/v2/booking/get_order_details",
+    { method: "POST", json: { id: orderId } },
+  );
+  return new Map(
+    (res.order_details?.tickets ?? []).map((t) => [
+      t.id,
+      {
+        id: t.id,
+        status: t.status ?? "",
+        price: typeof t.price === "number" ? t.price : null,
+        to: gtLegOf(t.trip_seats_to?.[0]),
+        back: gtLegOf(t.trip_seats_back?.[0]),
+        discountCard: t.trip_seats_to?.[0]?.discount_cart?.trim() || null,
+      },
+    ]),
+  );
 }
 
 /** A GT ticket as GT holds it: both directions (trip, seat, date, fare type) and the card. */
@@ -211,17 +284,9 @@ export async function gtTicketDetails(
   orderId: number,
   ticketId: number,
 ): Promise<{ to: GtTicketLeg; back: GtTicketLeg | null; discountCard: string | null }> {
-  const res = await gtCall<{
-    order_details?: { tickets?: { id: number; trip_seats_to?: GtSeatRow[]; trip_seats_back?: GtSeatRow[] }[] };
-  }>("/api/v2/booking/get_order_details", { method: "POST", json: { id: orderId } });
-  const t = res.order_details?.tickets?.find((x) => x.id === ticketId);
-  const to = gtLegOf(t?.trip_seats_to?.[0]);
-  if (!t || !to) throw new Error(`Grandes Tour: квиток ${ticketId} не знайдено в замовленні ${orderId}`);
-  return {
-    to,
-    back: gtLegOf(t.trip_seats_back?.[0]),
-    discountCard: t.trip_seats_to?.[0]?.discount_cart?.trim() || null,
-  };
+  const t = (await gtOrderTickets(orderId)).get(ticketId);
+  if (!t?.to) throw new Error(`Grandes Tour: квиток ${ticketId} не знайдено в замовленні ${orderId}`);
+  return { to: t.to, back: t.back, discountCard: t.discountCard };
 }
 
 /** A ticket removed on GT's side (their site or office) has the status "canceled". */

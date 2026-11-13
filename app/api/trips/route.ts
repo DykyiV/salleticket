@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { limitPublic, SEARCH_PER_IP } from "@/lib/security/publicLimit";
 import { listInternalTrips, upcomingInternalTrips } from "@/lib/trips/internal";
 import { grandesTourCarrierAdapter } from "@/lib/carriers/grandes-tour";
 import { grandesTourEnabled } from "@/lib/carriers/grandes-tour/client";
@@ -7,6 +8,8 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
+  const limited = await limitPublic(req, "trips", SEARCH_PER_IP);
+  if (limited) return limited;
   const from = req.nextUrl.searchParams.get("from")?.trim() ?? "";
   const to = req.nextUrl.searchParams.get("to")?.trim() ?? "";
   const date = req.nextUrl.searchParams.get("date")?.trim() ?? "";

@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { limitPublic, PROMO_PER_IP } from "@/lib/security/publicLimit";
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth/session";
 import { PromoError, validatePromo } from "@/lib/promo";
@@ -16,6 +17,8 @@ export const dynamic = "force-dynamic";
  *   200 { ok: false, reason, message }
  */
 export async function GET(req: NextRequest) {
+  const limited = await limitPublic(req, "promo", PROMO_PER_IP);
+  if (limited) return limited;
   const code = req.nextUrl.searchParams.get("code") ?? "";
   if (!code.trim()) {
     return NextResponse.json({ ok: false, reason: "missing", message: "Empty code" });
