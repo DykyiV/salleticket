@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { limitPublic, SEATS_PER_IP } from "@/lib/security/publicLimit";
 import { setVisitorCookie, visitorId } from "@/lib/security/visitor";
 import { prisma } from "@/lib/db";
 import { emptySeatLayout } from "@/lib/seats";
@@ -23,6 +24,8 @@ function parseSegment(req: NextRequest): Segment {
 }
 
 export async function GET(req: NextRequest, props: Params) {
+  const limited = await limitPublic(req, "seats", SEATS_PER_IP);
+  if (limited) return limited;
   const params = await props.params;
   // Grandes Tour: live seat map from their system (no holds on our side).
   if (params.id.startsWith("gt-")) {

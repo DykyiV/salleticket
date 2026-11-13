@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { limitPublic, BOOKING_PER_IP } from "@/lib/security/publicLimit";
 import { ONLINE_DISABLED_MESSAGE, onlinePaymentsEnabled } from "@/lib/paymentMode";
 import { AgeCategory, Prisma, TicketStatus, TripKind } from "@prisma/client";
 import { prisma } from "@/lib/db";
@@ -179,6 +180,8 @@ function combineDateTime(dateStr: string | undefined, time: string): Date {
 }
 
 export async function POST(req: NextRequest) {
+  const limited = await limitPublic(req, "booking", BOOKING_PER_IP);
+  if (limited) return limited;
   const guard = await requireAuth();
   if (!guard.ok) return guard.response;
   const { session } = guard;

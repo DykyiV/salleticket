@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { limitPublic, SEATS_PER_IP } from "@/lib/security/publicLimit";
 import { prisma } from "@/lib/db";
 import { gtLowestPrices } from "@/lib/carriers/grandes-tour";
 import { grandesTourEnabled } from "@/lib/carriers/grandes-tour/client";
@@ -15,6 +16,8 @@ const cache = new Map<string, { at: number; prices: Record<string, number> }>();
  * GET /api/calendar?from=…&to=…&month=YYYY-MM → { prices: { "2026-11-05": 81 }, currency }.
  */
 export async function GET(req: NextRequest) {
+  const limited = await limitPublic(req, "calendar", SEATS_PER_IP);
+  if (limited) return limited;
   const sp = req.nextUrl.searchParams;
   const from = cityNames(sp.get("from") ?? "")[0];
   const to = cityNames(sp.get("to") ?? "")[0];
