@@ -5,6 +5,9 @@ import * as Sentry from "@sentry/nextjs";
 Sentry.init({
   dsn: process.env.NEXT_PUBLIC_SENTRY_DSN,
   dataCollection: { userInfo: false, urlQueryParams: false },
+  // No "session" ping on every page view: the browser talks to Sentry only
+  // when an error happens, as the privacy policy says.
+  integrations: (defaults) => defaults.filter((i) => i.name !== "BrowserSession"),
 });
 
 // The SDK asks for this hook at build time; with tracing off it records nothing.

@@ -19,6 +19,7 @@ const HETZNER = "Hetzner Online GmbH, Industriestraße 25, 91710 Gunzenhausen";
 const RESEND = "Resend, Inc., 2261 Market Street #5039, San Francisco, CA 94114, USA";
 const IONOS = "IONOS SE, Elgendorfer Straße 57, 56410 Montabaur";
 const GOOGLE = "Google Ireland Limited, Gordon House, Barrow Street, Dublin 4, Irland";
+const SENTRY = "Functional Software, Inc. d/b/a Sentry, 45 Fremont Street, 8th Floor, San Francisco, CA 94105, USA";
 
 const phonesOf = (c: LegalContacts) => c.phones.join(", ");
 
@@ -184,7 +185,7 @@ export function privacyPolicy(lang: Lang, c: LegalContacts): LegalDoc {
           title: "4. Kundenkonto",
           paragraphs: [
             "Für Buchungen und den Zugriff auf Ihre Fahrkarten wird ein Kundenkonto angelegt – bei der Registrierung oder bei der ersten Buchung. Wir speichern Ihre E-Mail-Adresse und Ihr Passwort (nur als verschlüsselter Hashwert) sowie, falls Sie sie angeben, Anzeigename und Profilbild.",
-            "Rechtsgrundlage ist die Durchführung des Vertrags und vorvertraglicher Maßnahmen (Art. 6 Abs. 1 lit. b DSGVO). Sie können Ihr Konto jederzeit löschen lassen; Buchungsunterlagen, die wir aufbewahren müssen, bleiben bis zum Ende der gesetzlichen Fristen gespeichert (Abschnitt 11).",
+            "Rechtsgrundlage ist die Durchführung des Vertrags und vorvertraglicher Maßnahmen (Art. 6 Abs. 1 lit. b DSGVO). Sie können Ihr Konto jederzeit löschen lassen; Buchungsunterlagen, die wir aufbewahren müssen, bleiben bis zum Ende der gesetzlichen Fristen gespeichert (Abschnitt 12).",
           ],
         },
         {
@@ -230,22 +231,30 @@ export function privacyPolicy(lang: Lang, c: LegalContacts): LegalDoc {
           ],
         },
         {
+          id: "errors",
+          title: "10. Fehlerberichte (Sentry)",
+          paragraphs: [
+            `Tritt auf der Website ein technischer Fehler auf, senden unser Server bzw. Ihr Browser einen Fehlerbericht an den Dienst ${SENTRY}, der in unserem Auftrag tätig ist (Art. 28 DSGVO). Der Bericht enthält die Fehlermeldung, die betroffene Seite ohne Suchparameter sowie Browser- und Gerätetyp. Formulareingaben, Cookies und Kontodaten senden wir nicht mit; Ihre IP-Adresse wird beim Versand technisch übertragen, wir lassen sie aber nicht in den Bericht aufnehmen. Wir nutzen die Berichte nur, um Fehler zu finden und zu beheben (Art. 6 Abs. 1 lit. f DSGVO).`,
+            `Die Berichte werden im EU-Rechenzentrum von Sentry in Deutschland gespeichert und nach höchstens 90 Tagen automatisch gelöscht. Sentry ist nach dem EU-US Data Privacy Framework zertifiziert (Art. 45 DSGVO); für einen Zugriff aus den USA gelten zusätzlich die EU-Standardvertragsklauseln.`,
+          ],
+        },
+        {
           id: "links",
-          title: "10. Links zu Google Maps und Google Wallet",
+          title: "11. Links zu Google Maps und Google Wallet",
           paragraphs: [
             `Zu Haltestellen verlinken wir auf Google Maps, zu Fahrkarten auf Google Wallet. Erst wenn Sie einen solchen Link anklicken, verarbeitet ${GOOGLE}, Ihre Daten nach den eigenen Bestimmungen. Beim bloßen Besuch unserer Seiten wird keine Verbindung zu Google hergestellt.`,
           ],
         },
         {
           id: "storage",
-          title: "11. Speicherdauer",
+          title: "12. Speicherdauer",
           paragraphs: [
             "Wir speichern personenbezogene Daten nur so lange, wie es für die genannten Zwecke erforderlich ist. Buchungs- und Abrechnungsunterlagen bewahren wir aufgrund handels- und steuerrechtlicher Pflichten bis zu zehn Jahre auf (§ 257 HGB, § 147 AO) und löschen sie danach. Kontodaten löschen wir, wenn Sie das Konto löschen lassen, soweit keine Aufbewahrungspflicht entgegensteht.",
           ],
         },
         {
           id: "rights",
-          title: "12. Ihre Rechte",
+          title: "13. Ihre Rechte",
           paragraphs: [
             `Sie haben das Recht auf Auskunft (Art. 15 DSGVO), Berichtigung (Art. 16), Löschung (Art. 17), Einschränkung der Verarbeitung (Art. 18) und Datenübertragbarkeit (Art. 20) sowie das Recht, eine Einwilligung jederzeit mit Wirkung für die Zukunft zu widerrufen (Art. 7 Abs. 3). Eine Nachricht an ${c.email} genügt.`,
             "Widerspruchsrecht (Art. 21 DSGVO): Soweit wir Daten auf Grundlage von Art. 6 Abs. 1 lit. f DSGVO verarbeiten, können Sie aus Gründen, die sich aus Ihrer besonderen Situation ergeben, jederzeit widersprechen.",
@@ -254,7 +263,7 @@ export function privacyPolicy(lang: Lang, c: LegalContacts): LegalDoc {
         },
         {
           id: "misc",
-          title: "13. Sonstiges",
+          title: "14. Sonstiges",
           paragraphs: [
             "Eine automatisierte Entscheidungsfindung einschließlich Profiling (Art. 22 DSGVO) findet nicht statt.",
             "Wir passen diese Datenschutzerklärung an, wenn sich unsere Website oder die Rechtslage ändert; es gilt die hier veröffentlichte Fassung.",
@@ -300,7 +309,7 @@ export function privacyPolicy(lang: Lang, c: LegalContacts): LegalDoc {
           title: "4. Особистий кабінет",
           paragraphs: [
             "Для бронювань і доступу до квитків створюється кабінет — під час реєстрації або першого бронювання. Ми зберігаємо e-mail і пароль (лише у вигляді зашифрованого хешу), а також імʼя для показу й фото профілю, якщо ви їх вкажете.",
-            "Підстава — виконання договору та дії перед його укладенням (ст. 6 ч. 1 п. b GDPR). Кабінет можна видалити будь-коли; документи бронювань, які ми зобовʼязані зберігати, зберігаються до кінця строків, установлених законом (розділ 11).",
+            "Підстава — виконання договору та дії перед його укладенням (ст. 6 ч. 1 п. b GDPR). Кабінет можна видалити будь-коли; документи бронювань, які ми зобовʼязані зберігати, зберігаються до кінця строків, установлених законом (розділ 12).",
           ],
         },
         {
@@ -346,22 +355,30 @@ export function privacyPolicy(lang: Lang, c: LegalContacts): LegalDoc {
           ],
         },
         {
+          id: "errors",
+          title: "10. Звіти про помилки (Sentry)",
+          paragraphs: [
+            `Якщо на сайті стається технічна помилка, наш сервер або ваш браузер надсилає звіт про неї в сервіс ${SENTRY}, що діє за нашим дорученням (ст. 28 GDPR). У звіті є текст помилки, сторінка без параметрів пошуку, тип браузера й пристрою. Введені у форми дані, cookie й дані кабінету ми не передаємо; IP-адреса технічно передається під час надсилання, але до звіту ми її не включаємо. Звіти потрібні лише для того, щоб знаходити й виправляти помилки (ст. 6 ч. 1 п. f GDPR).`,
+            `Звіти зберігаються в дата-центрі Sentry в ЄС (Німеччина) і автоматично видаляються не пізніше ніж через 90 днів. Sentry сертифікована за EU-US Data Privacy Framework (ст. 45 GDPR); на випадок доступу зі США додатково діють стандартні договірні умови ЄС.`,
+          ],
+        },
+        {
           id: "links",
-          title: "10. Посилання на Google Maps і Google Wallet",
+          title: "11. Посилання на Google Maps і Google Wallet",
           paragraphs: [
             `Для зупинок ми даємо посилання на Google Maps, для квитків — на Google Wallet. Лише коли ви натиснете таке посилання, ${GOOGLE}, обробляє ваші дані за своїми правилами. Під час звичайного перегляду наших сторінок зʼєднання з Google не встановлюється.`,
           ],
         },
         {
           id: "storage",
-          title: "11. Строки зберігання",
+          title: "12. Строки зберігання",
           paragraphs: [
             "Ми зберігаємо персональні дані лише стільки, скільки потрібно для зазначених цілей. Документи бронювань і розрахунків зберігаємо до десяти років через вимоги торгового й податкового права Німеччини (§ 257 HGB, § 147 AO), після чого видаляємо. Дані кабінету видаляємо, коли ви просите видалити кабінет, якщо закон не вимагає їх зберігати.",
           ],
         },
         {
           id: "rights",
-          title: "12. Ваші права",
+          title: "13. Ваші права",
           paragraphs: [
             `Ви маєте право на доступ до даних (ст. 15 GDPR), виправлення (ст. 16), видалення (ст. 17), обмеження обробки (ст. 18) і перенесення даних (ст. 20), а також право будь-коли відкликати згоду на майбутнє (ст. 7 ч. 3). Достатньо написати на ${c.email}.`,
             "Право на заперечення (ст. 21 GDPR): якщо ми обробляємо дані на підставі ст. 6 ч. 1 п. f GDPR, ви можете будь-коли заперечити з причин, повʼязаних з вашою особливою ситуацією.",
@@ -370,7 +387,7 @@ export function privacyPolicy(lang: Lang, c: LegalContacts): LegalDoc {
         },
         {
           id: "misc",
-          title: "13. Інше",
+          title: "14. Інше",
           paragraphs: [
             "Автоматизованого ухвалення рішень, зокрема профілювання (ст. 22 GDPR), немає.",
             "Ми оновлюємо цю політику, коли змінюється сайт або законодавство; чинна — версія, опублікована тут.",
@@ -416,7 +433,7 @@ export function privacyPolicy(lang: Lang, c: LegalContacts): LegalDoc {
           title: "4. Customer account",
           paragraphs: [
             "An account is created for bookings and access to your tickets — when you register or with your first booking. We store your e-mail address and your password (only as an encrypted hash) and, if you provide them, a display name and profile picture.",
-            "The legal basis is the performance of the contract and pre-contractual steps (Art. 6(1)(b) GDPR). You can have your account deleted at any time; booking records we are required to keep are stored until the legal retention periods end (section 11).",
+            "The legal basis is the performance of the contract and pre-contractual steps (Art. 6(1)(b) GDPR). You can have your account deleted at any time; booking records we are required to keep are stored until the legal retention periods end (section 12).",
           ],
         },
         {
@@ -462,22 +479,30 @@ export function privacyPolicy(lang: Lang, c: LegalContacts): LegalDoc {
           ],
         },
         {
+          id: "errors",
+          title: "10. Error reports (Sentry)",
+          paragraphs: [
+            `If a technical error occurs on the website, our server or your browser sends an error report to ${SENTRY}, acting on our behalf (Art. 28 GDPR). The report contains the error message, the affected page without search parameters, and the browser and device type. We do not send form input, cookies or account data; your IP address is transmitted technically when the report is sent, but we do not include it in the report. We use the reports only to find and fix errors (Art. 6(1)(f) GDPR).`,
+            `The reports are stored in Sentry's EU data centre in Germany and deleted automatically after 90 days at the latest. Sentry is certified under the EU-US Data Privacy Framework (Art. 45 GDPR); the EU Standard Contractual Clauses apply in addition to any access from the USA.`,
+          ],
+        },
+        {
           id: "links",
-          title: "10. Links to Google Maps and Google Wallet",
+          title: "11. Links to Google Maps and Google Wallet",
           paragraphs: [
             `We link stops to Google Maps and tickets to Google Wallet. Only when you click such a link does ${GOOGLE} (Ireland), process your data under its own terms. Merely visiting our pages does not connect you to Google.`,
           ],
         },
         {
           id: "storage",
-          title: "11. Retention",
+          title: "12. Retention",
           paragraphs: [
             "We keep personal data only as long as necessary for the purposes described. Booking and accounting records are kept for up to ten years because of German commercial and tax law (§ 257 HGB, § 147 AO) and deleted afterwards. Account data are deleted when you have your account deleted, unless we are legally required to keep them.",
           ],
         },
         {
           id: "rights",
-          title: "12. Your rights",
+          title: "13. Your rights",
           paragraphs: [
             `You have the right of access (Art. 15 GDPR), rectification (Art. 16), erasure (Art. 17), restriction of processing (Art. 18) and data portability (Art. 20), and the right to withdraw consent at any time with effect for the future (Art. 7(3)). A message to ${c.email} is enough.`,
             "Right to object (Art. 21 GDPR): where we process data on the basis of Art. 6(1)(f) GDPR, you may object at any time on grounds relating to your particular situation.",
@@ -486,7 +511,7 @@ export function privacyPolicy(lang: Lang, c: LegalContacts): LegalDoc {
         },
         {
           id: "misc",
-          title: "13. Other",
+          title: "14. Other",
           paragraphs: [
             "There is no automated decision-making, including profiling (Art. 22 GDPR).",
             "We update this policy when our website or the law changes; the version published here applies.",
@@ -532,7 +557,7 @@ export function privacyPolicy(lang: Lang, c: LegalContacts): LegalDoc {
           title: "4. Cuenta de cliente",
           paragraphs: [
             "Para reservar y acceder a sus billetes se crea una cuenta, al registrarse o con la primera reserva. Guardamos su correo electrónico y su contraseña (solo como hash cifrado) y, si los indica, un nombre visible y una foto de perfil.",
-            "La base jurídica es la ejecución del contrato y de medidas precontractuales (art. 6.1.b RGPD). Puede pedir que borremos su cuenta en cualquier momento; los documentos de reservas que estamos obligados a conservar se guardan hasta que vencen los plazos legales (apartado 11).",
+            "La base jurídica es la ejecución del contrato y de medidas precontractuales (art. 6.1.b RGPD). Puede pedir que borremos su cuenta en cualquier momento; los documentos de reservas que estamos obligados a conservar se guardan hasta que vencen los plazos legales (apartado 12).",
           ],
         },
         {
@@ -578,22 +603,30 @@ export function privacyPolicy(lang: Lang, c: LegalContacts): LegalDoc {
           ],
         },
         {
+          id: "errors",
+          title: "10. Informes de errores (Sentry)",
+          paragraphs: [
+            `Si se produce un error técnico en el sitio, nuestro servidor o su navegador envían un informe del error a ${SENTRY}, que actúa por encargo nuestro (art. 28 RGPD). El informe contiene el mensaje de error, la página afectada sin parámetros de búsqueda y el tipo de navegador y dispositivo. No enviamos datos de formularios, cookies ni datos de la cuenta; su dirección IP se transmite técnicamente al enviar el informe, pero no la incluimos en él. Usamos los informes solo para encontrar y corregir errores (art. 6.1.f RGPD).`,
+            `Los informes se guardan en el centro de datos de Sentry en la UE (Alemania) y se borran automáticamente a los 90 días como máximo. Sentry está certificada conforme al Marco de Privacidad de Datos UE-EE. UU. (art. 45 RGPD); para un posible acceso desde EE. UU. se aplican además las cláusulas contractuales tipo de la UE.`,
+          ],
+        },
+        {
           id: "links",
-          title: "10. Enlaces a Google Maps y Google Wallet",
+          title: "11. Enlaces a Google Maps y Google Wallet",
           paragraphs: [
             `Enlazamos las paradas con Google Maps y los billetes con Google Wallet. Solo cuando pulsa uno de estos enlaces, ${GOOGLE}, trata sus datos según sus propias condiciones. La simple visita a nuestras páginas no establece ninguna conexión con Google.`,
           ],
         },
         {
           id: "storage",
-          title: "11. Plazo de conservación",
+          title: "12. Plazo de conservación",
           paragraphs: [
             "Conservamos los datos personales solo el tiempo necesario para los fines indicados. Los documentos de reservas y facturación se conservan hasta diez años por obligaciones mercantiles y fiscales alemanas (§ 257 HGB, § 147 AO) y después se borran. Los datos de la cuenta se borran cuando usted pide borrar la cuenta, salvo obligación legal de conservarlos.",
           ],
         },
         {
           id: "rights",
-          title: "12. Sus derechos",
+          title: "13. Sus derechos",
           paragraphs: [
             `Tiene derecho de acceso (art. 15 RGPD), rectificación (art. 16), supresión (art. 17), limitación del tratamiento (art. 18) y portabilidad (art. 20), así como a retirar su consentimiento en cualquier momento con efectos para el futuro (art. 7.3). Basta un mensaje a ${c.email}.`,
             "Derecho de oposición (art. 21 RGPD): cuando tratamos datos en base al art. 6.1.f RGPD, puede oponerse en cualquier momento por motivos relacionados con su situación particular.",
@@ -602,7 +635,7 @@ export function privacyPolicy(lang: Lang, c: LegalContacts): LegalDoc {
         },
         {
           id: "misc",
-          title: "13. Otros",
+          title: "14. Otros",
           paragraphs: [
             "No se toman decisiones automatizadas ni se elaboran perfiles (art. 22 RGPD).",
             "Actualizamos esta política cuando cambian nuestro sitio o la legislación; se aplica la versión publicada aquí.",

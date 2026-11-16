@@ -37,16 +37,17 @@ describe("Impressum (§ 5 DDG)", () => {
 });
 
 describe("Datenschutzerklärung (Art. 13 DSGVO)", () => {
-  it.each(LANGS)("has the same 13 sections in every language (%s)", (lang) => {
+  it.each(LANGS)("has the same 14 sections in every language (%s)", (lang) => {
     const doc = privacyPolicy(lang, contacts);
     expect(doc.sections.map((s) => s.id)).toEqual(privacyPolicy("de", contacts).sections.map((s) => s.id));
-    expect(doc.sections).toHaveLength(13);
+    expect(doc.sections).toHaveLength(14);
     const text = all(doc);
     for (const must of [
       "Kaufmann GmbH",
       "info@kaufmann-reisen.de",
       "Hetzner Online GmbH",
       "Resend, Inc.",
+      "Functional Software, Inc. d/b/a Sentry",
       "Grandes Tour",
       "kaufmann_session",
       "kaufmann_visitor",

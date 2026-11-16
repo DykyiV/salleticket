@@ -9,7 +9,8 @@ const csp = [
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob: https://gtmain.blob.core.windows.net",
   "font-src 'self' data:",
-  "connect-src 'self'",
+  // Sentry error reports from the browser (EU region).
+  "connect-src 'self' https://*.ingest.de.sentry.io",
   "media-src 'self' blob:",
   "object-src 'none'",
   "base-uri 'self'",
