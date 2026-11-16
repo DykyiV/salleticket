@@ -55,6 +55,7 @@ export const HISTORY_ACTION_LABEL: Record<string, string> = {
   CARRIER_CANCELLED: "Скасовано в системі Grandes Tour",
   CARRIER_CANCEL_FAILED: "Не вдалося скасувати в Grandes Tour — скасуйте вручну",
   CANCELLED_BY_CARRIER: "Скасовано в Grandes Tour (на їхньому боці)",
+  CHANGED_BY_CARRIER: "Змінено в Grandes Tour (на їхньому боці)",
   CHANGE_REQUESTED: "Клієнт просить змінити дату",
   CARRIER_REBOOKED: "Бронь у Grandes Tour відновлено (зміну не прийнято)",
   CARRIER_REBOOK_FAILED: "Бронь у Grandes Tour втрачено — забронюйте вручну",

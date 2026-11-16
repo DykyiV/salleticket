@@ -11,6 +11,7 @@ const ACTIONS: BulkAction[] = [
   "showStops",
   "setSaleEnabled",
   "setStopTime",
+  "setPhones",
 ];
 
 export async function applyDepartureBulk(
@@ -22,6 +23,17 @@ export async function applyDepartureBulk(
   }
   if (!ACTIONS.includes(payload.action)) {
     throw new RouteValidationError("Невідома дія");
+  }
+  if (payload.action === "setPhones") {
+    const data: { busPhone?: string; dispatcherPhone?: string } = {};
+    if (payload.busPhone?.trim()) data.busPhone = payload.busPhone.trim();
+    if (payload.dispatcherPhone?.trim()) data.dispatcherPhone = payload.dispatcherPhone.trim();
+    if (!Object.keys(data).length) {
+      throw new RouteValidationError("Вкажіть новий телефон автобуса або диспетчера");
+    }
+    const { count } = await prisma.departure.updateMany({ where: { id: { in: ids } }, data });
+    if (!count) throw new RouteValidationError("Виїзди не знайдено");
+    return { updatedDepartures: count, updatedStops: 0 };
   }
   if (
     !payload.city &&

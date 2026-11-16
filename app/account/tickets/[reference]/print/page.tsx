@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { headers } from "next/headers";
 import PrintTicketButton from "@/components/ticket/PrintTicketButton";
+import { BusGlyph } from "@/components/ticket/TicketGlyphs";
 import { getCurrentUser } from "@/lib/auth/session";
 import { ticketRights } from "@/lib/auth/access";
 import { prisma } from "@/lib/db";
@@ -133,7 +134,7 @@ export default async function PrintTicketPage(props: { params: Promise<{ referen
               <div className="mt-2 grid grid-cols-2 gap-2">
                 <div>
                   <p className="text-[10px] uppercase tracking-wider text-slate-500">Автобус</p>
-                  <p className="font-medium">{bus ?? "—"}</p>
+                  {bus ? <BusGlyph plate={bus} className="mt-0.5 h-9" /> : <p className="font-medium">—</p>}
                 </div>
                 <div>
                   <p className="text-[10px] uppercase tracking-wider text-slate-500">Місце</p>
@@ -150,6 +151,8 @@ export default async function PrintTicketPage(props: { params: Promise<{ referen
                 <p className="font-medium">{board ? boardingLabel(board) : trip?.fromCity ?? "—"}</p>
                 {board?.boardingAddress && board.boardingAddress !== boardingLabel(board) ? (
                   <p className="text-xs text-slate-600">{board.boardingAddress}</p>
+                ) : !board && trip?.carrierFromPlace ? (
+                  <p className="text-xs text-slate-600">{trip.carrierFromPlace}</p>
                 ) : null}
                 {board?.outboundTime ? <p className="text-xl font-bold tabular-nums">{board.outboundTime}</p> : null}
               </div>
@@ -158,6 +161,8 @@ export default async function PrintTicketPage(props: { params: Promise<{ referen
                 <p className="font-medium">{alight ? boardingLabel(alight) : trip?.toCity ?? "—"}</p>
                 {alight?.boardingAddress && alight.boardingAddress !== boardingLabel(alight) ? (
                   <p className="text-xs text-slate-600">{alight.boardingAddress}</p>
+                ) : !alight && trip?.carrierToPlace ? (
+                  <p className="text-xs text-slate-600">{trip.carrierToPlace}</p>
                 ) : null}
                 {alight?.outboundTime ? <p className="text-xl font-bold tabular-nums">{alight.outboundTime}</p> : null}
               </div>

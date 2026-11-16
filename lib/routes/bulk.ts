@@ -4,7 +4,8 @@ export type BulkAction =
   | "hideStops"
   | "showStops"
   | "setSaleEnabled"
-  | "setStopTime";
+  | "setStopTime"
+  | "setPhones";
 
 export type BulkPayload = {
   departureIds: string[];
@@ -15,6 +16,9 @@ export type BulkPayload = {
   outboundTime?: string | null;
   returnTime?: string | null;
   saleEnabled?: boolean;
+  /** setPhones: the phones a departure is created with (empty = unchanged). */
+  busPhone?: string | null;
+  dispatcherPhone?: string | null;
 };
 
 export function stopMatchesFilter(

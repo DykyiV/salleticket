@@ -25,6 +25,12 @@ export function weekdayShort(id: number | null | undefined): string {
   return WEEKDAYS.find((w) => w.id === id)?.short ?? "—";
 }
 
+/** "Четвер" / "П'ятниця" (a day as a carrier writes it) → "Чт" / "Пт"; unknown names stay as they are. */
+export function weekdayShortByName(name: string): string {
+  const key = name.trim().toLowerCase().replace(/['’ʼ]/g, "");
+  return WEEKDAYS.find((w) => w.full.toLowerCase().replace(/['’ʼ]/g, "") === key)?.short ?? name.trim();
+}
+
 export function parseWeekdays(raw: string | null | undefined): number[] {
   if (!raw) return [];
   try {

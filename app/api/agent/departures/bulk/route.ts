@@ -51,7 +51,7 @@ export async function POST(req: NextRequest) {
       { status: 403 }
     );
   }
-  if (body.action === "setStopTime" && !canEditDepartures(user)) {
+  if ((body.action === "setStopTime" || body.action === "setPhones") && !canEditDepartures(user)) {
     return NextResponse.json(
       { error: "Адмін не надав право редагувати години виїзду" },
       { status: 403 }

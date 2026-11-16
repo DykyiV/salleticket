@@ -20,7 +20,6 @@ export default async function RulesPage() {
         { id: "rights", ...t.legal.rights },
         { id: "offer", ...t.legal.offer },
         { id: "baggage", ...t.legal.baggage },
-        { id: "privacy", title: t.pages.privacyTitle, body: [t.pages.privacyText] },
       ]}
     />
   );

@@ -9,6 +9,8 @@
  * MAIL_FROM is the sender, e.g. `Kaufmann Reisen <tickets@kaufmann-reisen.de>`
  * (the domain must be verified with the provider). MAIL_REPLY_TO is optional.
  */
+import { companyLine } from "@/lib/legal/company";
+
 export type MailAttachment = { filename: string; content: Uint8Array };
 export type Mail = {
   to: string;
@@ -82,7 +84,16 @@ export function escapeHtml(value: string): string {
   return value.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
 }
 
-export async function sendMail(mail: Mail): Promise<MailResult> {
+/** Every business e-mail of a GmbH names the company, its seat, register and directors (§ 35a GmbHG). */
+export function withCompanyFooter(mail: Mail): Mail {
+  const line = companyLine();
+  const footer = `<p style="margin:24px 0 0;font-size:11px;line-height:1.5;color:#64748b">${escapeHtml(line)}</p>`;
+  const html = mail.html && (/<\/body>/i.test(mail.html) ? mail.html.replace(/<\/body>/i, `${footer}</body>`) : mail.html + footer);
+  return { ...mail, text: `${mail.text.trimEnd()}\n\n--\n${line}\n`, ...(html ? { html } : {}) };
+}
+
+export async function sendMail(input: Mail): Promise<MailResult> {
+  const mail = withCompanyFooter(input);
   const name = provider();
   const key = process.env.MAIL_API_KEY ?? "";
   const from = process.env.MAIL_FROM ?? "";
