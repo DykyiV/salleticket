@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { limitPublic, QUOTE_PER_IP } from "@/lib/security/publicLimit";
 import { grandesTourEnabled } from "@/lib/carriers/grandes-tour/client";
 import { gtCheckCard, gtFare, gtKindOfType, gtLegFromKey, gtPassengerTypes } from "@/lib/carriers/grandes-tour/pricing";
 
@@ -17,6 +18,8 @@ type Body = {
 
 /** Checkout preview of Grandes Tour fares (age types + discount card). */
 export async function POST(req: NextRequest) {
+  const limited = await limitPublic(req, "quote", QUOTE_PER_IP);
+  if (limited) return limited;
   if (!grandesTourEnabled()) return NextResponse.json({ error: "Not available" }, { status: 404 });
   let body: Body;
   try {

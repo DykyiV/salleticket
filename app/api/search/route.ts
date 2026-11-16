@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { limitPublic, SEARCH_PER_IP } from "@/lib/security/publicLimit";
 import { searchAllCarriers } from "@/lib/carriers/registry";
 import type { SearchQuery, TransportType } from "@/lib/carriers/types";
 
@@ -39,6 +40,8 @@ function parseQuery(searchParams: URLSearchParams): {
 }
 
 export async function GET(req: NextRequest) {
+  const limited = await limitPublic(req, "search", SEARCH_PER_IP);
+  if (limited) return limited;
   const parsed = parseQuery(req.nextUrl.searchParams);
   if (!parsed.ok) {
     return NextResponse.json(
@@ -82,6 +85,8 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const limited = await limitPublic(req, "search", SEARCH_PER_IP);
+  if (limited) return limited;
   let body: unknown;
   try {
     body = await req.json();

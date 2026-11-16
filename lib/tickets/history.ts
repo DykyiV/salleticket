@@ -5,6 +5,7 @@ import type {
   TicketStatus,
   TicketHistory,
 } from "@prisma/client";
+import { clientIp } from "@/lib/security/rateLimit";
 
 /**
  * Known origins of a ticket mutation. We keep this as a string column in the
@@ -27,18 +28,9 @@ export type RequestMeta = {
   userAgent: string | null;
 };
 
-/**
- * Pull best-effort IP and User-Agent from the incoming request. Relies on
- * the usual forwarding headers first, then falls back to x-real-ip.
- */
+/** IP (as our proxy saw it, see clientIp) and User-Agent of the incoming request. */
 export function requestMeta(req: NextRequest): RequestMeta {
-  const h = req.headers;
-  const fwd = h.get("x-forwarded-for");
-  const ip = fwd
-    ? fwd.split(",")[0]?.trim() ?? null
-    : h.get("x-real-ip") ?? null;
-  const ua = h.get("user-agent") ?? null;
-  return { ipAddress: ip, userAgent: ua };
+  return { ipAddress: clientIp(req), userAgent: req.headers.get("user-agent") ?? null };
 }
 
 /**

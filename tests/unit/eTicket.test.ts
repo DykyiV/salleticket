@@ -3,7 +3,7 @@ import { PDFDocument } from "pdf-lib";
 import { toETicket, ticketState, type ETicketBooking } from "@/lib/tickets/eTicket";
 import { buildTicketsPdf } from "@/lib/tickets/pdf";
 import { ticketMailContent } from "@/lib/tickets/ticketMail";
-import { escapeHtml, parseAddress, providerRequest, sendMail } from "@/lib/mail";
+import { escapeHtml, parseAddress, providerRequest, sendMail, withCompanyFooter } from "@/lib/mail";
 
 const stop = (city: string, day: number, out: string, back: string, address: string | null) => ({
   city,
@@ -89,6 +89,24 @@ describe("e-ticket model", () => {
     expect(j.boardMap).toContain("google.com/maps");
     expect(j.bus).toBe("Neoplan BC1234AA");
     expect(e.checkUrl).toBe("https://asol.test/check/AB-12345");
+  });
+
+  it("a carrier's trip (Grandes Tour) shows the carrier's boarding point and its map", () => {
+    const b = booking();
+    const t = b.ticket as unknown as { trip: Record<string, unknown> };
+    t.trip = {
+      ...t.trip,
+      departure: null,
+      fromCity: "Львів",
+      carrierFromPlace: "AС, вул. Стрийська, 109 ( 1-3 платформа )",
+      carrierFromMap: "https://www.google.com/maps/search/?api=1&query=x",
+      carrierToPlace: "АС біля радіо башні «Функтурм» Мазуреналле 4-6",
+      carrierToMap: "https://www.google.com/maps?q=52.50738496,13.27910737",
+    };
+    const j = toETicket(b, "https://asol.test").journeys[0];
+    expect(j.boardAddress).toBe("AС, вул. Стрийська, 109 ( 1-3 платформа )");
+    expect(j.boardMap).toContain("google.com/maps");
+    expect(j.alightMap).toBe("https://www.google.com/maps?q=52.50738496,13.27910737");
   });
 
   it("reads the return run backwards with its own times", () => {
@@ -181,6 +199,23 @@ describe("mail providers", () => {
     vi.stubEnv("MAIL_PROVIDER", "");
     const res = await sendMail(mail);
     expect(res.delivered).toBe(false);
+  });
+
+  it("signs every message with the company details (§ 35a GmbHG)", async () => {
+    const line = "Kaufmann GmbH · Bundesstraße 256 Nr. 10, 56637 Plaidt · Amtsgericht Koblenz HRB 10391 · Geschäftsführer: Vitalii Dykyi, Viktor Kaufmann";
+    const plain = withCompanyFooter({ to: "a@b.c", subject: "s", text: "Hallo\n" });
+    expect(plain.text).toBe(`Hallo\n\n--\n${line}\n`);
+    expect(plain.html).toBeUndefined();
+    const html = withCompanyFooter({ to: "a@b.c", subject: "s", text: "t", html: "<html><body><p>Hi</p></body></html>" });
+    expect(html.html).toMatch(/<p>Hi<\/p><p style="[^"]+">Kaufmann GmbH · .*HRB 10391.*<\/p><\/body><\/html>$/);
+
+    vi.stubEnv("MAIL_PROVIDER", "resend");
+    vi.stubEnv("MAIL_API_KEY", "re_1");
+    vi.stubEnv("MAIL_FROM", "Kaufmann Reisen <t@x.ua>");
+    const fetchMock = vi.fn(async (...args: [string, RequestInit]) => new Response(JSON.stringify({ id: String(args.length) }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    await sendMail({ to: "a@b.c", subject: "s", text: "Hallo" });
+    expect(JSON.parse(String(fetchMock.mock.calls[0][1].body)).text).toContain(line);
   });
 
   it("reports delivery only when the provider accepts the message", async () => {

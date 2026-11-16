@@ -509,6 +509,7 @@ const es: Dict = {
     documents: "Documentos",
     terms: "Condiciones de transporte",
     privacy: "Política de privacidad",
+    imprint: "Aviso legal",
     baggage: "Normas de equipaje",
     rights: "Derechos del pasajero",
     offer: "Contrato de oferta",
@@ -521,9 +522,6 @@ const es: Dict = {
     baggageIntro: "Qué puedes llevar contigo y cómo preparar el equipaje para el viaje.",
     rulesTitle: "Condiciones de transporte",
     rulesIntro: "Las condiciones en las que transportamos pasajeros y equipaje. Al comprar un billete, las aceptas.",
-    privacyTitle: "Datos personales",
-    privacyText:
-      "Tus datos personales se utilizan únicamente para organizar el transporte: emitir el billete, contactarte sobre el viaje y tramitar devoluciones.",
     questions: "¿Tienes más preguntas?",
     callUs: "Llámanos: te atendemos en ucraniano, alemán, español o inglés.",
   },

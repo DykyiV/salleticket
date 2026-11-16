@@ -668,7 +668,7 @@ export default function CheckoutForm({
                 {c.terms}
               </Link>{" "}
               ·{" "}
-              <Link href="/rules#privacy" target="_blank" className="text-brand-700 underline">
+              <Link href="/datenschutz" target="_blank" className="text-brand-700 underline">
                 {c.privacy}
               </Link>
             </span>
