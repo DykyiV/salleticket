@@ -18,4 +18,15 @@ const nextConfig = {
   },
 };
 
-module.exports = nextConfig;
+// eslint-disable-next-line @typescript-eslint/no-require-imports -- this config is CommonJS
+const { withSentryConfig } = require("@sentry/nextjs/config");
+
+// Sentry's build integration. Readable stack traces need source maps, and
+// those are uploaded only when the build has SENTRY_AUTH_TOKEN.
+module.exports = withSentryConfig(nextConfig, {
+  org: "ltd-grandes-tour",
+  project: "kaufmann-reisen-web",
+  silent: !process.env.CI,
+  // The build tool's own usage statistics are not sent to Sentry.
+  telemetry: false,
+});
