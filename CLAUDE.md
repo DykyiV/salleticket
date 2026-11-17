@@ -28,6 +28,7 @@
 | Сторінки (головна, результати, рейс, оформлення, квиток, кабінет) | `app/` (`page.tsx`, `results/`, `trip/`, `booking/`, `tickets/`, `cabinet/`) |
 | Інфосторінки: багаж, правила, повернення | `app/baggage`, `app/rules`, `app/refund` (тексти в `dict.legal.*`) |
 | Impressum і політика конфіденційності (DDG, DSGVO; німецький текст обовʼязковий) | `app/impressum`, `app/datenschutz`, тексти в `lib/legal/texts.ts`, реквізити компанії в `lib/legal/company.ts` (вони ж у підписі кожного листа) |
+| Сповіщення про збої через Sentry (лист власнику): сайт не відповідає, Grandes Tour не відповідає, зустрічні рейси в пошуку GT | `app/api/health`, `lib/health.ts`, `lib/alerts.ts`; cron на сервері питає `/api/health` кожні 5 хв |
 | Пошук (форма, міста будь-якою мовою, календар з цінами) | `components/home/SearchPanel.tsx`, `CityInput.tsx`, `DatePicker.tsx` |
 | Ціни на дні для календаря | `app/api/calendar/route.ts` |
 | Крок «Місця» (схема салону; скільки місць обрано — стільки пасажирів) | `components/checkout/SeatStep.tsx`, `SeatMapView.tsx` |

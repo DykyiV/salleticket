@@ -1,5 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { alertOwner } from "@/lib/alerts";
 import { grandesTourCarrierAdapter, gtLowestPrices } from "@/lib/carriers/grandes-tour";
+
+vi.mock("@/lib/alerts", () => ({ alertOwner: vi.fn() }));
 
 // POST /api/v2/booking/search_trips, Львів → Барселона, as Grandes Tour answered on 17.11.2026:
 // besides the real trips it lists the Spain → Ukraine bus (route «Севілія - Вінниця»),
@@ -22,6 +25,7 @@ const gtTrip = (id: number, dep: [string, string], arr: [string, string], durati
   price: 185,
   duration,
   carrier_name: "GRANDES TOUR",
+  route_line_name: duration.startsWith("-") ? "Севілія - Вінниця" : "Київ - Мадрид",
 });
 const sequence = (trip: ReturnType<typeof gtTrip>) => ({ canBook: true, canBookWithPaymentAtBoarding: true, currency_code: "EUR", trips: [trip] });
 const FOUND = [
@@ -52,6 +56,16 @@ describe("Grandes Tour search", () => {
   it("does not offer a bus going the other way (it would arrive before it leaves)", async () => {
     const trips = await grandesTourCarrierAdapter.search({ from: "Львів", to: "Барселона", date: "2026-11-24", passengers: 1 });
     expect(trips.map((t) => t.id)).toEqual(["gt-32864-1-91"]);
+  });
+
+  it("tells the owner which GT route came back reversed", async () => {
+    vi.mocked(alertOwner).mockClear();
+    await grandesTourCarrierAdapter.search({ from: "Львів", to: "Барселона", date: "2026-11-24", passengers: 1 });
+    expect(alertOwner).toHaveBeenCalledTimes(1);
+    const [key, message, extra] = vi.mocked(alertOwner).mock.calls[0];
+    expect(key).toEqual(["gt-reverse-trip", "Севілія - Вінниця"]);
+    expect(message).toContain("Львів → Барселона");
+    expect(extra).toMatchObject({ tripId: 31192, departure: "29.11.2026 11:00", arrival: "27.11.2026 23:55" });
   });
 
   it("keeps such days out of the price calendar", async () => {

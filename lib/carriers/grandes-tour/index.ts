@@ -15,6 +15,7 @@ import {
   gtTicketRef,
   gtTypeFor,
 } from "@/lib/carriers/grandes-tour/pricing";
+import { alertOwner } from "@/lib/alerts";
 import { gtCall } from "@/lib/carriers/grandes-tour/client";
 
 /**
@@ -50,6 +51,8 @@ type GtTrip = {
   carrier_name: string;
   /** Bus / office phones, e.g. "+380… (автобус), +49… (офіс)". */
   phoneNumber?: string;
+  /** Name of the GT route, e.g. «Севілія - Вінниця». */
+  route_line_name?: string;
 };
 type GtSequence = { canBook: boolean; canBookWithPaymentAtBoarding: boolean; currency_code: string; trips: GtTrip[] };
 type GtPlace = { id: number; name: string; type: string; status: string; x?: number; y?: number; floor?: number };
@@ -266,9 +269,19 @@ async function searchSequences(
       back: false,
     },
   });
-  const direct = (res.trips_sequences ?? []).filter(
-    (s) => s.canBook && s.canBookWithPaymentAtBoarding && s.trips?.length === 1 && runsForward(s.trips[0]),
+  const bookable = (res.trips_sequences ?? []).filter(
+    (s) => s.canBook && s.canBookWithPaymentAtBoarding && s.trips?.length === 1,
   );
+  const direct = bookable.filter((s) => runsForward(s.trips[0]));
+  for (const { trips: [t] } of bookable) {
+    if (runsForward(t)) continue;
+    // One issue per GT route: the owner hears about a new case once.
+    alertOwner(
+      ["gt-reverse-trip", t.route_line_name ?? ""],
+      `Grandes Tour: у пошуку ${t.departure_city} → ${t.arrival_city} є автобус зустрічного напрямку «${t.route_line_name ?? "?"}» (сайт його не показує)`,
+      { tripId: t.id, departure: `${t.departure_date} ${t.departure_time_hhmm}`, arrival: `${t.arrival_date} ${t.arrival_time_hhmm}` },
+    );
+  }
   for (const s of direct) tripMeta.set(s.trips[0].id, { busId: s.trips[0].bus_id, number: s.trips[0].number });
   return direct;
 }
