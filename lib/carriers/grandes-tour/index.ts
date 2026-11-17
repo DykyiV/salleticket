@@ -230,6 +230,15 @@ function toTrip(t: GtTrip, currency: string, seatsLeft: number): Trip {
   };
 }
 
+/**
+ * GT's search also returns a bus of the opposite direction when both cities
+ * are on its route (Львів → Барселона got the Севілія → Вінниця bus): such a
+ * "trip" arrives before it departs, and a ticket for it lands on the bus
+ * going the other way.
+ */
+const runsForward = (t: GtTrip) =>
+  `${isoDate(t.arrival_date)}T${t.arrival_time_hhmm}` > `${isoDate(t.departure_date)}T${t.departure_time_hhmm}`;
+
 /** bus_id + route order number per GT trip id (from the last search). */
 const tripMeta = new Map<number, { busId?: number; number?: number }>();
 
@@ -258,7 +267,7 @@ async function searchSequences(
     },
   });
   const direct = (res.trips_sequences ?? []).filter(
-    (s) => s.canBook && s.canBookWithPaymentAtBoarding && s.trips?.length === 1,
+    (s) => s.canBook && s.canBookWithPaymentAtBoarding && s.trips?.length === 1 && runsForward(s.trips[0]),
   );
   for (const s of direct) tripMeta.set(s.trips[0].id, { busId: s.trips[0].bus_id, number: s.trips[0].number });
   return direct;
