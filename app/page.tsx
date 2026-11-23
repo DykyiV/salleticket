@@ -3,10 +3,10 @@ import Link from "next/link";
 import Header from "@/components/Header";
 import SiteFooter from "@/components/site/SiteFooter";
 import SearchPanel from "@/components/home/SearchPanel";
-import PromoBanner from "@/components/home/PromoBanner";
+import { activePromo } from "@/lib/site/promoBanner";
 import Icon, { isIconName, type IconName } from "@/components/site/Icon";
 import { getDict } from "@/lib/i18n/server";
-import { fmt, money, plural } from "@/lib/i18n/format";
+import { fmt, localeOf, money, plural } from "@/lib/i18n/format";
 import type { Lang } from "@/lib/i18n/config";
 import type { Dict } from "@/lib/i18n/dict";
 import { cityLabel } from "@/lib/trips/cities";
@@ -32,8 +32,7 @@ export default async function Home() {
     <div className="flex min-h-screen flex-col">
       <Header />
       <main className="flex-1">
-        <PromoBanner t={t} lang={lang} today={todayInEurope()} />
-        <Hero t={t} quickRoutes={stats.slice(0, QUICK_COUNT).map(({ from, to }) => ({ from, to }))} />
+        <Hero t={t} lang={lang} quickRoutes={stats.slice(0, QUICK_COUNT).map(({ from, to }) => ({ from, to }))} />
         <Benefits t={t} />
         <PopularRoutes t={t} lang={lang} stats={stats} />
         <HowItWorks t={t} />
@@ -57,32 +56,64 @@ function SectionTitle({ title, subtitle, id }: { title: string; subtitle?: strin
   );
 }
 
-function Hero({ t, quickRoutes }: { t: Dict; quickRoutes: { from: string; to: string }[] }) {
+function Hero({ t, lang, quickRoutes }: { t: Dict; lang: Lang; quickRoutes: { from: string; to: string }[] }) {
+  // During Black Friday (lib/site/promoBanner.ts) the first screen carries the promo.
+  const promo = activePromo(todayInEurope());
+  const day = (iso: string, opts: Intl.DateTimeFormatOptions) =>
+    new Intl.DateTimeFormat(localeOf(lang), { ...opts, timeZone: "UTC" }).format(new Date(`${iso}T00:00:00Z`));
   return (
-    <section id="search" aria-labelledby="hero-title" className="relative isolate z-10 bg-navy">
-      <div className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(60rem_30rem_at_85%_-10%,rgba(37,99,235,0.45),transparent),radial-gradient(40rem_24rem_at_0%_110%,rgba(37,99,235,0.25),transparent)]" />
+    <section id="search" aria-labelledby="hero-title" className={`relative isolate z-10 ${promo ? "bg-black" : "bg-navy"}`}>
+      {promo ? (
+        <div className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(60rem_30rem_at_85%_-10%,rgba(252,211,77,0.22),transparent),radial-gradient(40rem_24rem_at_0%_110%,rgba(252,211,77,0.12),transparent)]" />
+      ) : (
+        <div className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(60rem_30rem_at_85%_-10%,rgba(37,99,235,0.45),transparent),radial-gradient(40rem_24rem_at_0%_110%,rgba(37,99,235,0.25),transparent)]" />
+      )}
       <div className="container-site pb-10 pt-8 sm:pb-14 sm:pt-12 lg:pb-16 lg:pt-14">
         <div className="grid items-center gap-6 lg:grid-cols-[1.05fr_1fr] lg:gap-10">
           <div className="order-1 text-white">
-            <span className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-xs font-medium text-blue-100 ring-1 ring-inset ring-white/15">
-              <span className="h-1.5 w-1.5 rounded-full bg-ok" />
-              {t.hero.badge}
-            </span>
-            <h1 id="hero-title" className="mt-4 text-[1.75rem] font-bold leading-tight tracking-tight sm:text-4xl lg:text-[2.75rem]">
-              {t.hero.title}
-            </h1>
-            <p className="mt-3 max-w-xl text-base text-blue-100/90 sm:text-lg">{t.hero.subtitle}</p>
+            {promo ? (
+              <>
+                <span className="inline-flex items-center gap-2 rounded-full bg-amber-300 px-3 py-1 text-xs font-bold uppercase tracking-wide text-black">
+                  Black Friday · {promo.from.slice(8)}–{promo.until.slice(8)}.{promo.until.slice(5, 7)}
+                </span>
+                <h1 id="hero-title" className="mt-4 text-[1.75rem] font-bold leading-tight tracking-tight text-amber-300 sm:text-4xl lg:text-[2.75rem]">
+                  {t.promoBanner.title}
+                </h1>
+                <p className="mt-3 max-w-xl text-base text-white/85 sm:text-lg">
+                  {fmt(t.promoBanner.text, { code: promo.code, date: day(promo.until, { day: "numeric", month: "long" }), field: t.checkout.promo })}
+                </p>
+              </>
+            ) : (
+              <>
+                <span className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-xs font-medium text-blue-100 ring-1 ring-inset ring-white/15">
+                  <span className="h-1.5 w-1.5 rounded-full bg-ok" />
+                  {t.hero.badge}
+                </span>
+                <h1 id="hero-title" className="mt-4 text-[1.75rem] font-bold leading-tight tracking-tight sm:text-4xl lg:text-[2.75rem]">
+                  {t.hero.title}
+                </h1>
+                <p className="mt-3 max-w-xl text-base text-blue-100/90 sm:text-lg">{t.hero.subtitle}</p>
+              </>
+            )}
           </div>
           <div className="order-3 -mx-2 flex justify-center lg:order-2 lg:mx-0">
-            <Image
-              src="/hero-bus.webp"
-              alt={t.hero.busAlt}
-              width={1400}
-              height={985}
-              priority
-              sizes="(min-width: 1024px) 560px, 100vw"
-              className="h-auto w-full max-w-md rounded-2xl shadow-2xl ring-1 ring-white/10 sm:max-w-lg lg:max-w-none"
-            />
+            <div className="relative w-full max-w-md sm:max-w-lg lg:max-w-none">
+              <Image
+                src="/hero-bus.webp"
+                alt={t.hero.busAlt}
+                width={1400}
+                height={985}
+                priority
+                sizes="(min-width: 1024px) 560px, 100vw"
+                className="h-auto w-full rounded-2xl shadow-2xl ring-1 ring-white/10"
+              />
+              {promo ? (
+                <div className="absolute -right-2 -top-3 rotate-6 rounded-2xl bg-amber-300 px-4 py-3 text-center text-black shadow-xl sm:-right-4 sm:-top-5 sm:px-5">
+                  <p className="text-3xl font-black leading-none sm:text-4xl">−20%</p>
+                  <p className="mt-1 font-mono text-sm font-bold tracking-widest">{promo.code}</p>
+                </div>
+              ) : null}
+            </div>
           </div>
           <div className="order-2 lg:order-3 lg:col-span-2">
             <SearchPanel quickRoutes={quickRoutes} today={todayInEurope()} />
