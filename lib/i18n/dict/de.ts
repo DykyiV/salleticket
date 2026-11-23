@@ -26,6 +26,11 @@ const de: Dict = {
     rules: "Bedingungen",
     support: "Hilfe",
   },
+  promoBanner: {
+    title: "Black Friday bei Grandes Tour: −20 %",
+    text: "Der Code {code} gilt für Fahrten bis {date} mit Bezahlung beim Einstieg. Geben Sie ihn bei der Buchung im Feld „{field}“ ein.",
+    cta: "Fahrt finden",
+  },
   hero: {
     badge: "Ukraine — Deutschland — Europa",
     title: "Regelmäßige internationale Busverbindungen Ukraine — Deutschland und in weitere Länder Europas",

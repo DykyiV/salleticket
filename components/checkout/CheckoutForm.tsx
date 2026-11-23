@@ -213,6 +213,7 @@ export default function CheckoutForm({
             tripId: trip.tripId,
             returnTripId: roundTrip ? trip.returnTripId : null,
             date: trip.date,
+            returnDate: roundTrip ? trip.returnDate : null,
             typeIds: typeKey.split("|").map((v) => (Number.isInteger(Number(v)) ? Number(v) : null)),
             card: code || null,
           }),
@@ -235,7 +236,7 @@ export default function CheckoutForm({
       ac.abort();
       window.clearTimeout(timer);
     };
-  }, [isGt, typeKey, promoInput, trip.tripId, trip.returnTripId, trip.date, roundTrip]);
+  }, [isGt, typeKey, promoInput, trip.tripId, trip.returnTripId, trip.date, trip.returnDate, roundTrip]);
 
   /** Fare type label shown next to a passenger (null = nothing to show). */
   const ageLabel = (i: number, withAdult: boolean): string | null => {

@@ -3,6 +3,7 @@ import Link from "next/link";
 import Header from "@/components/Header";
 import SiteFooter from "@/components/site/SiteFooter";
 import SearchPanel from "@/components/home/SearchPanel";
+import PromoBanner from "@/components/home/PromoBanner";
 import Icon, { isIconName, type IconName } from "@/components/site/Icon";
 import { getDict } from "@/lib/i18n/server";
 import { fmt, money, plural } from "@/lib/i18n/format";
@@ -31,6 +32,7 @@ export default async function Home() {
     <div className="flex min-h-screen flex-col">
       <Header />
       <main className="flex-1">
+        <PromoBanner t={t} lang={lang} today={todayInEurope()} />
         <Hero t={t} quickRoutes={stats.slice(0, QUICK_COUNT).map(({ from, to }) => ({ from, to }))} />
         <Benefits t={t} />
         <PopularRoutes t={t} lang={lang} stats={stats} />
