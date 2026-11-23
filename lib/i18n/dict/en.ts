@@ -29,7 +29,6 @@ const en: Dict = {
   promoBanner: {
     title: "Black Friday at Grandes Tour: −20%",
     text: "Code {code} is valid for trips until {date}, paid when boarding. Enter it at checkout in the “{field}” field.",
-    cta: "Find a trip",
   },
   hero: {
     badge: "Ukraine — Germany — Europe",

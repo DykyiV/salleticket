@@ -29,7 +29,6 @@ const es: Dict = {
   promoBanner: {
     title: "Black Friday en Grandes Tour: −20 %",
     text: "El código {code} es válido para viajes hasta el {date} con pago al subir al autobús. Introdúcelo al reservar en el campo «{field}».",
-    cta: "Buscar viaje",
   },
   hero: {
     badge: "Ucrania — Alemania — Europa",
