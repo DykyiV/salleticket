@@ -73,28 +73,54 @@ export function gtTypeFor(types: GtType[], kind: GtKind): GtType | null {
   );
 }
 
+/** "10.11.2026" → "2026-11-10" */
+export function isoDate(ddmmyyyy: string): string {
+  const [d, m, y] = ddmmyyyy.split(".");
+  return `${y}-${m}-${d}`;
+}
+
 export type GtCardCheck =
   | { status: "none" }
   | { status: "ok"; number: string; percent: number }
   | { status: "invalid"; number: string; message: string };
 
-/** Discount / loyalty card (or promo) known to Grandes Tour. */
-export async function gtCheckCard(raw: string | null | undefined): Promise<GtCardCheck> {
+/**
+ * Discount / loyalty card (or promo) known to Grandes Tour.
+ *
+ * `payOnBoarding`: the travel dates (YYYY-MM-DD) of a ticket paid when
+ * boarding. Such a ticket is paid on the day of the trip, so a card whose
+ * validity ends before that day does not apply (GT: a promo counts only for
+ * tickets paid while it runs, e.g. BF20 to 30.11).
+ */
+export async function gtCheckCard(
+  raw: string | null | undefined,
+  payOnBoarding: (string | null | undefined)[] = [],
+): Promise<GtCardCheck> {
   const number = (raw ?? "").trim();
   if (!number) return { status: "none" };
   try {
     const res = await gtCall<{
-      discount?: { percent?: number; is_blocked?: boolean; is_within_active_period?: boolean } | null;
+      discount?: { percent?: number; is_blocked?: boolean; is_within_active_period?: boolean; end_date?: string } | null;
     }>("/api/v2/booking/get_discount_card_info", { method: "POST", json: { number } });
     const d = res.discount;
     if (!d) return { status: "invalid", number, message: "Картку не знайдено" };
     if (d.is_blocked) return { status: "invalid", number, message: "Картку заблоковано" };
     if (d.is_within_active_period === false) return { status: "invalid", number, message: "Термін дії картки минув" };
+    const ends = d.end_date ? isoDate(d.end_date) : "";
+    if (ends && payOnBoarding.some((day) => day && day > ends)) {
+      return { status: "invalid", number, message: `Діє лише на поїздки до ${d.end_date} (оплата при посадці)` };
+    }
     return { status: "ok", number, percent: d.percent ?? 0 };
   } catch (err) {
     const message = err instanceof Error ? err.message.replace(/^Grandes Tour [^:]+: /, "") : "";
     return { status: "invalid", number, message: message || "Картку не знайдено" };
   }
+}
+
+/** first_name / last_name as GT wants them; a stand-in for a price preview before names are typed. */
+function gtNameFields(name: string | undefined) {
+  const [first, ...rest] = (name ?? "").trim().split(/\s+/).filter(Boolean);
+  return first ? { first_name: first.toUpperCase(), last_name: rest.join(" ").toUpperCase() } : { first_name: "PASSENGER", last_name: "PASSENGER" };
 }
 
 export type GtFare = { kind: GtKind; typeId: number | null; price: number; priceBeforeDiscount: number };
@@ -110,6 +136,8 @@ export async function gtFare(opts: {
   /** Explicit GT passenger type (chosen by the buyer); else by kind. */
   typeId?: number | null;
   card?: string | null;
+  /** The passenger's name: GT prices a card only for a named passenger (it can be personal). */
+  name?: string;
   currency?: string;
 }): Promise<GtFare> {
   const [typesTo, typesBack] = await Promise.all([
@@ -135,6 +163,7 @@ export async function gtFare(opts: {
     json: {
       trip_mode: opts.back ? "roundTrip" : "oneWay",
       currecny_code: opts.currency ?? "EUR",
+      ...(opts.card ? gtNameFields(opts.name) : {}),
       price_trips_to: [leg(opts.to, typeTo?.id ?? null)],
       price_trips_back: opts.back ? [leg(opts.back, typeBack?.id ?? null)] : [],
     },

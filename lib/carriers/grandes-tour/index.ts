@@ -14,6 +14,7 @@ import {
   gtTicketIdFromRef,
   gtTicketRef,
   gtTypeFor,
+  isoDate,
 } from "@/lib/carriers/grandes-tour/pricing";
 import { alertOwner } from "@/lib/alerts";
 import { gtCall } from "@/lib/carriers/grandes-tour/client";
@@ -85,12 +86,6 @@ export async function gtBaggageZone(from: string, to: string): Promise<BaggageZo
   } catch {
     return null;
   }
-}
-
-/** "10.11.2026" → "2026-11-10" */
-function isoDate(ddmmyyyy: string): string {
-  const [d, m, y] = ddmmyyyy.split(".");
-  return `${y}-${m}-${d}`;
 }
 
 /** "1.23:00:00" → 2820, "23:00:00" → 1380 */
@@ -343,7 +338,10 @@ export class GrandesTourCarrierAdapter implements CarrierAdapter {
     const seatsTo = pickPlaces(mapTo, people.map((p) => p.seatNumber));
     const seatsBack = back ? pickPlaces(mapBack, people.map((p) => p.returnSeatNumber)) : [];
 
-    const card = await gtCheckCard(request.discountCard);
+    const card = await gtCheckCard(
+      request.discountCard,
+      request.paymentAtBoarding === false ? [] : [request.travelDate, back ? request.returnDate : null],
+    );
     if (card.status === "invalid") throw new Error(`Картка ${card.number}: ${card.message}`);
     const cardNo = card.status === "ok" ? card.number : null;
 
@@ -356,7 +354,7 @@ export class GrandesTourCarrierAdapter implements CarrierAdapter {
         const chosen = p.fareTypeId != null ? typesTo.find((t) => t.id === p.fareTypeId) : undefined;
         if (p.fareTypeId != null && !chosen) throw new Error("Невідомий тип квитка");
         const kind = chosen ? gtKindOfType(chosen) : gtKindForBirthDate(p.birthDate, travelDate);
-        const total = await gtFare({ to: key, back, kind, typeId: chosen?.id, card: cardNo, currency });
+        const total = await gtFare({ to: key, back, kind, typeId: chosen?.id, card: cardNo, name: p.name, currency });
         return {
           kind,
           total,

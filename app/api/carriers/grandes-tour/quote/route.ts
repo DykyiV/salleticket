@@ -11,6 +11,8 @@ type Body = {
   returnTripId?: string | null;
   /** Travel date YYYY-MM-DD. */
   date?: string;
+  /** Date of the way back, YYYY-MM-DD. */
+  returnDate?: string | null;
   /** GT passenger type per passenger (null = adult). */
   typeIds?: (number | null)[];
   card?: string | null;
@@ -33,7 +35,8 @@ export async function POST(req: NextRequest) {
   if (!to || !typeIds.length) return NextResponse.json({ error: "tripId and typeIds are required" }, { status: 400 });
 
   try {
-    const card = await gtCheckCard(body.card);
+    // The live site takes payment only at boarding.
+    const card = await gtCheckCard(body.card, [body.date, back ? body.returnDate : null]);
     const cardNo = card.status === "ok" ? card.number : null;
     const types = await gtPassengerTypes(to);
     const fares = await Promise.all(
